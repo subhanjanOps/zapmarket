@@ -13,7 +13,7 @@ package main
 // @license.url http://www.apache.org/licenses/LICENSE-2.0.html
 
 // @host localhost:8080
-// @BasePath /auth
+// @BasePath /v1/auth
 // @schemes http https
 
 // @securityDefinitions.apikey BearerAuth
@@ -37,13 +37,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	httpSwagger "github.com/swaggo/http-swagger"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/services/auth-service/authpb"
 	grpcHandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
-	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func main() {
@@ -81,22 +81,23 @@ func main() {
 
 	// Setup HTTP server
 	mux := http.NewServeMux()
-	mux.HandleFunc("/auth/register", httpHandler.LoggingMiddleware(httpHandler.Register))
-	mux.HandleFunc("/auth/login", httpHandler.LoggingMiddleware(httpHandler.Login))
-	mux.HandleFunc("/auth/refresh", httpHandler.LoggingMiddleware(httpHandler.Refresh))
-	mux.HandleFunc("/auth/me", httpHandler.LoggingMiddleware(httpHandler.Me))
-	mux.HandleFunc("/auth/oauth/google/url", httpHandler.LoggingMiddleware(httpHandler.GoogleOAuthURL))
-	mux.HandleFunc("/auth/oauth/google/callback", httpHandler.LoggingMiddleware(httpHandler.GoogleOAuthCallback))
-	mux.HandleFunc("/auth/oauth/facebook/url", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthURL))
-	mux.HandleFunc("/auth/oauth/facebook/callback", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthCallback))
+
+	mux.HandleFunc("/v1/auth/register", httpHandler.LoggingMiddleware(httpHandler.Register))
+	mux.HandleFunc("/v1/auth/login", httpHandler.LoggingMiddleware(httpHandler.Login))
+	mux.HandleFunc("/v1/auth/refresh", httpHandler.LoggingMiddleware(httpHandler.Refresh))
+	mux.HandleFunc("/v1/auth/me", httpHandler.LoggingMiddleware(httpHandler.Me))
+	mux.HandleFunc("/v1/auth/oauth/google/url", httpHandler.LoggingMiddleware(httpHandler.GoogleOAuthURL))
+	mux.HandleFunc("/v1/auth/oauth/google/callback", httpHandler.LoggingMiddleware(httpHandler.GoogleOAuthCallback))
+	mux.HandleFunc("/v1/auth/oauth/facebook/url", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthURL))
+	mux.HandleFunc("/v1/auth/oauth/facebook/callback", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthCallback))
 
 	// Serve Swagger JSON
-	mux.HandleFunc("/swagger.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/docs/swagger.json", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./docs/swagger.json")
 	})
 
 	// Serve Swagger UI
-	mux.Handle("/swagger/", httpSwagger.Handler(httpSwagger.URL("/swagger.json")))
+	mux.Handle("/v1/docs/", httpSwagger.Handler(httpSwagger.URL("/v1/docs/swagger.json")))
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
