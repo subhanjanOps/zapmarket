@@ -1,0 +1,359 @@
+basePath: /auth
+definitions:
+  http.AuthResponse:
+    properties:
+      access_token:
+        description: Access token for API authentication
+        type: string
+      code:
+        description: HTTP status code
+        type: integer
+      error:
+        description: Error message if any
+        type: string
+      refresh_token:
+        description: Refresh token for obtaining new access tokens
+        type: string
+      user:
+        allOf:
+        - $ref: '#/definitions/http.UserResponse'
+        description: User object
+    type: object
+  http.LoginRequest:
+    properties:
+      email:
+        description: |-
+          User's email address
+          example: user@example.com
+        example: user@example.com
+        type: string
+      password:
+        description: |-
+          User's password
+          example: secret123
+        example: secret123
+        type: string
+    type: object
+  http.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        description: |-
+          Refresh token issued during login or registration
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  http.RegisterRequest:
+    properties:
+      email:
+        description: |-
+          User's email address
+          example: user@example.com
+        example: user@example.com
+        type: string
+      full_name:
+        description: |-
+          User's full name
+          example: John Doe
+        example: John Doe
+        type: string
+      password:
+        description: |-
+          User's password
+          example: secret123
+        example: secret123
+        type: string
+    type: object
+  http.UserResponse:
+    properties:
+      created_at:
+        description: Creation timestamp
+        example: "2023-01-01T00:00:00Z"
+        type: string
+      email:
+        description: Email address
+        example: user@example.com
+        type: string
+      full_name:
+        description: Full name
+        example: John Doe
+        type: string
+      id:
+        description: Unique identifier
+        example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        type: string
+      is_verified:
+        description: Email verification status
+        example: true
+        type: boolean
+      phone:
+        description: Phone number (optional)
+        example: "+1234567890"
+        type: string
+      role:
+        description: Role (customer, seller, admin)
+        example: customer
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is the authentication and user management service for ZapMarket.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: ZapMarket Auth Service API
+  version: "1.0"
+paths:
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate a user with email and password
+      parameters:
+      - description: User login credentials
+        in: body
+        name: login
+        required: true
+        schema:
+          $ref: '#/definitions/http.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Login successful
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "400":
+          description: Invalid request body or missing fields
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "401":
+          description: Invalid email or password
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+      summary: Login a user
+      tags:
+      - auth
+  /me:
+    get:
+      description: Retrieve the profile of the currently authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User profile retrieved
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "401":
+          description: Missing or invalid authorization header
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - auth
+  /oauth/facebook/callback:
+    get:
+      description: Handle the callback from Facebook OAuth service
+      parameters:
+      - description: Authorization code from Facebook
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: State parameter from Facebook
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OAuth login successful
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "400":
+          description: Missing code parameter
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+      summary: Facebook OAuth callback
+      tags:
+      - oauth
+  /oauth/facebook/url:
+    get:
+      description: Get the URL for initiating Facebook OAuth flow
+      parameters:
+      - description: State parameter for OAuth security
+        in: query
+        name: state
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OAuth URL
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+      summary: Get Facebook OAuth URL
+      tags:
+      - oauth
+  /oauth/google/callback:
+    get:
+      description: Handle the callback from Google OAuth service
+      parameters:
+      - description: Authorization code from Google
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: State parameter from Google
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OAuth login successful
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "400":
+          description: Missing code parameter
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+      summary: Google OAuth callback
+      tags:
+      - oauth
+  /oauth/google/url:
+    get:
+      description: Get the URL for initiating Google OAuth flow
+      parameters:
+      - description: State parameter for OAuth security
+        in: query
+        name: state
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OAuth URL
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+      summary: Get Google OAuth URL
+      tags:
+      - oauth
+  /refresh:
+    post:
+      consumes:
+      - application/json
+      description: Generate a new access token using a refresh token
+      parameters:
+      - description: Refresh token
+        in: body
+        name: refresh
+        required: true
+        schema:
+          $ref: '#/definitions/http.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New access token generated
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "400":
+          description: Invalid request body or missing refresh token
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "401":
+          description: Invalid or expired refresh token
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+      security:
+      - BearerAuth: []
+      summary: Refresh access token
+      tags:
+      - auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with email, password, and full name
+      parameters:
+      - description: User registration details
+        in: body
+        name: register
+        required: true
+        schema:
+          $ref: '#/definitions/http.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User registered successfully
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "400":
+          description: Invalid request body or missing fields
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "409":
+          description: User with this email already exists
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+      summary: Register a new user
+      tags:
+      - auth
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

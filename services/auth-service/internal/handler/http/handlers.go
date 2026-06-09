@@ -243,6 +243,7 @@ func userToResponse(user *domain.User) *UserResponse {
 // @Failure 400 {object} AuthResponse "Invalid request body or missing fields"
 // @Failure 409 {object} AuthResponse "User with this email already exists"
 // @Failure 500 {object} AuthResponse "Internal server error"
+// @Router /register [post]
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -298,6 +299,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} AuthResponse "Invalid request body or missing fields"
 // @Failure 401 {object} AuthResponse "Invalid email or password"
 // @Failure 500 {object} AuthResponse "Internal server error"
+// @Router /login [post]
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -356,6 +358,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} AuthResponse "Invalid request body or missing refresh token"
 // @Failure 401 {object} AuthResponse "Invalid or expired refresh token"
 // @Failure 500 {object} AuthResponse "Internal server error"
+// @Router /refresh [post]
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -394,6 +397,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} AuthResponse "User profile retrieved"
 // @Failure 401 {object} AuthResponse "Missing or invalid authorization header"
 // @Failure 500 {object} AuthResponse "Internal server error"
+// @Router /me [get]
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -436,6 +440,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 // @Param state query string false "State parameter for OAuth security"
 // @Success 200 {object} map[string]string "OAuth URL"
 // @Failure 500 {object} AuthResponse "Internal server error"
+// @Router /oauth/google/url [get]
 func (h *Handler) GoogleOAuthURL(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -469,6 +474,7 @@ func (h *Handler) GoogleOAuthURL(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} AuthResponse "OAuth login successful"
 // @Failure 400 {object} AuthResponse "Missing code parameter"
 // @Failure 500 {object} AuthResponse "Internal server error"
+// @Router /oauth/google/callback [get]
 func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -509,6 +515,7 @@ func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 // @Param state query string false "State parameter for OAuth security"
 // @Success 200 {object} map[string]string "OAuth URL"
 // @Failure 500 {object} AuthResponse "Internal server error"
+// @Router /oauth/facebook/url [get]
 func (h *Handler) FacebookOAuthURL(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -542,6 +549,7 @@ func (h *Handler) FacebookOAuthURL(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} AuthResponse "OAuth login successful"
 // @Failure 400 {object} AuthResponse "Missing code parameter"
 // @Failure 500 {object} AuthResponse "Internal server error"
+// @Router /oauth/facebook/callback [get]
 func (h *Handler) FacebookOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")

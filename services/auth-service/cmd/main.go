@@ -1,5 +1,25 @@
 package main
 
+// @title ZapMarket Auth Service API
+// @version 1.0
+// @description This is the authentication and user management service for ZapMarket.
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url http://www.swagger.io/support
+// @contact.email support@swagger.io
+
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host localhost:8080
+// @BasePath /auth
+// @schemes http https
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+
 import (
 	"context"
 	"database/sql"
@@ -23,6 +43,7 @@ import (
 	httphandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func main() {
@@ -71,8 +92,11 @@ func main() {
 
 	// Serve Swagger JSON
 	mux.HandleFunc("/swagger.json", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "docs/swagger.json")
+		http.ServeFile(w, r, "./docs/swagger.json")
 	})
+
+	// Serve Swagger UI
+	mux.Handle("/swagger/", httpSwagger.Handler(httpSwagger.URL("/swagger.json")))
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
