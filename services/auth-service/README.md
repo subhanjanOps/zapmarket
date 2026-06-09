@@ -7,6 +7,8 @@ The Auth Service handles user authentication and authorization for the zapMarket
 - **User roles** — Customer, Seller, Admin with RBAC support
 - **gRPC interfaces** — For internal service-to-service calls
 - **REST API** — For client applications
+- **Structured logging** — Request/response logging for observability
+- **OpenAPI documentation** — Auto-generated API specs
 
 ---
 
@@ -23,6 +25,7 @@ REST API (HTTP)
 │  │ HTTP Handlers                      │  │
 │  │  - Register, Login, Refresh, Me    │  │
 │  │  - OAuth2 callbacks (Google/FB)    │  │
+│  │  - Structured logging middleware   │  │
 │  └────────────────────────────────────┘  │
 │  ┌────────────────────────────────────┐  │
 │  │ Auth Service (Business Logic)      │  │
@@ -83,6 +86,7 @@ PostgreSQL (userauth database)
    Service will start on:
    - HTTP: `http://localhost:8080`
    - gRPC: `localhost:50051` (placeholder until proto stubs generated)
+   - OpenAPI/Swagger JSON: `http://localhost:8080/swagger.json`
 
 ### Docker
 
@@ -229,6 +233,28 @@ Service health status.
 }
 ```
 
+### API Documentation
+
+#### `GET /swagger.json`
+OpenAPI 3.0 specification in JSON format.
+
+**Response (200 OK):**
+```json
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ZapMarket Auth Service API",
+    "version": "1.0.0",
+    ...
+  },
+  "paths": {
+    "/auth/register": { ... },
+    "/auth/login": { ... },
+    ...
+  }
+}
+```
+
 ---
 
 ## Environment Variables
@@ -307,6 +333,34 @@ See [db-design.md](../../db-design.md) for full schema details.
 
 ---
 
+## Structured Logging
+
+The service implements structured request/response logging for both HTTP and gRPC endpoints using the standard `log/slog` library.
+
+### HTTP Logging
+All HTTP endpoints (except `/health`) log:
+- **Request**: Method, path, query, user ID (if authenticated), remote address, user agent, referer
+- **Response**: Method, path, status code, duration (ms), response body (truncated to 500 chars)
+
+Example log output:
+```
+time="2026-06-09T10:30:45Z" level=info msg="HTTP request" method=POST path=/auth/login query= user_id=[authenticated] remote_addr=192.168.1.100:54321 user_agent=Mozilla/5.0 (...) referer=
+time="2026-06-09T10:30:46Z" level=info msg="HTTP response" method=POST path=/auth/login status=200 duration_ms=125 response_body={"user":{"id":"...","email":"user@example.com",...},"access_token":"...","refresh_token":"..."}
+```
+
+### gRPC Logging
+All gRPC methods log:
+- **Request**: Method name at start of processing
+- **Response**: Method name, status (success/error), error message (if applicable), duration (ms)
+
+Example log output:
+```
+time="2026-06-09T10:30:45Z" level=info msg="gRPC request" method=RegisterUser
+time="2026-06-09T10:30:46Z" level=info msg="gRPC response" method=RegisterUser status=success duration_ms=125
+```
+
+---
+
 ## Security Considerations
 
 1. **Password Hashing** — Bcrypt with cost factor 12
@@ -315,6 +369,7 @@ See [db-design.md](../../db-design.md) for full schema details.
 4. **Refresh Token Revocation** — Tokens can be manually invalidated
 5. **OAuth2 Flow** — Server-side authorization code flow; no implicit grant
 6. **HTTPS in Production** — OAuth2 redirect URIs must use HTTPS
+7. **Structured Logging** — No sensitive data (tokens, passwords) logged in plain text
 
 ---
 
@@ -351,7 +406,13 @@ curl -X GET http://localhost:8080/auth/me \
 curl -X POST http://localhost:8080/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refresh_token": "TOKEN"}'
+
+# View Swagger/OpenAPI spec
+curl http://localhost:8080/swagger.json | jq .
 ```
+
+### Verifying Logging
+When making requests, check the service console output for structured log entries as described in the **Structured Logging** section above.
 
 ---
 
@@ -366,6 +427,7 @@ curl -X POST http://localhost:8080/auth/refresh \
 - [ ] **Audit Logging** — Track auth events (login, password change, etc.)
 - [ ] **Rate Limiting** — Prevent brute force attacks
 - [ ] **mTLS for gRPC** — Secure service-to-service communication
+- [ ] **Enhanced OpenAPI** — Add Swagger UI endpoint for interactive documentation
 
 ---
 
@@ -390,6 +452,11 @@ curl -X POST http://localhost:8080/auth/refresh \
 - Run: `protoc --go_out=. --go-grpc_out=. proto/auth.proto`
 - Uncomment gRPC startup in `cmd/main.go`
 
+### No Structured Logs Appearing
+- Verify the service was built with the logging middleware changes
+- Check that you're hitting endpoints other than `/health` (which is intentionally not logged)
+- Ensure the service isn't running in a mode that suppresses info-level logs
+
 ---
 
 ## References
@@ -399,3 +466,5 @@ curl -X POST http://localhost:8080/auth/refresh \
 - [Go JWT Library](https://github.com/golang-jwt/jwt)
 - [OAuth2 Specification](https://tools.ietf.org/html/rfc6749)
 - [gRPC Documentation](https://grpc.io/docs/languages/go/)
+- [OpenAPI/Swagger Specification](https://swagger.io/specification/)
+- [Structured Logging with slog](https://golang.org/pkg/log/slog/)

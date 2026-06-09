@@ -1,52 +1,268 @@
-# zapMarket Monorepo
+# ⚡ ZapMarket
 
-This repository is structured as a Go monorepo using Go workspaces for service modules and shared packages.
+ZapMarket is a scalable, cloud-native e-commerce platform built using a Go monorepo architecture.  
+The system is designed around microservices, event-driven communication, and modern distributed system patterns.
 
-## Layout
+---
 
-- `services/` — independent Go modules for each microservice
-  - `auth-service`
-  - `product-catalog-service`
-  - `order-management-service`
-  - `inventory-service`
-  - `payment-service`
-  - `notification-service`
-- `pkg/` — shared libraries, proto definitions, tooling, and cross-service helpers
-- `design.md` — the primary architecture reference for the system
-- `AGENTS.md` — AI agent guidance and repository conventions
+# 🏗️ Architecture Overview
 
-## Getting started
+The platform follows a modular microservice architecture powered by:
 
-1. Ensure Go 1.22 or newer is installed.
-2. Run:
+- **Go Workspaces (`go.work`)** for monorepo management
+- **gRPC** for internal service communication
+- **Kafka** for asynchronous event streaming
+- **PostgreSQL** for transactional persistence
+- **Redis** for caching and distributed coordination
+- **Elasticsearch** for product search and indexing
+- **MinIO** for object storage
+- **Debezium CDC** for change data capture pipelines
 
-   ```bash
-   go work sync
-   ```
+The complete architecture and design decisions are documented in:
 
-3. Add service-specific implementation code inside `services/*`.
-4. Add shared modules or proto artifacts inside `pkg/*`.
+```text
+design.md
+```
 
-## Local dependencies
+---
 
-The project architecture depends on Kafka, Redis, PostgreSQL, Elasticsearch, MinIO, and Debezium CDC. Start these dependencies locally with:
+# 📂 Repository Structure
+
+```text
+zapmarket/
+│
+├── services/
+│   ├── auth-service/
+│   ├── product-catalog-service/
+│   ├── order-management-service/
+│   ├── inventory-service/
+│   ├── payment-service/
+│   └── notification-service/
+│
+├── pkg/
+│   ├── proto/
+│   ├── logger/
+│   ├── middleware/
+│   ├── kafka/
+│   ├── redis/
+│   ├── database/
+│   └── utils/
+│
+├── deploy/
+├── scripts/
+├── docker-compose.yml
+├── go.work
+├── design.md
+├── AGENTS.md
+└── README.md
+```
+
+---
+
+# 🚀 Services
+
+| Service | Responsibility |
+|---|---|
+| `auth-service` | Authentication, authorization, JWT, user identity |
+| `product-catalog-service` | Product management, categories, search indexing |
+| `order-management-service` | Order lifecycle and orchestration |
+| `inventory-service` | Inventory tracking and stock reservation |
+| `payment-service` | Payment processing and transaction workflows |
+| `notification-service` | Email, SMS, and event notifications |
+
+---
+
+# 🧩 Shared Packages
+
+The `pkg/` directory contains reusable shared modules across services:
+
+- gRPC protobuf definitions
+- Kafka producers/consumers
+- Database helpers
+- Redis utilities
+- Logging and tracing
+- Middleware and interceptors
+- Shared DTOs and contracts
+
+---
+
+# ⚙️ Prerequisites
+
+Ensure the following are installed:
+
+- Go `1.22+`
+- Docker
+- Docker Compose
+
+---
+
+# 🛠️ Getting Started
+
+## 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-org/zapmarket.git
+
+cd zapmarket
+```
+
+---
+
+## 2. Sync Go Workspaces
+
+```bash
+go work sync
+```
+
+---
+
+## 3. Start Infrastructure Dependencies
 
 ```bash
 docker compose up -d
 ```
 
-The PostgreSQL init script also installs the `pgcrypto` extension in each service database for `gen_random_uuid()` support.
+This will start:
 
-MinIO will be available at `http://localhost:9000` and its console at `http://localhost:9001`.
+- PostgreSQL
+- Kafka
+- Zookeeper
+- Redis
+- Elasticsearch
+- MinIO
+- Debezium
 
-Then confirm the infrastructure is available before wiring the services into the stack.
+---
 
-## Module status
+# 🗄️ Database Notes
 
-Each service is scaffolded as its own Go module, but currently contains only placeholder startup code.
+The PostgreSQL initialization scripts automatically enable:
 
-## Next steps
+```sql
+pgcrypto
+```
 
-- implement service APIs, gRPC clients/servers, and data access layers
-- add shared proto definitions and generated Go code in `pkg/proto`
-- update module `go.mod` files with required dependencies and replace placeholder commands
+This allows usage of:
+
+```sql
+gen_random_uuid()
+```
+
+across all service databases.
+
+---
+
+# 📦 MinIO Access
+
+| Component | URL |
+|---|---|
+| MinIO API | `http://localhost:9000` |
+| MinIO Console | `http://localhost:9001` |
+
+---
+
+# 🔌 Service Development
+
+Each service inside `services/` is an independent Go module.
+
+Typical service structure:
+
+```text
+service-name/
+├── cmd/
+├── internal/
+├── api/
+├── configs/
+├── migrations/
+├── Dockerfile
+├── go.mod
+└── main.go
+```
+
+---
+
+# 🧪 Current Status
+
+✅ Repository scaffolding completed  
+✅ Go workspace configured  
+✅ Local infrastructure setup available  
+
+🚧 Service implementations are currently in progress.
+
+---
+
+# 📡 Communication Patterns
+
+| Communication Type | Technology |
+|---|---|
+| Synchronous | gRPC |
+| Asynchronous | Kafka Events |
+| Search | Elasticsearch |
+| Caching | Redis |
+| Object Storage | MinIO |
+
+---
+
+# 📋 Planned Features
+
+- Distributed tracing
+- API Gateway
+- Rate limiting
+- Service discovery
+- Event sourcing support
+- Saga orchestration
+- Multi-tenant support
+- Observability stack
+- CI/CD pipelines
+- Kubernetes deployment manifests
+
+---
+
+# 🤝 Development Workflow
+
+## Generate Protobufs
+
+```bash
+make proto
+```
+
+## Run a Service
+
+```bash
+cd services/auth-service
+
+go run .
+```
+
+## Run Tests
+
+```bash
+go test ./...
+```
+
+---
+
+# 📖 Documentation
+
+| File | Description |
+|---|---|
+| `design.md` | System architecture and design |
+| `AGENTS.md` | AI agent and repository conventions |
+
+---
+
+# 🧠 Engineering Principles
+
+- Domain-driven service boundaries
+- Event-driven architecture
+- High cohesion, low coupling
+- Infrastructure abstraction
+- Cloud-native deployment readiness
+- Horizontal scalability
+- Observability-first design
+
+---
+
+# 📄 License
+
+This project is licensed under the MIT License.
