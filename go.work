@@ -1,0 +1,15 @@
+go 1.25.0
+
+use ./services/auth-service
+
+use ./services/product-catalog-service
+
+use ./services/order-management-service
+
+use ./services/inventory-service
+
+use ./services/payment-service
+
+use ./services/notification-service
+
+use ./pkg/proto

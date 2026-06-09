@@ -1,0 +1,139 @@
+services:
+  # zookeeper:
+  #   image: bitnami/zookeeper:latest
+  #   container_name: zapmarket-zookeeper
+  #   environment:
+  #     - ALLOW_ANONYMOUS_LOGIN=yes
+  #   ports:
+  #     - 2181:2181
+  #   networks:
+  #     - zapnet
+  #   volumes:
+  #     - zookeeper-data:/bitnami/zookeeper
+
+  # kafka:
+  #   image: bitnami/kafka:latest
+  #   container_name: zapmarket-kafka
+  #   depends_on:
+  #     - zookeeper
+  #   environment:
+  #     - KAFKA_BROKER_ID=1
+  #     - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+  #     - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+  #     - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+  #     - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+  #     - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+  #     - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+  #     - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+  #     - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+  #   ports:
+  #     - 9092:9092
+  #     - 29092:29092
+  #   networks:
+  #     - zapnet
+  #     - frontend
+  #   volumes:
+  #     - kafka-data:/bitnami/kafka
+
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: zapmarket-redis
+  #   ports:
+  #     - 6379:6379
+  #   networks:
+  #     - zapnet
+  #   volumes:
+  #     - redis-data:/data
+
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: zapmarket-minio
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     - MINIO_ROOT_USER=minioadmin
+  #     - MINIO_ROOT_PASSWORD=minioadmin
+  #   ports:
+  #     - 9000:9000
+  #     - 9001:9001
+  #   networks:
+  #     - zapnet
+  #   volumes:
+  #     - minio-data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: zapmarket-postgres
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=zapuser
+      - POSTGRES_PASSWORD=zappass123
+    ports:
+      - 5432:5432
+    networks:
+      - zapnet
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: zapmarket-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@zapmarket.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - 5050:80
+    networks:
+      - zapnet
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+  # elasticsearch:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+  #   container_name: zapmarket-elasticsearch
+  #   environment:
+  #     - discovery.type=single-node
+  #     - xpack.security.enabled=false
+  #     - xpack.ml.enabled=false
+  #     - ES_JAVA_OPTS=-Xms512m -Xmx512m
+  #   ports:
+  #     - 9200:9200
+  #   networks:
+  #     - zapnet
+  #   volumes:
+  #     - elasticsearch-data:/usr/share/elasticsearch/data
+
+  # kafka-connect:
+  #   image: debezium/connect:2.5
+  #   container_name: zapmarket-kafka-connect
+  #   depends_on:
+  #     - kafka
+  #   environment:
+  #     - BOOTSTRAP_SERVERS=kafka:9092
+  #     - GROUP_ID=1
+  #     - CONFIG_STORAGE_TOPIC=my_connect_configs
+  #     - OFFSET_STORAGE_TOPIC=my_connect_offsets
+  #     - STATUS_STORAGE_TOPIC=my_connect_statuses
+  #     - KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+  #     - VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+  #     - KEY_CONVERTER_SCHEMAS_ENABLE=false
+  #     - VALUE_CONVERTER_SCHEMAS_ENABLE=false
+  #     - CONNECT_REST_ADVERTISED_HOST_NAME=kafka-connect
+  #     - CONNECT_PLUGIN_PATH=/kafka/connect
+  #   ports:
+  #     - 8083:8083
+  #   networks:
+  #     - zapnet
+
+networks:
+  zapnet:
+  frontend:
+
+volumes:
+  zookeeper-data:
+  kafka-data:
+  redis-data:
+  minio-data:
+  postgres-data:
+  pgadmin-data:
+  elasticsearch-data:
