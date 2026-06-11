@@ -32,10 +32,13 @@ type CreateProductImageRequest struct {
 //	@Tags			product-images
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			product_id	path		string						true	"Product UUID"
 //	@Param			body		body		CreateProductImageRequest	true	"Image payload"
 //	@Success		201			{object}	Response{data=domain.ProductImage}
 //	@Failure		400			{object}	Response
+//	@Failure		401			{object}	Response
+//	@Failure		403			{object}	Response
 //	@Router			/api/v1/products/{product_id}/images [post]
 func (h *ProductImageHandler) CreateProductImage(w http.ResponseWriter, r *http.Request) {
 	var req CreateProductImageRequest
@@ -122,11 +125,14 @@ type UpdateImagePositionRequest struct {
 //	@Tags			product-images
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			product_id	path		string						true	"Product UUID"
 //	@Param			id			path		string						true	"Image UUID"
 //	@Param			body		body		UpdateImagePositionRequest	true	"Position payload"
 //	@Success		200			{object}	Response
 //	@Failure		400			{object}	Response
+//	@Failure		401			{object}	Response
+//	@Failure		403			{object}	Response
 //	@Router			/api/v1/products/{product_id}/images/{id}/position [patch]
 func (h *ProductImageHandler) UpdateImagePosition(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
@@ -154,10 +160,13 @@ func (h *ProductImageHandler) UpdateImagePosition(w http.ResponseWriter, r *http
 //
 //	@Summary		Delete product image
 //	@Tags			product-images
+//	@Security		BearerAuth
 //	@Param			product_id	path	string	true	"Product UUID"
 //	@Param			id			path	string	true	"Image UUID"
 //	@Success		204
 //	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		403	{object}	Response
 //	@Failure		404	{object}	Response
 //	@Router			/api/v1/products/{product_id}/images/{id} [delete]
 func (h *ProductImageHandler) DeleteProductImage(w http.ResponseWriter, r *http.Request) {

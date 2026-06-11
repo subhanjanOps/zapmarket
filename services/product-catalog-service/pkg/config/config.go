@@ -27,6 +27,9 @@ type Config struct {
 	HTTPPort int
 	GRPCPort int
 	AppEnv   string
+
+	// Downstream services
+	AuthServiceAddr string
 }
 
 // Load reads configuration from environment variables
@@ -52,6 +55,9 @@ func Load() (*Config, error) {
 		HTTPPort: getEnvInt("HTTP_PORT", 8081),
 		GRPCPort: getEnvInt("GRPC_PORT", 50052),
 		AppEnv:   getEnv("APP_ENV", "development"),
+
+		// Downstream services
+		AuthServiceAddr: getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),
 	}
 
 	// Validate required fields

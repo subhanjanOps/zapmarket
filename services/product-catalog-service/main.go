@@ -3,6 +3,10 @@
 // @description	Manages products, SKUs, categories, and images for ZapMarket.
 // @host			localhost:8081
 // @BasePath		/
+// @securityDefinitions.apikey	BearerAuth
+// @in							header
+// @name						Authorization
+// @description				Enter: Bearer <token>
 package main
 
 import (
@@ -18,7 +22,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	_ "github.com/lib/pq"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	googlegrpc "google.golang.org/grpc"
@@ -27,6 +31,7 @@ import (
 	_ "github.com/zapmarket/zapmarket/services/product-catalog-service/docs"
 	grpchandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/grpc"
 	httpHandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/http"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/middleware"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/pkg/config"
@@ -59,6 +64,14 @@ func main() {
 	}
 	logger.Info("connected to database")
 
+	// ── Auth middleware ────────────────────────────────────────────────────────
+	authMW, err := middleware.NewAuthMiddleware(cfg.AuthServiceAddr, logger)
+	if err != nil {
+		logger.Error("failed to connect to auth-service", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("connected to auth-service", "addr", cfg.AuthServiceAddr)
+
 	// ── Repositories ───────────────────────────────────────────────────────────
 	categoryRepo := repository.NewCategoryRepository(db)
 	productRepo := repository.NewProductRepository(db)
@@ -79,40 +92,53 @@ func main() {
 
 	// ── HTTP router ────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.RequestID)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Categories
-		r.Post("/categories", categoryH.CreateCategory)
+
+		// ── Public: read-only ──────────────────────────────────────────────────
 		r.Get("/categories", categoryH.GetCategoryList)
 		r.Get("/categories/slug/{slug}", categoryH.GetCategoryBySlug)
 		r.Get("/categories/{id}", categoryH.GetCategoryByID)
-		r.Put("/categories/{id}", categoryH.UpdateCategory)
-		r.Delete("/categories/{id}", categoryH.DeleteCategory)
 
-		// Products
-		r.Post("/products", productH.CreateProduct)
 		r.Get("/products", productH.GetProductList)
 		r.Get("/products/slug/{slug}", productH.GetProductBySlug)
 		r.Get("/products/{id}", productH.GetProductByID)
-		r.Put("/products/{id}", productH.UpdateProduct)
-		r.Delete("/products/{id}", productH.DeleteProduct)
-
-		// Product images (nested under product)
-		r.Post("/products/{product_id}/images", imageH.CreateProductImage)
 		r.Get("/products/{product_id}/images", imageH.GetImagesByProductID)
 		r.Get("/products/{product_id}/images/sku/{sku_id}", imageH.GetImagesBySKUID)
-		r.Patch("/products/{product_id}/images/{id}/position", imageH.UpdateImagePosition)
-		r.Delete("/products/{product_id}/images/{id}", imageH.DeleteProductImage)
 
-		// SKUs
-		r.Post("/skus", skuH.CreateSKU)
 		r.Get("/skus", skuH.GetSKUList)
 		r.Get("/skus/{id}", skuH.GetSKUByID)
-		r.Put("/skus/{id}", skuH.UpdateSKU)
-		r.Delete("/skus/{id}", skuH.DeleteSKU)
+
+		// ── Seller or Admin: manage products, SKUs, images ─────────────────────
+		r.Group(func(r chi.Router) {
+			r.Use(authMW.Authenticate)
+			r.Use(authMW.RequireRole("seller", "admin"))
+
+			r.Post("/products", productH.CreateProduct)
+			r.Put("/products/{id}", productH.UpdateProduct)
+			r.Delete("/products/{id}", productH.DeleteProduct)
+
+			r.Post("/products/{product_id}/images", imageH.CreateProductImage)
+			r.Patch("/products/{product_id}/images/{id}/position", imageH.UpdateImagePosition)
+			r.Delete("/products/{product_id}/images/{id}", imageH.DeleteProductImage)
+
+			r.Post("/skus", skuH.CreateSKU)
+			r.Put("/skus/{id}", skuH.UpdateSKU)
+			r.Delete("/skus/{id}", skuH.DeleteSKU)
+		})
+
+		// ── Admin only: manage categories ──────────────────────────────────────
+		r.Group(func(r chi.Router) {
+			r.Use(authMW.Authenticate)
+			r.Use(authMW.RequireRole("admin"))
+
+			r.Post("/categories", categoryH.CreateCategory)
+			r.Put("/categories/{id}", categoryH.UpdateCategory)
+			r.Delete("/categories/{id}", categoryH.DeleteCategory)
+		})
 	})
 
 	// Swagger UI

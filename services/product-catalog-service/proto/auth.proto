@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "./authpb";
+
+// User represents a user in the system
+message User {
+  string id = 1;
+  string email = 2;
+  string phone = 3;
+  string full_name = 4;
+  string role = 5; // "customer", "seller", "admin"
+  bool is_verified = 6;
+  string created_at = 7;
+  string updated_at = 8;
+}
+
+// ValidateTokenRequest is the request to validate a JWT token
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+// ValidateTokenResponse returns the validation result
+message ValidateTokenResponse {
+  bool valid = 1;
+  User user = 2;
+  string error_message = 3;
+}
+
+// GetUserRequest retrieves a user by ID
+message GetUserRequest {
+  string user_id = 1;
+}
+
+// GetUserResponse returns user details
+message GetUserResponse {
+  User user = 1;
+  string error_message = 2;
+}
+
+// LoginPasswordRequest requests password login
+message LoginPasswordRequest {
+  string email = 1;
+  string password = 2;
+}
+
+// LoginPasswordResponse returns login results
+message LoginPasswordResponse {
+  User user = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  string error_message = 4;
+}
+
+// RegisterUserRequest requests user registration
+message RegisterUserRequest {
+  string email = 1;
+  string password = 2;
+  string full_name = 3;
+}
+
+// RegisterUserResponse returns registration results
+message RegisterUserResponse {
+  User user = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  string error_message = 4;
+}
+
+// RefreshTokenRequest requests a new access token using refresh token
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+// RefreshTokenResponse returns new access token
+message RefreshTokenResponse {
+  string access_token = 1;
+  string error_message = 2;
+}
+
+// AuthService is the gRPC service for authentication
+service AuthService {
+  // ValidateToken validates a JWT token and returns user info (called by API Gateway)
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+
+  // GetUser retrieves user details by ID (called by other services)
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+  // LoginPassword authenticates a user (called by REST API)
+  rpc LoginPassword(LoginPasswordRequest) returns (LoginPasswordResponse);
+
+  // RegisterUser registers a new user (called by REST API)
+  rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
+
+  // RefreshAccessToken issues a new access token using refresh token (called by REST API)
+  rpc RefreshAccessToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+}

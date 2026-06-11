@@ -45,9 +45,12 @@ type UpdateProductRequest struct {
 //	@Tags			products
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			body	body		CreateProductRequest	true	"Product payload"
 //	@Success		201		{object}	Response{data=domain.Product}
 //	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		403		{object}	Response
 //	@Failure		409		{object}	Response
 //	@Router			/api/v1/products [post]
 func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -188,10 +191,13 @@ func (h *ProductHandler) GetProductList(w http.ResponseWriter, r *http.Request) 
 //	@Tags			products
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			id		path		string				true	"Product UUID"
 //	@Param			body	body		UpdateProductRequest	true	"Product payload"
 //	@Success		200		{object}	Response{data=domain.Product}
 //	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		403		{object}	Response
 //	@Failure		404		{object}	Response
 //	@Router			/api/v1/products/{id} [put]
 func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
@@ -237,9 +243,12 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 //
 //	@Summary		Delete product
 //	@Tags			products
+//	@Security		BearerAuth
 //	@Param			id	path	string	true	"Product UUID"
 //	@Success		204
 //	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		403	{object}	Response
 //	@Failure		404	{object}	Response
 //	@Router			/api/v1/products/{id} [delete]
 func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {

@@ -39,9 +39,12 @@ type UpdateCategoryRequest struct {
 //	@Tags			categories
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			body	body		CreateCategoryRequest	true	"Category payload"
 //	@Success		201		{object}	Response{data=domain.Category}
 //	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		403		{object}	Response
 //	@Failure		409		{object}	Response
 //	@Router			/api/v1/categories [post]
 func (h *CategoryHandler) CreateCategory(w http.ResponseWriter, r *http.Request) {
@@ -146,10 +149,13 @@ func (h *CategoryHandler) GetCategoryList(w http.ResponseWriter, r *http.Request
 //	@Tags			categories
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			id		path		string					true	"Category UUID"
 //	@Param			body	body		UpdateCategoryRequest	true	"Category payload"
 //	@Success		200		{object}	Response{data=domain.Category}
 //	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		403		{object}	Response
 //	@Failure		404		{object}	Response
 //	@Router			/api/v1/categories/{id} [put]
 func (h *CategoryHandler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
@@ -185,9 +191,12 @@ func (h *CategoryHandler) UpdateCategory(w http.ResponseWriter, r *http.Request)
 //
 //	@Summary		Delete category
 //	@Tags			categories
+//	@Security		BearerAuth
 //	@Param			id	path	string	true	"Category UUID"
 //	@Success		204
 //	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		403	{object}	Response
 //	@Failure		404	{object}	Response
 //	@Router			/api/v1/categories/{id} [delete]
 func (h *CategoryHandler) DeleteCategory(w http.ResponseWriter, r *http.Request) {

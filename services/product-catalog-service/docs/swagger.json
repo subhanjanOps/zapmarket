@@ -57,6 +57,11 @@
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -99,6 +104,18 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
@@ -216,6 +233,11 @@
                 }
             },
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -269,6 +291,18 @@
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -278,6 +312,11 @@
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "categories"
                 ],
@@ -297,6 +336,18 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
@@ -376,6 +427,11 @@
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -418,6 +474,18 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
@@ -535,6 +603,11 @@
                 }
             },
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -588,6 +661,18 @@
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -597,6 +682,11 @@
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "products"
                 ],
@@ -616,6 +706,18 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
@@ -678,6 +780,11 @@
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -727,6 +834,18 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
@@ -792,6 +911,11 @@
         },
         "/api/v1/products/{product_id}/images/{id}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "product-images"
                 ],
@@ -822,6 +946,18 @@
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -833,6 +969,11 @@
         },
         "/api/v1/products/{product_id}/images/{id}/position": {
             "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -877,6 +1018,18 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
@@ -950,6 +1103,11 @@
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -992,6 +1150,18 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
@@ -1057,6 +1227,11 @@
                 }
             },
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1110,6 +1285,18 @@
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -1119,6 +1306,11 @@
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "skus"
                 ],
@@ -1138,6 +1330,18 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
                         }
@@ -1476,6 +1680,14 @@
                     "type": "integer"
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Enter: Bearer \u003ctoken\u003e",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }

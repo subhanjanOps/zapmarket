@@ -276,10 +276,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "409":
           description: Conflict
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Create a category
       tags:
       - categories
@@ -298,10 +308,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Delete category
       tags:
       - categories
@@ -366,10 +386,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Update category
       tags:
       - categories
@@ -470,10 +500,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "409":
           description: Conflict
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Create a product
       tags:
       - products
@@ -492,10 +532,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Delete product
       tags:
       - products
@@ -560,10 +610,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Update product
       tags:
       - products
@@ -627,6 +687,16 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Add product image
       tags:
       - product-images
@@ -650,10 +720,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Delete product image
       tags:
       - product-images
@@ -689,6 +769,16 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Update image position
       tags:
       - product-images
@@ -823,10 +913,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "409":
           description: Conflict
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Create a SKU
       tags:
       - skus
@@ -845,10 +945,20 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Delete SKU
       tags:
       - skus
@@ -913,11 +1023,27 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      security:
+      - BearerAuth: []
       summary: Update SKU
       tags:
       - skus
+securityDefinitions:
+  BearerAuth:
+    description: 'Enter: Bearer <token>'
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

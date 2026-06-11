@@ -49,9 +49,12 @@ type UpdateSKURequest struct {
 //	@Tags			skus
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			body	body		CreateSKURequest	true	"SKU payload"
 //	@Success		201		{object}	Response{data=domain.SKU}
 //	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		403		{object}	Response
 //	@Failure		409		{object}	Response
 //	@Router			/api/v1/skus [post]
 func (h *SKUHandler) CreateSKU(w http.ResponseWriter, r *http.Request) {
@@ -157,10 +160,13 @@ func (h *SKUHandler) GetSKUList(w http.ResponseWriter, r *http.Request) {
 //	@Tags			skus
 //	@Accept			json
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			id		path		string			true	"SKU UUID"
 //	@Param			body	body		UpdateSKURequest	true	"SKU payload"
 //	@Success		200		{object}	Response{data=domain.SKU}
 //	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		403		{object}	Response
 //	@Failure		404		{object}	Response
 //	@Router			/api/v1/skus/{id} [put]
 func (h *SKUHandler) UpdateSKU(w http.ResponseWriter, r *http.Request) {
@@ -200,9 +206,12 @@ func (h *SKUHandler) UpdateSKU(w http.ResponseWriter, r *http.Request) {
 //
 //	@Summary		Delete SKU
 //	@Tags			skus
+//	@Security		BearerAuth
 //	@Param			id	path	string	true	"SKU UUID"
 //	@Success		204
 //	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		403	{object}	Response
 //	@Failure		404	{object}	Response
 //	@Router			/api/v1/skus/{id} [delete]
 func (h *SKUHandler) DeleteSKU(w http.ResponseWriter, r *http.Request) {
