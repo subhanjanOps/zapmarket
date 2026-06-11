@@ -20,7 +20,7 @@
         "version": "1.0"
     },
     "host": "localhost:8080",
-    "basePath": "/auth",
+    "basePath": "/v1/auth",
     "paths": {
         "/login": {
             "post": {
@@ -463,6 +463,11 @@
                     "description": "User's password\nexample: secret123",
                     "type": "string",
                     "example": "secret123"
+                },
+                "role": {
+                    "description": "Account role: \"buyer\" or \"seller\"\nexample: buyer",
+                    "type": "string",
+                    "example": "buyer"
                 }
             }
         },
@@ -500,9 +505,9 @@
                     "example": "+1234567890"
                 },
                 "role": {
-                    "description": "Role (customer, seller, admin)",
+                    "description": "Role (buyer, seller, admin)",
                     "type": "string",
-                    "example": "customer"
+                    "example": "buyer"
                 }
             }
         }

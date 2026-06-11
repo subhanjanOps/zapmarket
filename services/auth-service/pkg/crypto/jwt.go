@@ -99,7 +99,7 @@ func ValidateAccessToken(tokenString, secretKey string) (*domain.Claims, error) 
 
 	role, ok := claims["role"].(string)
 	if !ok {
-		role = "customer"
+		role = "buyer"
 	}
 
 	exp, ok := claims["exp"].(float64)

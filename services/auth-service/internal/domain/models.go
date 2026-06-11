@@ -6,6 +6,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// Role represents a user's role in the system.
+type Role string
+
+const (
+	RoleBuyer  Role = "buyer"
+	RoleSeller Role = "seller"
+	RoleAdmin  Role = "admin"
+)
+
 // User represents a registered user in the system
 type User struct {
 	ID           uuid.UUID
@@ -13,7 +22,7 @@ type User struct {
 	Phone        *string
 	PasswordHash *string // nil for OAuth-only accounts
 	FullName     string
-	Role         string // "customer", "seller", "admin"
+	Role         string
 	IsVerified   bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time

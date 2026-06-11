@@ -153,6 +153,9 @@ type RegisterRequest struct {
 	// User's full name
 	// example: John Doe
 	FullName string `json:"full_name" example:"John Doe"`
+	// Account role: "buyer" or "seller"
+	// example: buyer
+	Role string `json:"role" example:"buyer"`
 }
 
 // LoginRequest represents the login request body
@@ -196,8 +199,8 @@ type UserResponse struct {
 	Phone *string `json:"phone,omitempty" example:"+1234567890"`
 	// Full name
 	FullName string `json:"full_name" example:"John Doe"`
-	// Role (customer, seller, admin)
-	Role string `json:"role" example:"customer"`
+	// Role (buyer, seller, admin)
+	Role string `json:"role" example:"buyer"`
 	// Email verification status
 	IsVerified bool `json:"is_verified" example:"true"`
 	// Creation timestamp
@@ -261,9 +264,13 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "email, password, and full_name are required")
 		return
 	}
+	if req.Role != string(domain.RoleBuyer) && req.Role != string(domain.RoleSeller) {
+		h.writeError(w, http.StatusBadRequest, "role must be 'buyer' or 'seller'")
+		return
+	}
 
 	// Register user
-	user, refreshToken, err := h.authSvc.RegisterUserPassword(r.Context(), req.Email, req.Password, req.FullName)
+	user, refreshToken, err := h.authSvc.RegisterUserPassword(r.Context(), req.Email, req.Password, req.FullName, req.Role)
 	if err != nil {
 		domainErr, ok := err.(*domain.DomainError)
 		if ok && domainErr.Type == domain.ErrUserExists {

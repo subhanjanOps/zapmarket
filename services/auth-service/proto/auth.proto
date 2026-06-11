@@ -10,7 +10,7 @@ message User {
   string email = 2;
   string phone = 3;
   string full_name = 4;
-  string role = 5; // "customer", "seller", "admin"
+  string role = 5; // "buyer", "seller", "admin"
   bool is_verified = 6;
   string created_at = 7;
   string updated_at = 8;

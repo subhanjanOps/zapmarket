@@ -176,7 +176,7 @@ func (s *AuthServer) RegisterUser(ctx context.Context, req *authpb.RegisterUserR
 		"method", "RegisterUser",
 	)
 
-	user, refreshToken, err := s.authSvc.RegisterUserPassword(ctx, req.Email, req.Password, req.FullName)
+	user, refreshToken, err := s.authSvc.RegisterUserPassword(ctx, req.Email, req.Password, req.FullName, string(domain.RoleBuyer))
 	if err != nil {
 		duration := time.Since(start)
 		slog.Info("gRPC response",

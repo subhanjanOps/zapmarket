@@ -35,8 +35,9 @@ func NewAuthService(
 	}
 }
 
-// RegisterUserPassword registers a new user with email and password
-func (s *AuthService) RegisterUserPassword(ctx context.Context, email, password, fullName string) (*domain.User, *domain.RefreshToken, error) {
+// RegisterUserPassword registers a new user with email, password, and role.
+// role must be domain.RoleBuyer or domain.RoleSeller; domain.RoleAdmin is not self-assignable.
+func (s *AuthService) RegisterUserPassword(ctx context.Context, email, password, fullName, role string) (*domain.User, *domain.RefreshToken, error) {
 	// Check if user already exists
 	_, err := s.userRepo.GetUserByEmail(ctx, email)
 	if err == nil {
@@ -61,7 +62,7 @@ func (s *AuthService) RegisterUserPassword(ctx context.Context, email, password,
 		Email:        email,
 		PasswordHash: &passwordHash,
 		FullName:     fullName,
-		Role:         "customer",
+		Role:         role,
 		IsVerified:   true, // Auto-verify for now; implement email verification in Phase 2
 		CreatedAt:    now,
 		UpdatedAt:    now,

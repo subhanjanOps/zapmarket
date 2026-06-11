@@ -465,6 +465,11 @@ const docTemplate = `{
                     "description": "User's password\nexample: secret123",
                     "type": "string",
                     "example": "secret123"
+                },
+                "role": {
+                    "description": "Account role: \"buyer\" or \"seller\"\nexample: buyer",
+                    "type": "string",
+                    "example": "buyer"
                 }
             }
         },
@@ -502,9 +507,9 @@ const docTemplate = `{
                     "example": "+1234567890"
                 },
                 "role": {
-                    "description": "Role (customer, seller, admin)",
+                    "description": "Role (buyer, seller, admin)",
                     "type": "string",
-                    "example": "customer"
+                    "example": "buyer"
                 }
             }
         }
@@ -522,7 +527,7 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
 	Host:             "localhost:8080",
-	BasePath:         "/auth",
+	BasePath:         "/v1/auth",
 	Schemes:          []string{"http", "https"},
 	Title:            "ZapMarket Auth Service API",
 	Description:      "This is the authentication and user management service for ZapMarket.",

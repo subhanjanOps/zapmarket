@@ -161,7 +161,7 @@ func (s *OAuthService) handleOAuthUser(ctx context.Context, userInfo *OAuthUserI
 		ID:         uuid.New(),
 		Email:      userInfo.Email,
 		FullName:   userInfo.FullName,
-		Role:       "customer",
+		Role:       string(domain.RoleBuyer),
 		IsVerified: true, // OAuth email is already verified by provider
 		CreatedAt:  now,
 		UpdatedAt:  now,

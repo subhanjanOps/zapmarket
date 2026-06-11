@@ -1,4 +1,4 @@
-basePath: /auth
+basePath: /v1/auth
 definitions:
   http.AuthResponse:
     properties:
@@ -63,6 +63,12 @@ definitions:
           example: secret123
         example: secret123
         type: string
+      role:
+        description: |-
+          Account role: "buyer" or "seller"
+          example: buyer
+        example: buyer
+        type: string
     type: object
   http.UserResponse:
     properties:
@@ -91,8 +97,8 @@ definitions:
         example: "+1234567890"
         type: string
       role:
-        description: Role (customer, seller, admin)
-        example: customer
+        description: Role (buyer, seller, admin)
+        example: buyer
         type: string
     type: object
 host: localhost:8080
