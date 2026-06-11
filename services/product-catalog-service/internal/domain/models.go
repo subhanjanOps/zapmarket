@@ -36,6 +36,20 @@ type Product struct {
 	DeletedAt   *time.Time      `json:"deleted_at,omitempty"`
 }
 
+type ProductFilters struct {
+	CategoryID *uuid.UUID
+	SellerID   *uuid.UUID
+	Status     string
+	Slug       string
+	Search     string
+
+	Limit  int
+	Offset int
+
+	SortBy    string
+	SortOrder string
+}
+
 type ProductStatus string
 
 const (
