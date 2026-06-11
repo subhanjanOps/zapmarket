@@ -11,7 +11,7 @@ ZapMarket is a Go monorepo of six microservices managed via `go.work`. Each serv
 | Service | HTTP | gRPC | DB name |
 |---|---|---|---|
 | `auth-service` | 8080 | 50051 | `userauth` |
-| `product-catalog-service` | 8081 | 50052 | (configurable) |
+| `product-catalog-service` | 8081 | 50052 | `productcatalog` |
 | `order-management-service` | — | — | — |
 | `inventory-service` | — | — | — |
 | `payment-service` | — | — | — |
@@ -89,7 +89,7 @@ go test ./...
 
 ## Configuration
 
-All config is loaded from environment variables with sensible defaults (see `pkg/config/config.go` and each service's `pkg/config/config.go`). A `.env` file is supported (via `godotenv`) in auth-service. Key env vars:
+All config is loaded from environment variables with sensible defaults (see `pkg/config/config.go` and each service's `pkg/config/config.go`). Both implemented services load a `.env` file via `godotenv` if present — see each service's `.env.example` for all available vars. Key env vars:
 
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 - `JWT_SECRET_KEY`, `JWT_REFRESH_SECRET_KEY`
@@ -104,5 +104,5 @@ Default DB credentials: user=`zapuser`, password=`zappass123`. PostgreSQL must h
 - **Transactional outbox** — Order and Payment services write events to an `outbox` table in the same transaction, then Debezium CDC publishes to Kafka
 - **Idempotency keys** — Order and Payment endpoints use `Idempotency-Key` header; result cached in Redis for 24h
 - **Atomic inventory** — Redis Lua scripts do check-and-decrement to prevent oversell; PostgreSQL is the durable ledger
-- The `auth-service` uses `chi` router indirectly; the `product-catalog-service` uses `go-chi/chi/v5` explicitly with middleware chaining
+- `auth-service` uses the standard `net/http` ServeMux; `product-catalog-service` uses `go-chi/chi/v5` with explicit middleware chaining
 - Proto-generated files are copied into each consuming service under `proto/<name>pb/` rather than imported from a shared module
