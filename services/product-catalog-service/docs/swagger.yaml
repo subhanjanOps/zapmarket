@@ -1,0 +1,923 @@
+basePath: /
+definitions:
+  domain.Category:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      parent_id:
+        type: string
+      slug:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  domain.Product:
+    properties:
+      attributes:
+        items:
+          type: integer
+        type: array
+      category_id:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      seller_id:
+        type: string
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/domain.ProductStatus'
+      updated_at:
+        type: string
+    type: object
+  domain.ProductImage:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      position:
+        type: integer
+      product_id:
+        type: string
+      sku_id:
+        type: string
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  domain.ProductStatus:
+    enum:
+    - draft
+    - active
+    - inactive
+    - archived
+    type: string
+    x-enum-varnames:
+    - ProductStatusDraft
+    - ProductStatusActive
+    - ProductStatusInactive
+    - ProductStatusArchived
+  domain.SKU:
+    properties:
+      compare_price:
+        type: integer
+      created_at:
+        type: string
+      currency:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      price_amount:
+        type: integer
+      product_id:
+        type: string
+      sku_code:
+        type: string
+      updated_at:
+        type: string
+      variant_attributes:
+        items:
+          type: integer
+        type: array
+      weight_grams:
+        type: integer
+    type: object
+  github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/http.ErrorInfo'
+      success:
+        type: boolean
+    type: object
+  http.CreateCategoryRequest:
+    properties:
+      name:
+        type: string
+      parent_id:
+        type: string
+      slug:
+        type: string
+    type: object
+  http.CreateProductImageRequest:
+    properties:
+      product_id:
+        type: string
+      sku_id:
+        type: string
+      url:
+        type: string
+    type: object
+  http.CreateProductRequest:
+    properties:
+      attributes: {}
+      category_id:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      status:
+        type: string
+    type: object
+  http.CreateSKURequest:
+    properties:
+      compare_price:
+        type: integer
+      currency:
+        type: string
+      is_active:
+        type: boolean
+      price_amount:
+        type: integer
+      product_id:
+        type: string
+      sku_code:
+        type: string
+      variant_attrs: {}
+      weight_grams:
+        type: integer
+    type: object
+  http.ErrorInfo:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  http.UpdateCategoryRequest:
+    properties:
+      name:
+        type: string
+      parent_id:
+        type: string
+      slug:
+        type: string
+    type: object
+  http.UpdateImagePositionRequest:
+    properties:
+      position:
+        type: integer
+    type: object
+  http.UpdateProductRequest:
+    properties:
+      attributes: {}
+      category_id:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      status:
+        type: string
+    type: object
+  http.UpdateSKURequest:
+    properties:
+      compare_price:
+        type: integer
+      currency:
+        type: string
+      is_active:
+        type: boolean
+      price_amount:
+        type: integer
+      product_id:
+        type: string
+      sku_code:
+        type: string
+      variant_attrs: {}
+      weight_grams:
+        type: integer
+    type: object
+host: localhost:8081
+info:
+  contact: {}
+  description: Manages products, SKUs, categories, and images for ZapMarket.
+  title: Product Catalog Service API
+  version: "1.0"
+paths:
+  /api/v1/categories:
+    get:
+      parameters:
+      - description: Page size (default 20)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.Category'
+                  type: array
+              type: object
+      summary: List categories
+      tags:
+      - categories
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Category'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Create a category
+      tags:
+      - categories
+  /api/v1/categories/{id}:
+    delete:
+      parameters:
+      - description: Category UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Delete category
+      tags:
+      - categories
+    get:
+      parameters:
+      - description: Category UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Category'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Get category by ID
+      tags:
+      - categories
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Category UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Category payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Category'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Update category
+      tags:
+      - categories
+  /api/v1/categories/slug/{slug}:
+    get:
+      parameters:
+      - description: Category slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Category'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Get category by slug
+      tags:
+      - categories
+  /api/v1/products:
+    get:
+      parameters:
+      - description: Page size (default 20)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Filter by category UUID
+        in: query
+        name: category_id
+        type: string
+      - description: Filter by status (draft|active|inactive|archived)
+        in: query
+        name: status
+        type: string
+      - description: Search by name or description
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.Product'
+                  type: array
+              type: object
+      summary: List products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Product payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Create a product
+      tags:
+      - products
+  /api/v1/products/{id}:
+    delete:
+      parameters:
+      - description: Product UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Delete product
+      tags:
+      - products
+    get:
+      parameters:
+      - description: Product UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Get product by ID
+      tags:
+      - products
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Product UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Update product
+      tags:
+      - products
+  /api/v1/products/{product_id}/images:
+    get:
+      parameters:
+      - description: Product UUID
+        in: path
+        name: product_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.ProductImage'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Get images by product
+      tags:
+      - product-images
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Product UUID
+        in: path
+        name: product_id
+        required: true
+        type: string
+      - description: Image payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateProductImageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.ProductImage'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Add product image
+      tags:
+      - product-images
+  /api/v1/products/{product_id}/images/{id}:
+    delete:
+      parameters:
+      - description: Product UUID
+        in: path
+        name: product_id
+        required: true
+        type: string
+      - description: Image UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Delete product image
+      tags:
+      - product-images
+  /api/v1/products/{product_id}/images/{id}/position:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Product UUID
+        in: path
+        name: product_id
+        required: true
+        type: string
+      - description: Image UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Position payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateImagePositionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Update image position
+      tags:
+      - product-images
+  /api/v1/products/{product_id}/images/sku/{sku_id}:
+    get:
+      parameters:
+      - description: Product UUID
+        in: path
+        name: product_id
+        required: true
+        type: string
+      - description: SKU UUID
+        in: path
+        name: sku_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.ProductImage'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Get images by SKU
+      tags:
+      - product-images
+  /api/v1/products/slug/{slug}:
+    get:
+      parameters:
+      - description: Product slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Get product by slug
+      tags:
+      - products
+  /api/v1/skus:
+    get:
+      parameters:
+      - description: Page size (default 20)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      - description: Filter by product UUID
+        in: query
+        name: product_id
+        type: string
+      - description: Filter by SKU code (partial match)
+        in: query
+        name: sku_code
+        type: string
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.SKU'
+                  type: array
+              type: object
+      summary: List SKUs
+      tags:
+      - skus
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: SKU payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateSKURequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.SKU'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Create a SKU
+      tags:
+      - skus
+  /api/v1/skus/{id}:
+    delete:
+      parameters:
+      - description: SKU UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Delete SKU
+      tags:
+      - skus
+    get:
+      parameters:
+      - description: SKU UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.SKU'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Get SKU by ID
+      tags:
+      - skus
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: SKU UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: SKU payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateSKURequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.SKU'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response'
+      summary: Update SKU
+      tags:
+      - skus
+swagger: "2.0"

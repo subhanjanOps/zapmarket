@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package product_catalog;
+
+option go_package = "./productcatalogpb";
+
+// ── Shared messages ──────────────────────────────────────────────────────────
+
+message ProductProto {
+  string id          = 1;
+  string category_id = 2;
+  string seller_id   = 3;
+  string name        = 4;
+  string slug        = 5;
+  string description = 6;
+  string attributes  = 7; // JSON string
+  string status      = 8;
+  string created_at  = 9;
+  string updated_at  = 10;
+}
+
+message SKUProto {
+  string id            = 1;
+  string product_id    = 2;
+  string sku_code      = 3;
+  string variant_attrs = 4; // JSON string
+  int64  price_amount  = 5;
+  int64  compare_price = 6; // 0 means not set
+  string currency      = 7;
+  int32  weight_grams  = 8; // 0 means not set
+  bool   is_active     = 9;
+  string created_at    = 10;
+  string updated_at    = 11;
+}
+
+// ── GetProduct ────────────────────────────────────────────────────────────────
+
+message GetProductRequest {
+  string product_id = 1;
+}
+
+message GetProductResponse {
+  ProductProto product       = 1;
+  string       error_message = 2;
+}
+
+// ── GetSKU ────────────────────────────────────────────────────────────────────
+
+message GetSKURequest {
+  string sku_id = 1;
+}
+
+message GetSKUResponse {
+  SKUProto sku           = 1;
+  string   error_message = 2;
+}
+
+// ── GetSKUsByProduct ──────────────────────────────────────────────────────────
+
+message GetSKUsByProductRequest {
+  string product_id = 1;
+  bool   active_only = 2; // if true, returns only is_active=true SKUs
+}
+
+message GetSKUsByProductResponse {
+  repeated SKUProto skus          = 1;
+  string            error_message = 2;
+}
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
+service ProductCatalogService {
+  // GetProduct returns product details by ID (used by Order Mgmt, Inventory)
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+
+  // GetSKU returns SKU details by ID including price (used by Order Mgmt)
+  rpc GetSKU(GetSKURequest) returns (GetSKUResponse);
+
+  // GetSKUsByProduct returns all SKUs for a product (used by Order Mgmt)
+  rpc GetSKUsByProduct(GetSKUsByProductRequest) returns (GetSKUsByProductResponse);
+}
