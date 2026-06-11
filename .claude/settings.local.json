@@ -3,7 +3,10 @@
     "allow": [
       "Bash(go build *)",
       "Bash(cd /c/Users/subha/Downloads/Projects/zapMarket/services/auth-service && go build ./internal/handler/grpc)",
-      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/auth-service/**)"
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/auth-service/**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/product-catalog-service/**)",
+      "Bash(go get *)",
+      "Bash(go mod *)"
     ]
   }
 }
