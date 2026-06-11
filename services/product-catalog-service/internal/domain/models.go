@@ -74,6 +74,15 @@ type SKU struct {
 	DeletedAt    *time.Time      `json:"deleted_at,omitempty"`
 }
 
+type SKUFilters struct {
+	ProductID *uuid.UUID
+	SKUCode   *string
+	IsActive  *bool
+	Limit     int
+	Offset    int
+	SortBy    string
+	SortOrder string
+}
 type ProductImage struct {
 	ID        uuid.UUID  `json:"id"`
 	ProductID uuid.UUID  `json:"product_id"`
