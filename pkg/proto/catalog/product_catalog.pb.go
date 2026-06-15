@@ -15,9 +15,7 @@ import (
 )
 
 const (
-	// Verify that this generated code is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
-	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
@@ -29,7 +27,7 @@ type ProductProto struct {
 	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	Slug          string                 `protobuf:"bytes,5,opt,name=slug,proto3" json:"slug,omitempty"`
 	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
-	Attributes    string                 `protobuf:"bytes,7,opt,name=attributes,proto3" json:"attributes,omitempty"` // JSON string
+	Attributes    string                 `protobuf:"bytes,7,opt,name=attributes,proto3" json:"attributes,omitempty"`
 	Status        string                 `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     string                 `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
@@ -62,7 +60,6 @@ func (x *ProductProto) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ProductProto.ProtoReflect.Descriptor instead.
 func (*ProductProto) Descriptor() ([]byte, []int) {
 	return file_proto_product_catalog_proto_rawDescGZIP(), []int{0}
 }
@@ -142,11 +139,11 @@ type SKUProto struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	ProductId     string                 `protobuf:"bytes,2,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
 	SkuCode       string                 `protobuf:"bytes,3,opt,name=sku_code,json=skuCode,proto3" json:"sku_code,omitempty"`
-	VariantAttrs  string                 `protobuf:"bytes,4,opt,name=variant_attrs,json=variantAttrs,proto3" json:"variant_attrs,omitempty"` // JSON string
+	VariantAttrs  string                 `protobuf:"bytes,4,opt,name=variant_attrs,json=variantAttrs,proto3" json:"variant_attrs,omitempty"`
 	PriceAmount   int64                  `protobuf:"varint,5,opt,name=price_amount,json=priceAmount,proto3" json:"price_amount,omitempty"`
-	ComparePrice  int64                  `protobuf:"varint,6,opt,name=compare_price,json=comparePrice,proto3" json:"compare_price,omitempty"` // 0 means not set
+	ComparePrice  int64                  `protobuf:"varint,6,opt,name=compare_price,json=comparePrice,proto3" json:"compare_price,omitempty"`
 	Currency      string                 `protobuf:"bytes,7,opt,name=currency,proto3" json:"currency,omitempty"`
-	WeightGrams   int32                  `protobuf:"varint,8,opt,name=weight_grams,json=weightGrams,proto3" json:"weight_grams,omitempty"` // 0 means not set
+	WeightGrams   int32                  `protobuf:"varint,8,opt,name=weight_grams,json=weightGrams,proto3" json:"weight_grams,omitempty"`
 	IsActive      bool                   `protobuf:"varint,9,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     string                 `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
@@ -179,7 +176,6 @@ func (x *SKUProto) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SKUProto.ProtoReflect.Descriptor instead.
 func (*SKUProto) Descriptor() ([]byte, []int) {
 	return file_proto_product_catalog_proto_rawDescGZIP(), []int{1}
 }
@@ -293,7 +289,6 @@ func (x *GetProductRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetProductRequest.ProtoReflect.Descriptor instead.
 func (*GetProductRequest) Descriptor() ([]byte, []int) {
 	return file_proto_product_catalog_proto_rawDescGZIP(), []int{2}
 }
@@ -338,7 +333,6 @@ func (x *GetProductResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetProductResponse.ProtoReflect.Descriptor instead.
 func (*GetProductResponse) Descriptor() ([]byte, []int) {
 	return file_proto_product_catalog_proto_rawDescGZIP(), []int{3}
 }
@@ -389,7 +383,6 @@ func (x *GetSKURequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSKURequest.ProtoReflect.Descriptor instead.
 func (*GetSKURequest) Descriptor() ([]byte, []int) {
 	return file_proto_product_catalog_proto_rawDescGZIP(), []int{4}
 }
@@ -434,7 +427,6 @@ func (x *GetSKUResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSKUResponse.ProtoReflect.Descriptor instead.
 func (*GetSKUResponse) Descriptor() ([]byte, []int) {
 	return file_proto_product_catalog_proto_rawDescGZIP(), []int{5}
 }
@@ -456,7 +448,7 @@ func (x *GetSKUResponse) GetErrorMessage() string {
 type GetSKUsByProductRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProductId     string                 `protobuf:"bytes,1,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
-	ActiveOnly    bool                   `protobuf:"varint,2,opt,name=active_only,json=activeOnly,proto3" json:"active_only,omitempty"` // if true, returns only is_active=true SKUs
+	ActiveOnly    bool                   `protobuf:"varint,2,opt,name=active_only,json=activeOnly,proto3" json:"active_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -486,7 +478,6 @@ func (x *GetSKUsByProductRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSKUsByProductRequest.ProtoReflect.Descriptor instead.
 func (*GetSKUsByProductRequest) Descriptor() ([]byte, []int) {
 	return file_proto_product_catalog_proto_rawDescGZIP(), []int{6}
 }
@@ -538,7 +529,6 @@ func (x *GetSKUsByProductResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSKUsByProductResponse.ProtoReflect.Descriptor instead.
 func (*GetSKUsByProductResponse) Descriptor() ([]byte, []int) {
 	return file_proto_product_catalog_proto_rawDescGZIP(), []int{7}
 }

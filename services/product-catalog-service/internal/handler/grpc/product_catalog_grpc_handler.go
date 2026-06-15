@@ -9,7 +9,7 @@ import (
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
-	pb "github.com/zapmarket/zapmarket/services/product-catalog-service/proto/productcatalogpb"
+	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

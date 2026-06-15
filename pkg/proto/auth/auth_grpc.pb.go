@@ -13,9 +13,6 @@ import (
 	status "google.golang.org/grpc/status"
 )
 
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the grpc package it is being compiled against.
-// Requires gRPC-Go v1.64.0 or later.
 const _ = grpc.SupportPackageIsVersion9
 
 const (
@@ -26,21 +23,11 @@ const (
 	AuthService_RefreshAccessToken_FullMethodName = "/auth.AuthService/RefreshAccessToken"
 )
 
-// AuthServiceClient is the client API for AuthService service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-//
-// AuthService is the gRPC service for authentication
 type AuthServiceClient interface {
-	// ValidateToken validates a JWT token and returns user info (called by API Gateway)
 	ValidateToken(ctx context.Context, in *ValidateTokenRequest, opts ...grpc.CallOption) (*ValidateTokenResponse, error)
-	// GetUser retrieves user details by ID (called by other services)
 	GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*GetUserResponse, error)
-	// LoginPassword authenticates a user (called by REST API)
 	LoginPassword(ctx context.Context, in *LoginPasswordRequest, opts ...grpc.CallOption) (*LoginPasswordResponse, error)
-	// RegisterUser registers a new user (called by REST API)
 	RegisterUser(ctx context.Context, in *RegisterUserRequest, opts ...grpc.CallOption) (*RegisterUserResponse, error)
-	// RefreshAccessToken issues a new access token using refresh token (called by REST API)
 	RefreshAccessToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
 }
 
@@ -102,30 +89,15 @@ func (c *authServiceClient) RefreshAccessToken(ctx context.Context, in *RefreshT
 	return out, nil
 }
 
-// AuthServiceServer is the server API for AuthService service.
-// All implementations must embed UnimplementedAuthServiceServer
-// for forward compatibility.
-//
-// AuthService is the gRPC service for authentication
 type AuthServiceServer interface {
-	// ValidateToken validates a JWT token and returns user info (called by API Gateway)
 	ValidateToken(context.Context, *ValidateTokenRequest) (*ValidateTokenResponse, error)
-	// GetUser retrieves user details by ID (called by other services)
 	GetUser(context.Context, *GetUserRequest) (*GetUserResponse, error)
-	// LoginPassword authenticates a user (called by REST API)
 	LoginPassword(context.Context, *LoginPasswordRequest) (*LoginPasswordResponse, error)
-	// RegisterUser registers a new user (called by REST API)
 	RegisterUser(context.Context, *RegisterUserRequest) (*RegisterUserResponse, error)
-	// RefreshAccessToken issues a new access token using refresh token (called by REST API)
 	RefreshAccessToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
-// UnimplementedAuthServiceServer must be embedded to have
-// forward compatible implementations.
-//
-// NOTE: this should be embedded by value instead of pointer to avoid a nil
-// pointer dereference when methods are called.
 type UnimplementedAuthServiceServer struct{}
 
 func (UnimplementedAuthServiceServer) ValidateToken(context.Context, *ValidateTokenRequest) (*ValidateTokenResponse, error) {
@@ -146,18 +118,11 @@ func (UnimplementedAuthServiceServer) RefreshAccessToken(context.Context, *Refre
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
 
-// UnsafeAuthServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to AuthServiceServer will
-// result in compilation errors.
 type UnsafeAuthServiceServer interface {
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
 func RegisterAuthServiceServer(s grpc.ServiceRegistrar, srv AuthServiceServer) {
-	// If the following call pancis, it indicates UnimplementedAuthServiceServer was
-	// embedded by pointer and is nil.  This will cause panics if an
-	// unimplemented method is ever invoked, so we test this at initialization
-	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
@@ -172,10 +137,7 @@ func _AuthService_ValidateToken_Handler(srv interface{}, ctx context.Context, de
 	if interceptor == nil {
 		return srv.(AuthServiceServer).ValidateToken(ctx, in)
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthService_ValidateToken_FullMethodName,
-	}
+	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: AuthService_ValidateToken_FullMethodName}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).ValidateToken(ctx, req.(*ValidateTokenRequest))
 	}
@@ -190,10 +152,7 @@ func _AuthService_GetUser_Handler(srv interface{}, ctx context.Context, dec func
 	if interceptor == nil {
 		return srv.(AuthServiceServer).GetUser(ctx, in)
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthService_GetUser_FullMethodName,
-	}
+	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: AuthService_GetUser_FullMethodName}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).GetUser(ctx, req.(*GetUserRequest))
 	}
@@ -208,10 +167,7 @@ func _AuthService_LoginPassword_Handler(srv interface{}, ctx context.Context, de
 	if interceptor == nil {
 		return srv.(AuthServiceServer).LoginPassword(ctx, in)
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthService_LoginPassword_FullMethodName,
-	}
+	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: AuthService_LoginPassword_FullMethodName}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).LoginPassword(ctx, req.(*LoginPasswordRequest))
 	}
@@ -226,10 +182,7 @@ func _AuthService_RegisterUser_Handler(srv interface{}, ctx context.Context, dec
 	if interceptor == nil {
 		return srv.(AuthServiceServer).RegisterUser(ctx, in)
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthService_RegisterUser_FullMethodName,
-	}
+	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: AuthService_RegisterUser_FullMethodName}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).RegisterUser(ctx, req.(*RegisterUserRequest))
 	}
@@ -244,43 +197,22 @@ func _AuthService_RefreshAccessToken_Handler(srv interface{}, ctx context.Contex
 	if interceptor == nil {
 		return srv.(AuthServiceServer).RefreshAccessToken(ctx, in)
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthService_RefreshAccessToken_FullMethodName,
-	}
+	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: AuthService_RefreshAccessToken_FullMethodName}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).RefreshAccessToken(ctx, req.(*RefreshTokenRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
-// It's only intended for direct use with grpc.RegisterService,
-// and not to be introspected or modified (even as a copy)
 var AuthService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "auth.AuthService",
 	HandlerType: (*AuthServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "ValidateToken",
-			Handler:    _AuthService_ValidateToken_Handler,
-		},
-		{
-			MethodName: "GetUser",
-			Handler:    _AuthService_GetUser_Handler,
-		},
-		{
-			MethodName: "LoginPassword",
-			Handler:    _AuthService_LoginPassword_Handler,
-		},
-		{
-			MethodName: "RegisterUser",
-			Handler:    _AuthService_RegisterUser_Handler,
-		},
-		{
-			MethodName: "RefreshAccessToken",
-			Handler:    _AuthService_RefreshAccessToken_Handler,
-		},
+		{MethodName: "ValidateToken", Handler: _AuthService_ValidateToken_Handler},
+		{MethodName: "GetUser", Handler: _AuthService_GetUser_Handler},
+		{MethodName: "LoginPassword", Handler: _AuthService_LoginPassword_Handler},
+		{MethodName: "RegisterUser", Handler: _AuthService_RegisterUser_Handler},
+		{MethodName: "RefreshAccessToken", Handler: _AuthService_RefreshAccessToken_Handler},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "proto/auth.proto",

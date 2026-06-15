@@ -11,6 +11,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/zapmarket/zapmarket/pkg/config v0.0.0
 	github.com/zapmarket/zapmarket/pkg/errors v0.0.0
+	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 )
@@ -37,4 +38,5 @@ require (
 replace (
 	github.com/zapmarket/zapmarket/pkg/config => ../../pkg/config
 	github.com/zapmarket/zapmarket/pkg/errors => ../../pkg/errors
+	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 )

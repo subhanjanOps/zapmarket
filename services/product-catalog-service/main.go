@@ -36,7 +36,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 	"github.com/zapmarket/zapmarket/pkg/config"
-	pb "github.com/zapmarket/zapmarket/services/product-catalog-service/proto/productcatalogpb"
+	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
 )
 
 func main() {

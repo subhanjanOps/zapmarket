@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	httputil "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/http"
-	authpb "github.com/zapmarket/zapmarket/services/product-catalog-service/proto/authpb"
+	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
 )
 
 type contextKey string
