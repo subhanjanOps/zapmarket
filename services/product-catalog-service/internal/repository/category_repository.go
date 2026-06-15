@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
 )
 
 type CategoryRepository struct {
@@ -42,27 +42,13 @@ func (cr *CategoryRepository) CreateCategory(
 	)
 
 	if err != nil {
-
 		if pqErr, ok := err.(*pq.Error); ok {
-
 			switch pqErr.Code {
-
-			// unique_violation
 			case "23505":
-				return appErr.ConflictError(
-					fmt.Sprintf(
-						"category with slug '%s' already exists",
-						category.Slug,
-					),
-					err,
-				)
+				return pkgerrors.NewConflict("CATEGORY_ALREADY_EXISTS", fmt.Sprintf("category with slug '%s' already exists", category.Slug))
 			}
 		}
-
-		return appErr.DatabaseError(
-			"failed to create category",
-			err,
-		)
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to create category", err)
 	}
 
 	return nil
@@ -98,18 +84,10 @@ func (cr *CategoryRepository) GetCategoryByID(
 	)
 
 	if err != nil {
-
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, appErr.DatabaseError(
-				"category not found",
-				err,
-			)
+			return nil, pkgerrors.NewNotFound("CATEGORY_NOT_FOUND", "category not found")
 		}
-
-		return nil, appErr.DatabaseError(
-			"failed to get category",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to get category", err)
 	}
 
 	return category, nil
@@ -134,19 +112,12 @@ func (cr *CategoryRepository) GetCategoryBySlug(ctx context.Context, slug string
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, appErr.DatabaseError(
-				"category not found",
-				err,
-			)
+			return nil, pkgerrors.NewNotFound("CATEGORY_NOT_FOUND", "category not found")
 		}
-		return nil, appErr.DatabaseError(
-			"failed to get category",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to get category", err)
 	}
 
 	return category, nil
-
 }
 
 func (cr *CategoryRepository) GetCategoryList(ctx context.Context, filters map[string]string, limit int, offset int) ([]*domain.Category, error) {
@@ -162,10 +133,7 @@ func (cr *CategoryRepository) GetCategoryList(ctx context.Context, filters map[s
 
 	rows, err := cr.db.QueryContext(ctx, query, limit, offset)
 	if err != nil {
-		return nil, appErr.DatabaseError(
-			"failed to fetch categories",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch categories", err)
 	}
 	for rows.Next() {
 		var category domain.Category
@@ -179,10 +147,7 @@ func (cr *CategoryRepository) GetCategoryList(ctx context.Context, filters map[s
 			&category.UpdatedAt,
 		)
 		if err != nil {
-			return nil, appErr.DatabaseError(
-				"failed to scan category",
-				err,
-			)
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan category", err)
 		}
 
 		categories = append(categories, &category)
@@ -216,47 +181,25 @@ func (cr *CategoryRepository) UpdateCategory(
 		category.ID,
 	)
 	if err != nil {
-
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) {
-
 			switch pqErr.Code {
-
-			// unique_violation
 			case "23505":
-				return appErr.ConflictError(
-					"category slug already exists",
-					err,
-				)
-
-			// foreign_key_violation
+				return pkgerrors.NewConflict("CATEGORY_ALREADY_EXISTS", "category slug already exists")
 			case "23503":
-				return appErr.ValidationError(
-					"parent category does not exist",
-					err,
-				)
+				return pkgerrors.NewValidation("INVALID_DATA", "parent category does not exist")
 			}
 		}
-
-		return appErr.DatabaseError(
-			"failed to update category",
-			err,
-		)
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to update category", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return appErr.DatabaseError(
-			"failed to get affected rows",
-			err,
-		)
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to get affected rows", err)
 	}
 
 	if rowsAffected == 0 {
-		return appErr.NotFoundError(
-			"category not found",
-			nil,
-		)
+		return pkgerrors.NewNotFound("CATEGORY_NOT_FOUND", "category not found")
 	}
 
 	return nil
@@ -277,25 +220,16 @@ func (cr *CategoryRepository) DeleteCategory(
 
 	result, err := cr.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return appErr.InternalError(
-			"failed to delete category",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to delete category", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return appErr.InternalError(
-			"failed to get affected rows",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get affected rows", err)
 	}
 
 	if rowsAffected == 0 {
-		return appErr.NotFoundError(
-			"category not found",
-			nil,
-		)
+		return pkgerrors.NewNotFound("CATEGORY_NOT_FOUND", "category not found")
 	}
 
 	return nil

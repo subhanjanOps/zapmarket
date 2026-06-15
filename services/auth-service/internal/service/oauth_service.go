@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/config"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
 	"golang.org/x/oauth2"
@@ -42,16 +43,15 @@ func NewOAuthService(
 	tokenRepo *repository.RefreshTokenRepository,
 	cfg *config.Config,
 ) *OAuthService {
-	service := &OAuthService{
+	svc := &OAuthService{
 		userRepo:  userRepo,
 		oauthRepo: oauthRepo,
 		tokenRepo: tokenRepo,
 		cfg:       cfg,
 	}
 
-	// Initialize Google OAuth2 config
 	if cfg.GoogleClientID != "" {
-		service.googleConfig = &oauth2.Config{
+		svc.googleConfig = &oauth2.Config{
 			ClientID:     cfg.GoogleClientID,
 			ClientSecret: cfg.GoogleClientSecret,
 			RedirectURL:  cfg.GoogleRedirectURL,
@@ -63,9 +63,8 @@ func NewOAuthService(
 		}
 	}
 
-	// Initialize Facebook OAuth2 config
 	if cfg.FacebookClientID != "" {
-		service.facebookConfig = &oauth2.Config{
+		svc.facebookConfig = &oauth2.Config{
 			ClientID:     cfg.FacebookClientID,
 			ClientSecret: cfg.FacebookClientSecret,
 			RedirectURL:  cfg.FacebookRedirectURL,
@@ -74,13 +73,13 @@ func NewOAuthService(
 		}
 	}
 
-	return service
+	return svc
 }
 
 // GetGoogleOAuthURL returns the authorization URL for Google OAuth2
 func (s *OAuthService) GetGoogleOAuthURL(state string) (string, error) {
 	if s.googleConfig == nil {
-		return "", domain.NewDomainError(domain.ErrOAuthFailed, "Google OAuth is not configured")
+		return "", pkgerrors.NewInternal("OAUTH_NOT_CONFIGURED", "Google OAuth is not configured", nil)
 	}
 	return s.googleConfig.AuthCodeURL(state), nil
 }
@@ -88,7 +87,7 @@ func (s *OAuthService) GetGoogleOAuthURL(state string) (string, error) {
 // GetFacebookOAuthURL returns the authorization URL for Facebook OAuth2
 func (s *OAuthService) GetFacebookOAuthURL(state string) (string, error) {
 	if s.facebookConfig == nil {
-		return "", domain.NewDomainError(domain.ErrOAuthFailed, "Facebook OAuth is not configured")
+		return "", pkgerrors.NewInternal("OAUTH_NOT_CONFIGURED", "Facebook OAuth is not configured", nil)
 	}
 	return s.facebookConfig.AuthCodeURL(state), nil
 }
@@ -96,16 +95,14 @@ func (s *OAuthService) GetFacebookOAuthURL(state string) (string, error) {
 // HandleGoogleCallback exchanges the authorization code for tokens and creates/updates the user
 func (s *OAuthService) HandleGoogleCallback(ctx context.Context, code string) (*domain.User, *domain.RefreshToken, error) {
 	if s.googleConfig == nil {
-		return nil, nil, domain.NewDomainError(domain.ErrOAuthFailed, "Google OAuth is not configured")
+		return nil, nil, pkgerrors.NewInternal("OAUTH_NOT_CONFIGURED", "Google OAuth is not configured", nil)
 	}
 
-	// Exchange code for token
 	token, err := s.googleConfig.Exchange(ctx, code)
 	if err != nil {
-		return nil, nil, domain.NewDomainError(domain.ErrOAuthFailed, fmt.Sprintf("failed to exchange code: %v", err))
+		return nil, nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to exchange code: %v", err), err)
 	}
 
-	// Get user info
 	userInfo, err := s.getGoogleUserInfo(token)
 	if err != nil {
 		return nil, nil, err
@@ -117,16 +114,14 @@ func (s *OAuthService) HandleGoogleCallback(ctx context.Context, code string) (*
 // HandleFacebookCallback exchanges the authorization code for tokens and creates/updates the user
 func (s *OAuthService) HandleFacebookCallback(ctx context.Context, code string) (*domain.User, *domain.RefreshToken, error) {
 	if s.facebookConfig == nil {
-		return nil, nil, domain.NewDomainError(domain.ErrOAuthFailed, "Facebook OAuth is not configured")
+		return nil, nil, pkgerrors.NewInternal("OAUTH_NOT_CONFIGURED", "Facebook OAuth is not configured", nil)
 	}
 
-	// Exchange code for token
 	token, err := s.facebookConfig.Exchange(ctx, code)
 	if err != nil {
-		return nil, nil, domain.NewDomainError(domain.ErrOAuthFailed, fmt.Sprintf("failed to exchange code: %v", err))
+		return nil, nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to exchange code: %v", err), err)
 	}
 
-	// Get user info
 	userInfo, err := s.getFacebookUserInfo(token)
 	if err != nil {
 		return nil, nil, err
@@ -135,12 +130,10 @@ func (s *OAuthService) HandleFacebookCallback(ctx context.Context, code string) 
 	return s.handleOAuthUser(ctx, userInfo)
 }
 
-// handleOAuthUser creates or updates a user with OAuth account
+// handleOAuthUser creates or updates a user with an OAuth account
 func (s *OAuthService) handleOAuthUser(ctx context.Context, userInfo *OAuthUserInfo) (*domain.User, *domain.RefreshToken, error) {
-	// Try to find existing OAuth account
 	oauthAccount, existingUser, err := s.oauthRepo.GetOAuthAccountByProviderUID(ctx, userInfo.Provider, userInfo.UID)
 	if err == nil && oauthAccount != nil && existingUser != nil {
-		// User already exists, just generate tokens
 		refreshToken, err := s.generateRefreshTokenForUser(ctx, existingUser.ID)
 		if err != nil {
 			return nil, nil, err
@@ -148,32 +141,28 @@ func (s *OAuthService) handleOAuthUser(ctx context.Context, userInfo *OAuthUserI
 		return existingUser, refreshToken, nil
 	}
 
-	// Check if domain error is NOT "user not found"
+	// Ignore not-found; any other error is real
 	if err != nil {
-		if domainErr, ok := err.(*domain.DomainError); ok && domainErr.Type != domain.ErrUserNotFound {
+		if appErr, ok := err.(*pkgerrors.AppError); !ok || appErr.Type != pkgerrors.NotFound {
 			return nil, nil, err
 		}
 	}
 
-	// Create new user and OAuth account
 	now := time.Now()
 	user := &domain.User{
 		ID:         uuid.New(),
 		Email:      userInfo.Email,
 		FullName:   userInfo.FullName,
 		Role:       string(domain.RoleBuyer),
-		IsVerified: true, // OAuth email is already verified by provider
+		IsVerified: true,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
 
-	// Create user
-	err = s.userRepo.CreateUser(ctx, user)
-	if err != nil {
+	if err := s.userRepo.CreateUser(ctx, user); err != nil {
 		return nil, nil, err
 	}
 
-	// Create OAuth account
 	oauthAccount = &domain.OAuthAccount{
 		ID:          uuid.New(),
 		UserID:      user.ID,
@@ -183,12 +172,10 @@ func (s *OAuthService) handleOAuthUser(ctx context.Context, userInfo *OAuthUserI
 		UpdatedAt:   now,
 	}
 
-	err = s.oauthRepo.CreateOAuthAccount(ctx, oauthAccount)
-	if err != nil {
+	if err := s.oauthRepo.CreateOAuthAccount(ctx, oauthAccount); err != nil {
 		return nil, nil, err
 	}
 
-	// Generate tokens
 	refreshToken, err := s.generateRefreshTokenForUser(ctx, user.ID)
 	if err != nil {
 		return nil, nil, err
@@ -197,30 +184,25 @@ func (s *OAuthService) handleOAuthUser(ctx context.Context, userInfo *OAuthUserI
 	return user, refreshToken, nil
 }
 
-// getGoogleUserInfo fetches user information from Google
 func (s *OAuthService) getGoogleUserInfo(token *oauth2.Token) (*OAuthUserInfo, error) {
 	resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
 	if err != nil {
-		return nil, domain.NewDomainError(domain.ErrOAuthFailed, fmt.Sprintf("failed to get user info: %v", err))
+		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to get user info: %v", err), err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, domain.NewDomainError(domain.ErrOAuthFailed, fmt.Sprintf("failed to read response: %v", err))
+		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to read response: %v", err), err)
 	}
 
-	// Parse JSON manually to extract id, email, name
-	// For production, use a JSON decoder
 	var googleResp struct {
 		ID    string `json:"id"`
 		Email string `json:"email"`
 		Name  string `json:"name"`
 	}
-
-	err = json.Unmarshal(body, &googleResp)
-	if err != nil {
-		return nil, domain.NewDomainError(domain.ErrOAuthFailed, fmt.Sprintf("failed to parse user info: %v", err))
+	if err := json.Unmarshal(body, &googleResp); err != nil {
+		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to parse user info: %v", err), err)
 	}
 
 	return &OAuthUserInfo{
@@ -231,29 +213,25 @@ func (s *OAuthService) getGoogleUserInfo(token *oauth2.Token) (*OAuthUserInfo, e
 	}, nil
 }
 
-// getFacebookUserInfo fetches user information from Facebook
 func (s *OAuthService) getFacebookUserInfo(token *oauth2.Token) (*OAuthUserInfo, error) {
 	resp, err := http.Get("https://graph.facebook.com/me?fields=id,email,name&access_token=" + token.AccessToken)
 	if err != nil {
-		return nil, domain.NewDomainError(domain.ErrOAuthFailed, fmt.Sprintf("failed to get user info: %v", err))
+		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to get user info: %v", err), err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, domain.NewDomainError(domain.ErrOAuthFailed, fmt.Sprintf("failed to read response: %v", err))
+		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to read response: %v", err), err)
 	}
 
-	// Parse JSON manually to extract id, email, name
 	var facebookResp struct {
 		ID    string `json:"id"`
 		Email string `json:"email"`
 		Name  string `json:"name"`
 	}
-
-	err = json.Unmarshal(body, &facebookResp)
-	if err != nil {
-		return nil, domain.NewDomainError(domain.ErrOAuthFailed, fmt.Sprintf("failed to parse user info: %v", err))
+	if err := json.Unmarshal(body, &facebookResp); err != nil {
+		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to parse user info: %v", err), err)
 	}
 
 	return &OAuthUserInfo{
@@ -264,10 +242,7 @@ func (s *OAuthService) getFacebookUserInfo(token *oauth2.Token) (*OAuthUserInfo,
 	}, nil
 }
 
-// generateRefreshTokenForUser is a helper to create and store a refresh token
 func (s *OAuthService) generateRefreshTokenForUser(ctx context.Context, userID uuid.UUID) (*domain.RefreshToken, error) {
-	// This mirrors the logic in AuthService but avoids duplication
-	// In production, extract this to a shared helper
 	authSvc := NewAuthService(s.userRepo, s.oauthRepo, s.tokenRepo, s.cfg)
 	return authSvc.generateRefreshToken(ctx, userID)
 }

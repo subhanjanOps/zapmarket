@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
 )
 
 type ProductRepository struct {
@@ -56,10 +56,7 @@ func (pr *ProductRepository) CreateProduct(
 	)
 
 	if err != nil {
-		return appErr.InternalError(
-			"failed to create product",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to create product", err)
 	}
 
 	return nil
@@ -105,16 +102,9 @@ func (pr *ProductRepository) GetProductByID(
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, appErr.NotFoundError(
-				"product not found",
-				err,
-			)
+			return nil, pkgerrors.NewNotFound("PRODUCT_NOT_FOUND", "product not found")
 		}
-
-		return nil, appErr.InternalError(
-			"failed to fetch product",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to fetch product", err)
 	}
 
 	return product, nil
@@ -160,16 +150,9 @@ func (pr *ProductRepository) GetProductBySlug(
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, appErr.NotFoundError(
-				"product not found",
-				err,
-			)
+			return nil, pkgerrors.NewNotFound("PRODUCT_NOT_FOUND", "product not found")
 		}
-
-		return nil, appErr.InternalError(
-			"failed to fetch product",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to fetch product", err)
 	}
 
 	return product, nil
@@ -240,11 +223,7 @@ func (pr *ProductRepository) GetProductList(ctx context.Context, filters *domain
 		}
 	}
 
-	query += fmt.Sprintf(
-		" ORDER BY %s %s",
-		sortBy,
-		sortOrder,
-	)
+	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, sortOrder)
 
 	if filters != nil && filters.Limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argPos)
@@ -258,16 +237,9 @@ func (pr *ProductRepository) GetProductList(ctx context.Context, filters *domain
 		argPos++
 	}
 
-	rows, err := pr.db.QueryContext(
-		ctx,
-		query,
-		args...,
-	)
+	rows, err := pr.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, appErr.InternalError(
-			"failed to fetch products",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to fetch products", err)
 	}
 	defer rows.Close()
 
@@ -290,20 +262,14 @@ func (pr *ProductRepository) GetProductList(ctx context.Context, filters *domain
 			&product.DeletedAt,
 		)
 		if err != nil {
-			return nil, appErr.InternalError(
-				"failed to scan product",
-				err,
-			)
+			return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to scan product", err)
 		}
 
 		products = append(products, product)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, appErr.InternalError(
-			"failed to iterate products",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to iterate products", err)
 	}
 
 	return products, nil
@@ -337,29 +303,21 @@ func (pr *ProductRepository) UpdateProduct(ctx context.Context, product *domain.
 	)
 
 	if err != nil {
-		return appErr.InternalError(
-			"failed to update product",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to update product", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return appErr.InternalError(
-			"failed to get affected rows",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get affected rows", err)
 	}
 
 	if rowsAffected == 0 {
-		return appErr.NotFoundError(
-			"product not found",
-			nil,
-		)
+		return pkgerrors.NewNotFound("PRODUCT_NOT_FOUND", "product not found")
 	}
 
 	return nil
 }
+
 func (pr *ProductRepository) DeleteProduct(ctx context.Context, id uuid.UUID) error {
 	query := `
 		UPDATE products
@@ -370,32 +328,18 @@ func (pr *ProductRepository) DeleteProduct(ctx context.Context, id uuid.UUID) er
 			AND deleted_at IS NULL;
 	`
 
-	result, err := pr.db.ExecContext(
-		ctx,
-		query,
-		id,
-	)
-
+	result, err := pr.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return appErr.InternalError(
-			"failed to delete product",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to delete product", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return appErr.InternalError(
-			"failed to get affected rows",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get affected rows", err)
 	}
 
 	if rowsAffected == 0 {
-		return appErr.NotFoundError(
-			"product not found",
-			nil,
-		)
+		return pkgerrors.NewNotFound("PRODUCT_NOT_FOUND", "product not found")
 	}
 
 	return nil

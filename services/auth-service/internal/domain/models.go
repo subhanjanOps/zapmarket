@@ -99,29 +99,3 @@ type Claims struct {
 	IssuedAt  int64     `json:"iat"`
 }
 
-// Error types
-type ErrorType string
-
-const (
-	ErrUserNotFound    ErrorType = "user_not_found"
-	ErrInvalidPassword ErrorType = "invalid_password"
-	ErrUserExists      ErrorType = "user_exists"
-	ErrInvalidToken    ErrorType = "invalid_token"
-	ErrExpiredToken    ErrorType = "expired_token"
-	ErrOAuthFailed     ErrorType = "oauth_failed"
-	ErrDatabaseError   ErrorType = "database_error"
-)
-
-// DomainError wraps domain-level errors
-type DomainError struct {
-	Type    ErrorType
-	Message string
-}
-
-func (e *DomainError) Error() string {
-	return string(e.Type) + ": " + e.Message
-}
-
-func NewDomainError(errType ErrorType, message string) *DomainError {
-	return &DomainError{Type: errType, Message: message}
-}

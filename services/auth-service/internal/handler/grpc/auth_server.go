@@ -10,7 +10,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
-	"github.com/zapmarket/zapmarket/services/auth-service/pkg/crypto"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 
 	// NOTE: Proto stubs should be imported here after code generation
 	authpb "github.com/zapmarket/zapmarket/services/auth-service/authpb"

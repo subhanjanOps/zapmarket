@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 )
 
@@ -50,7 +51,7 @@ func (r *RefreshTokenRepository) CreateRefreshToken(ctx context.Context, userID 
 	)
 
 	if err != nil {
-		return nil, domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to create refresh token: %v", err))
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to create refresh token: %v", err), err)
 	}
 
 	return &domain.RefreshToken{
@@ -85,19 +86,17 @@ func (r *RefreshTokenRepository) GetRefreshTokenByHash(ctx context.Context, toke
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, domain.NewDomainError(domain.ErrInvalidToken, "refresh token not found")
+			return nil, pkgerrors.NewUnauthorized("INVALID_TOKEN", "refresh token not found")
 		}
-		return nil, domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get refresh token: %v", err))
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get refresh token: %v", err), err)
 	}
 
-	// Check if token has been revoked
 	if token.RevokedAt != nil {
-		return nil, domain.NewDomainError(domain.ErrInvalidToken, "refresh token has been revoked")
+		return nil, pkgerrors.NewUnauthorized("INVALID_TOKEN", "refresh token has been revoked")
 	}
 
-	// Check if token has expired
 	if time.Now().After(token.ExpiresAt) {
-		return nil, domain.NewDomainError(domain.ErrExpiredToken, "refresh token has expired")
+		return nil, pkgerrors.NewUnauthorized("EXPIRED_TOKEN", "refresh token has expired")
 	}
 
 	return token, nil
@@ -113,16 +112,16 @@ func (r *RefreshTokenRepository) RevokeRefreshToken(ctx context.Context, tokenID
 
 	result, err := r.db.ExecContext(ctx, query, time.Now(), time.Now(), tokenID)
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to revoke refresh token: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to revoke refresh token: %v", err), err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get rows affected: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get rows affected: %v", err), err)
 	}
 
 	if rowsAffected == 0 {
-		return domain.NewDomainError(domain.ErrInvalidToken, "refresh token not found")
+		return pkgerrors.NewUnauthorized("INVALID_TOKEN", "refresh token not found")
 	}
 
 	return nil
@@ -138,7 +137,7 @@ func (r *RefreshTokenRepository) InvalidateUserTokens(ctx context.Context, userI
 
 	_, err := r.db.ExecContext(ctx, query, time.Now(), time.Now(), userID)
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to invalidate user tokens: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to invalidate user tokens: %v", err), err)
 	}
 
 	return nil

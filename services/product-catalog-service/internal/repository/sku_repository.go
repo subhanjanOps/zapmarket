@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
 )
 
 type SkuRepository struct {
@@ -60,21 +60,13 @@ func (sr *SkuRepository) CreateSku(
 
 	if err != nil {
 		var pqErr *pq.Error
-
 		if errors.As(err, &pqErr) {
 			switch pqErr.Code {
 			case "23505":
-				return appErr.ConflictError(
-					"sku code already exists",
-					err,
-				)
+				return pkgerrors.NewConflict("SKU_ALREADY_EXISTS", "sku code already exists")
 			}
 		}
-
-		return appErr.InternalError(
-			"failed to create sku",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to create sku", err)
 	}
 
 	return nil
@@ -105,11 +97,7 @@ func (sr *SkuRepository) GetSkuByID(
 
 	sku := &domain.SKU{}
 
-	err := sr.db.QueryRowContext(
-		ctx,
-		query,
-		id,
-	).Scan(
+	err := sr.db.QueryRowContext(ctx, query, id).Scan(
 		&sku.ID,
 		&sku.ProductID,
 		&sku.SKUCode,
@@ -126,23 +114,13 @@ func (sr *SkuRepository) GetSkuByID(
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, appErr.NotFoundError(
-				"sku not found",
-				err,
-			)
+			return nil, pkgerrors.NewNotFound("SKU_NOT_FOUND", "sku not found")
 		}
-
-		return nil, appErr.InternalError(
-			"failed to get sku",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get sku", err)
 	}
 
 	return sku, nil
 }
-
-// func (sr *SkuRepository) GetSkuBySlug(ctx context.Context, slug string) (*domain.SKU, error) {
-// }
 
 func (sr *SkuRepository) GetSkuList(
 	ctx context.Context,
@@ -172,35 +150,19 @@ func (sr *SkuRepository) GetSkuList(
 
 	if filters != nil {
 		if filters.ProductID != nil {
-			query += fmt.Sprintf(
-				" AND product_id = $%d",
-				argPos,
-			)
-
+			query += fmt.Sprintf(" AND product_id = $%d", argPos)
 			args = append(args, *filters.ProductID)
 			argPos++
 		}
 
 		if filters.SKUCode != nil {
-			query += fmt.Sprintf(
-				" AND sku_code ILIKE $%d",
-				argPos,
-			)
-
-			args = append(
-				args,
-				"%"+*filters.SKUCode+"%",
-			)
-
+			query += fmt.Sprintf(" AND sku_code ILIKE $%d", argPos)
+			args = append(args, "%"+*filters.SKUCode+"%")
 			argPos++
 		}
 
 		if filters.IsActive != nil {
-			query += fmt.Sprintf(
-				" AND is_active = $%d",
-				argPos,
-			)
-
+			query += fmt.Sprintf(" AND is_active = $%d", argPos)
 			args = append(args, *filters.IsActive)
 			argPos++
 		}
@@ -211,10 +173,7 @@ func (sr *SkuRepository) GetSkuList(
 
 	if filters != nil {
 		switch filters.SortBy {
-		case "created_at",
-			"updated_at",
-			"price_amount",
-			"sku_code":
+		case "created_at", "updated_at", "price_amount", "sku_code":
 			sortBy = filters.SortBy
 		}
 
@@ -226,11 +185,7 @@ func (sr *SkuRepository) GetSkuList(
 		}
 	}
 
-	query += fmt.Sprintf(
-		" ORDER BY %s %s",
-		sortBy,
-		sortOrder,
-	)
+	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, sortOrder)
 
 	limit := 50
 	offset := 0
@@ -239,33 +194,18 @@ func (sr *SkuRepository) GetSkuList(
 		if filters.Limit > 0 {
 			limit = filters.Limit
 		}
-
 		if filters.Offset >= 0 {
 			offset = filters.Offset
 		}
 	}
 
-	query += fmt.Sprintf(
-		" LIMIT $%d OFFSET $%d",
-		argPos,
-		argPos+1,
-	)
-
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, limit, offset)
 
-	rows, err := sr.db.QueryContext(
-		ctx,
-		query,
-		args...,
-	)
-
+	rows, err := sr.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, appErr.InternalError(
-			"failed to get sku list",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get sku list", err)
 	}
-
 	defer rows.Close()
 
 	var skus []*domain.SKU
@@ -289,20 +229,14 @@ func (sr *SkuRepository) GetSkuList(
 		)
 
 		if err != nil {
-			return nil, appErr.InternalError(
-				"failed to scan sku",
-				err,
-			)
+			return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to scan sku", err)
 		}
 
 		skus = append(skus, sku)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, appErr.InternalError(
-			"failed while iterating skus",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed while iterating skus", err)
 	}
 
 	return skus, nil
@@ -344,37 +278,22 @@ func (sr *SkuRepository) UpdateSku(
 
 	if err != nil {
 		var pqErr *pq.Error
-
 		if errors.As(err, &pqErr) {
 			switch pqErr.Code {
 			case "23505":
-				return appErr.ConflictError(
-					"sku code already exists",
-					err,
-				)
+				return pkgerrors.NewConflict("SKU_ALREADY_EXISTS", "sku code already exists")
 			}
 		}
-
-		return appErr.InternalError(
-			"failed to update sku",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to update sku", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
-
 	if err != nil {
-		return appErr.InternalError(
-			"failed to get affected rows",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get affected rows", err)
 	}
 
 	if rowsAffected == 0 {
-		return appErr.NotFoundError(
-			"sku not found",
-			err,
-		)
+		return pkgerrors.NewNotFound("SKU_NOT_FOUND", "sku not found")
 	}
 
 	return nil
@@ -393,33 +312,18 @@ func (sr *SkuRepository) DeleteSku(
 		AND deleted_at IS NULL
 	`
 
-	result, err := sr.db.ExecContext(
-		ctx,
-		query,
-		id,
-	)
-
+	result, err := sr.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return appErr.InternalError(
-			"failed to delete sku",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to delete sku", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
-
 	if err != nil {
-		return appErr.InternalError(
-			"failed to get affected rows",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get affected rows", err)
 	}
 
 	if rowsAffected == 0 {
-		return appErr.NotFoundError(
-			"sku not found",
-			err,
-		)
+		return pkgerrors.NewNotFound("SKU_NOT_FOUND", "sku not found")
 	}
 
 	return nil

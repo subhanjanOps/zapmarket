@@ -12,4 +12,18 @@ use ./services/payment-service
 
 use ./services/notification-service
 
+use ./pkg/config
+
+use ./pkg/crypto
+
+use ./pkg/errors
+
+use ./pkg/database
+
+use ./pkg/grpcx
+
+use ./pkg/httpx
+
+use ./pkg/logger
+
 use ./pkg/proto

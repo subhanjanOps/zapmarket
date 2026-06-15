@@ -5,8 +5,8 @@ import (
 	"database/sql"
 
 	"github.com/google/uuid"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
 )
 
 type ProductImageRepository struct {
@@ -62,10 +62,7 @@ func (pir *ProductImageRepository) CreateProductImage(
 	)
 
 	if err != nil {
-		return appErr.InternalError(
-			"failed to create product image",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to create product image", err)
 	}
 
 	return nil
@@ -93,19 +90,10 @@ func (pir *ProductImageRepository) GetImageByProductID(
 		ORDER BY position ASC
 	`
 
-	rows, err := pir.db.QueryContext(
-		ctx,
-		query,
-		productID,
-	)
-
+	rows, err := pir.db.QueryContext(ctx, query, productID)
 	if err != nil {
-		return nil, appErr.InternalError(
-			"failed to fetch product images",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to fetch product images", err)
 	}
-
 	defer rows.Close()
 
 	var images []*domain.ProductImage
@@ -125,20 +113,14 @@ func (pir *ProductImageRepository) GetImageByProductID(
 		)
 
 		if err != nil {
-			return nil, appErr.InternalError(
-				"failed to scan product image",
-				err,
-			)
+			return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to scan product image", err)
 		}
 
 		images = append(images, image)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, appErr.InternalError(
-			"failed while iterating product images",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed while iterating product images", err)
 	}
 
 	return images, nil
@@ -168,10 +150,7 @@ func (pir *ProductImageRepository) GetImageBySKUID(
 
 	rows, err := pir.db.QueryContext(ctx, query, skuID)
 	if err != nil {
-		return nil, appErr.InternalError(
-			"failed to fetch sku images",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to fetch sku images", err)
 	}
 	defer rows.Close()
 
@@ -191,20 +170,14 @@ func (pir *ProductImageRepository) GetImageBySKUID(
 			&img.DeletedAt,
 		)
 		if err != nil {
-			return nil, appErr.InternalError(
-				"failed to scan product image",
-				err,
-			)
+			return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to scan product image", err)
 		}
 
 		images = append(images, img)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, appErr.InternalError(
-			"failed while iterating sku images",
-			err,
-		)
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed while iterating sku images", err)
 	}
 
 	return images, nil
@@ -226,33 +199,18 @@ func (pir *ProductImageRepository) UpdateProductImagePosition(
 			AND deleted_at IS NULL
 	`
 
-	result, err := pir.db.ExecContext(
-		ctx,
-		query,
-		position,
-		id,
-	)
-
+	result, err := pir.db.ExecContext(ctx, query, position, id)
 	if err != nil {
-		return appErr.InternalError(
-			"failed to update image position",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to update image position", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return appErr.InternalError(
-			"failed to get affected rows",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get affected rows", err)
 	}
 
 	if rowsAffected == 0 {
-		return appErr.NotFoundError(
-			"product image not found",
-			nil,
-		)
+		return pkgerrors.NewNotFound("IMAGE_NOT_FOUND", "product image not found")
 	}
 
 	return nil
@@ -273,32 +231,18 @@ func (pir *ProductImageRepository) DeleteProductImage(
 			AND deleted_at IS NULL
 	`
 
-	result, err := pir.db.ExecContext(
-		ctx,
-		query,
-		id,
-	)
-
+	result, err := pir.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return appErr.InternalError(
-			"failed to delete product image",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to delete product image", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return appErr.InternalError(
-			"failed to get affected rows",
-			err,
-		)
+		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get affected rows", err)
 	}
 
 	if rowsAffected == 0 {
-		return appErr.NotFoundError(
-			"product image not found",
-			nil,
-		)
+		return pkgerrors.NewNotFound("IMAGE_NOT_FOUND", "product image not found")
 	}
 
 	return nil

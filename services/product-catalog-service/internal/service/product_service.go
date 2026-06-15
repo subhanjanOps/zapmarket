@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 )
 
 //go:generate mockgen -source=product_service.go -destination=../mocks/product_service.go -package=mocks
@@ -36,19 +36,19 @@ func NewProductService(repo ProductRepository, logger *slog.Logger) ProductServi
 
 func (ps *productService) CreateProduct(ctx context.Context, product *domain.Product) error {
 	if product.Name == "" {
-		return appErr.ValidationError("product name is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","product name is required")
 	}
 
 	if product.Slug == "" {
-		return appErr.ValidationError("product slug is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","product slug is required")
 	}
 
 	if product.CategoryID == uuid.Nil {
-		return appErr.ValidationError("category id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","category id is required")
 	}
 
 	if product.SellerID == uuid.Nil {
-		return appErr.ValidationError("seller id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","seller id is required")
 	}
 
 	if product.Status == "" {
@@ -62,7 +62,7 @@ func (ps *productService) CreateProduct(ctx context.Context, product *domain.Pro
 
 func (ps *productService) GetProductByID(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
 	if id == uuid.Nil {
-		return nil, appErr.ValidationError("product id is required", nil)
+		return nil, pkgerrors.NewValidation("INVALID_DATA","product id is required")
 	}
 
 	ps.logger.Info("fetching product by id", "id", id)
@@ -72,7 +72,7 @@ func (ps *productService) GetProductByID(ctx context.Context, id uuid.UUID) (*do
 
 func (ps *productService) GetProductBySlug(ctx context.Context, slug string) (*domain.Product, error) {
 	if slug == "" {
-		return nil, appErr.ValidationError("product slug is required", nil)
+		return nil, pkgerrors.NewValidation("INVALID_DATA","product slug is required")
 	}
 
 	ps.logger.Info("fetching product by slug", "slug", slug)
@@ -88,19 +88,19 @@ func (ps *productService) GetProductList(ctx context.Context, filters *domain.Pr
 
 func (ps *productService) UpdateProduct(ctx context.Context, product *domain.Product) error {
 	if product.ID == uuid.Nil {
-		return appErr.ValidationError("product id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","product id is required")
 	}
 
 	if product.Name == "" {
-		return appErr.ValidationError("product name is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","product name is required")
 	}
 
 	if product.Slug == "" {
-		return appErr.ValidationError("product slug is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","product slug is required")
 	}
 
 	if product.CategoryID == uuid.Nil {
-		return appErr.ValidationError("category id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","category id is required")
 	}
 
 	ps.logger.Info("updating product", "id", product.ID, "name", product.Name)
@@ -110,7 +110,7 @@ func (ps *productService) UpdateProduct(ctx context.Context, product *domain.Pro
 
 func (ps *productService) DeleteProduct(ctx context.Context, id uuid.UUID) error {
 	if id == uuid.Nil {
-		return appErr.ValidationError("product id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","product id is required")
 	}
 
 	ps.logger.Info("deleting product", "id", id)

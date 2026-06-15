@@ -29,9 +29,10 @@ import (
 	"log/slog"
 
 	"github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
-	"github.com/zapmarket/zapmarket/services/auth-service/pkg/crypto"
 )
 
 // LoggingMiddleware logs request and response details
@@ -272,12 +273,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	// Register user
 	user, refreshToken, err := h.authSvc.RegisterUserPassword(r.Context(), req.Email, req.Password, req.FullName, req.Role)
 	if err != nil {
-		domainErr, ok := err.(*domain.DomainError)
-		if ok && domainErr.Type == domain.ErrUserExists {
-			h.writeError(w, http.StatusConflict, domainErr.Message)
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		pkgerrors.HandleHTTP(w, err)
 		return
 	}
 
@@ -328,14 +324,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	// Login user
 	user, refreshToken, err := h.authSvc.LoginPassword(r.Context(), req.Email, req.Password)
 	if err != nil {
-		domainErr, ok := err.(*domain.DomainError)
-		if ok {
-			if domainErr.Type == domain.ErrUserNotFound || domainErr.Type == domain.ErrInvalidPassword {
-				h.writeError(w, http.StatusUnauthorized, "invalid email or password")
-				return
-			}
-		}
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		pkgerrors.HandleHTTP(w, err)
 		return
 	}
 
@@ -462,7 +451,7 @@ func (h *Handler) GoogleOAuthURL(w http.ResponseWriter, r *http.Request) {
 
 	url, err := h.oauthSvc.GetGoogleOAuthURL(state)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		pkgerrors.HandleHTTP(w, err)
 		return
 	}
 
@@ -496,7 +485,7 @@ func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, refreshToken, err := h.oauthSvc.HandleGoogleCallback(r.Context(), code)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		pkgerrors.HandleHTTP(w, err)
 		return
 	}
 
@@ -537,7 +526,7 @@ func (h *Handler) FacebookOAuthURL(w http.ResponseWriter, r *http.Request) {
 
 	url, err := h.oauthSvc.GetFacebookOAuthURL(state)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		pkgerrors.HandleHTTP(w, err)
 		return
 	}
 
@@ -571,7 +560,7 @@ func (h *Handler) FacebookOAuthCallback(w http.ResponseWriter, r *http.Request) 
 
 	user, refreshToken, err := h.oauthSvc.HandleFacebookCallback(r.Context(), code)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, err.Error())
+		pkgerrors.HandleHTTP(w, err)
 		return
 	}
 

@@ -1,35 +1,27 @@
 package errors
 
-import "fmt"
+import (
+	"fmt"
+
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
+)
 
 func CategoryNotFound(id string) error {
-	return &AppError{
-		Type:    NotFound,
-		Code:    "CATEGORY_NOT_FOUND",
-		Message: fmt.Sprintf("category %s not found", id),
-	}
+	return pkgerrors.NewNotFound("CATEGORY_NOT_FOUND", fmt.Sprintf("category %s not found", id))
 }
 
 func CategoryAlreadyExists(slug string) error {
-	return &AppError{
-		Type:    Conflict,
-		Code:    "CATEGORY_ALREADY_EXISTS",
-		Message: fmt.Sprintf("category with slug %s already exists", slug),
-	}
+	return pkgerrors.NewConflict("CATEGORY_ALREADY_EXISTS", fmt.Sprintf("category with slug %s already exists", slug))
 }
 
 func ProductNotFound(id string) error {
-	return &AppError{
-		Type:    NotFound,
-		Code:    "PRODUCT_NOT_FOUND",
-		Message: fmt.Sprintf("product %s not found", id),
-	}
+	return pkgerrors.NewNotFound("PRODUCT_NOT_FOUND", fmt.Sprintf("product %s not found", id))
 }
 
 func SKUNotFound(id string) error {
-	return &AppError{
-		Type:    NotFound,
-		Code:    "SKU_NOT_FOUND",
-		Message: fmt.Sprintf("sku %s not found", id),
-	}
+	return pkgerrors.NewNotFound("SKU_NOT_FOUND", fmt.Sprintf("sku %s not found", id))
+}
+
+func ImageNotFound(id string) error {
+	return pkgerrors.NewNotFound("IMAGE_NOT_FOUND", fmt.Sprintf("image %s not found", id))
 }

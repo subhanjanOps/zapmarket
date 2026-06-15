@@ -1,0 +1,319 @@
+# ZapMarket Architecture Audit & Refactoring Checklist
+
+## Goal
+
+Transform ZapMarket into a production-grade e-commerce microservices platform with:
+
+- Clean Architecture
+- Domain Driven Design principles
+- gRPC internal communication
+- Kafka event-driven workflows
+- Outbox Pattern
+- Shared infrastructure libraries
+- Kubernetes deployment readiness
+- CI/CD readiness
+
+---
+
+# Phase 1 — Monorepo Cleanup
+
+## Shared Package Consolidation
+
+- [ ] Remove service-local config packages
+- [ ] Remove service-local crypto packages
+- [ ] Use root shared packages exclusively
+- [ ] Update imports across all services
+- [ ] Verify go.work dependency resolution
+
+Target:
+
+```text
+pkg/
+├── config
+├── crypto
+```
+
+---
+
+# Phase 2 — Shared Infrastructure Layer
+
+Create:
+
+```text
+pkg/database
+pkg/logger
+pkg/httpx
+pkg/grpcx
+pkg/kafka
+pkg/errors
+```
+
+### Database
+- [ ] PostgreSQL connection helper
+- [ ] Pool configuration
+- [ ] Health checks
+- [ ] Transaction helpers
+
+### Logger
+- [ ] Structured logging
+- [ ] JSON output
+- [ ] Correlation IDs
+- [ ] Context-aware logging
+
+### HTTP
+- [ ] Response helpers
+- [ ] Error mappers
+- [ ] Middleware helpers
+- [ ] Request ID middleware
+
+### gRPC
+- [ ] Server bootstrap
+- [ ] Client factory
+- [ ] Unary interceptors
+- [ ] Recovery interceptor
+
+### Kafka
+- [ ] Producer wrapper
+- [ ] Consumer wrapper
+- [ ] Retry support
+- [ ] Topic registration
+
+---
+
+# Phase 3 — Shared Protobuf Ownership
+
+Target:
+
+```text
+pkg/proto
+├── auth
+├── catalog
+├── inventory
+├── order
+├── payment
+```
+
+- [ ] Move all proto ownership to pkg/proto
+- [ ] Remove duplicated proto definitions
+- [ ] Centralize code generation
+- [ ] Update imports
+
+---
+
+# Phase 4 — Domain Contract Cleanup
+
+- [ ] Move repository interfaces out of service package
+- [ ] Define interfaces in domain/contracts layer
+- [ ] Ensure services depend only on interfaces
+
+---
+
+# Phase 5 — Error Handling Standardization
+
+- [ ] Create shared AppError model
+- [ ] Standardize error codes
+- [ ] HTTP error mapping
+- [ ] gRPC error mapping
+
+Standard response:
+
+```json
+{
+  "success": false,
+  "code": "PRODUCT_NOT_FOUND",
+  "message": "product not found"
+}
+```
+
+---
+
+# Phase 6 — Database Migrations
+
+- [ ] Add golang-migrate
+- [ ] Create migration runner
+- [ ] Add up/down migrations
+- [ ] Integrate with Docker startup
+
+---
+
+# Phase 7 — Product Catalog Hardening
+
+### Category Filters
+- [ ] Typed filter structs
+- [ ] Pagination
+- [ ] Sorting
+
+### Product Filters
+- [ ] Category filtering
+- [ ] Seller filtering
+- [ ] Search support
+- [ ] Pagination
+- [ ] Sorting
+
+### SKU Filters
+- [ ] Product filtering
+- [ ] Active status filtering
+- [ ] Pagination
+- [ ] Sorting
+
+---
+
+# Phase 8 — Inventory Service
+
+- [ ] Inventory CRUD
+- [ ] Stock reservation
+- [ ] Stock release
+- [ ] Stock deduction
+- [ ] Kafka integration
+
+Events:
+
+- inventory.reserved
+- inventory.released
+- inventory.deducted
+
+---
+
+# Phase 9 — Order Service
+
+Workflow:
+
+Order Created → Reserve Inventory → Process Payment → Confirm Order
+
+- [ ] Order aggregate
+- [ ] Order state machine
+- [ ] Saga orchestration
+- [ ] Compensation logic
+
+States:
+
+- PENDING
+- RESERVED
+- PAID
+- CONFIRMED
+- CANCELLED
+
+---
+
+# Phase 10 — Payment Service
+
+- [ ] Payment creation
+- [ ] Webhook handling
+- [ ] Idempotency support
+- [ ] Refund workflow
+
+---
+
+# Phase 11 — Notification Service
+
+- [ ] Kafka consumers
+- [ ] Email notifications
+- [ ] SMS notifications
+- [ ] Push notifications
+
+---
+
+# Phase 12 — Outbox Pattern
+
+- [ ] Create outbox table
+- [ ] Event publisher
+- [ ] Debezium integration
+- [ ] Remove direct Kafka publishing from transactions
+
+Flow:
+
+Business Data + Outbox Event → Debezium → Kafka
+
+---
+
+# Phase 13 — API Gateway
+
+- [ ] Service discovery
+- [ ] Routing
+- [ ] JWT validation
+- [ ] Rate limiting
+- [ ] Request logging
+- [ ] Correlation IDs
+- [ ] Circuit breakers
+
+---
+
+# Phase 14 — Redis Layer
+
+- [ ] Product cache
+- [ ] Category cache
+- [ ] Session cache
+- [ ] Rate limit storage
+
+Patterns:
+
+- Cache Aside
+- Write Through
+
+---
+
+# Phase 15 — Observability
+
+- [ ] Prometheus metrics
+- [ ] OpenTelemetry tracing
+- [ ] Grafana dashboards
+- [ ] Kafka metrics
+
+---
+
+# Phase 16 — Kubernetes Readiness
+
+- [ ] Deployments
+- [ ] Services
+- [ ] ConfigMaps
+- [ ] Secrets
+- [ ] HPA
+- [ ] Ingress
+
+---
+
+# Phase 17 — CI/CD
+
+GitHub Actions:
+
+### Pull Requests
+- [ ] Lint
+- [ ] Unit tests
+- [ ] Security scans
+
+### Main Branch
+- [ ] Build images
+- [ ] Push images
+- [ ] Deploy
+
+---
+
+# Phase 18 — Production Readiness
+
+### Security
+- [ ] JWT rotation
+- [ ] Refresh token revocation
+- [ ] Secrets management
+- [ ] TLS everywhere
+
+### Reliability
+- [ ] Retry policies
+- [ ] Circuit breakers
+- [ ] Dead letter queues
+- [ ] Graceful shutdown
+
+---
+
+# Completion Criteria
+
+- [ ] Shared infrastructure packages complete
+- [ ] Centralized protobuf ownership
+- [ ] Outbox pattern implemented
+- [ ] Saga orchestration implemented
+- [ ] OpenTelemetry integrated
+- [ ] Kubernetes deployment ready
+- [ ] CI/CD operational
+- [ ] Redis caching enabled
+- [ ] API Gateway operational
+- [ ] Health/readiness endpoints implemented
+- [ ] End-to-end order flow passes integration tests

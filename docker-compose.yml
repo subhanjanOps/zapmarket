@@ -60,6 +60,59 @@ services:
   #   volumes:
   #     - minio-data:/data
 
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    container_name: zapmarket-auth-service
+    depends_on:
+      - postgres
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=userauth
+      - JWT_SECRET_KEY=change-me-in-production
+      - JWT_REFRESH_SECRET_KEY=change-me-refresh-in-production
+      - JWT_ACCESS_EXPIRY_HOURS=1
+      - JWT_REFRESH_EXPIRY_DAYS=7
+      - HTTP_PORT=8080
+      - GRPC_PORT=50051
+      - APP_ENV=development
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  product-catalog-service:
+    build:
+      context: .
+      dockerfile: services/product-catalog-service/Dockerfile
+    container_name: zapmarket-product-catalog-service
+    depends_on:
+      - postgres
+      - auth-service
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=productcatalog
+      - JWT_SECRET_KEY=change-me-in-production
+      - AUTH_SERVICE_ADDR=zapmarket-auth-service:50051
+      - HTTP_PORT=8081
+      - GRPC_PORT=50052
+      - APP_ENV=development
+    ports:
+      - "8081:8081"
+      - "50052:50052"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     container_name: zapmarket-postgres

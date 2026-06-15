@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
     phone          VARCHAR(20),
     password_hash  TEXT,
     full_name      VARCHAR(255),
-    role           VARCHAR(50)  NOT NULL DEFAULT 'customer'
-                   CHECK (role IN ('customer', 'seller', 'admin')),
+    role           VARCHAR(50)  NOT NULL DEFAULT 'buyer'
+                   CHECK (role IN ('buyer', 'seller', 'admin')),
     is_verified    BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),

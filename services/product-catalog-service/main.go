@@ -35,7 +35,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/middleware"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
-	"github.com/zapmarket/zapmarket/services/product-catalog-service/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/config"
 	pb "github.com/zapmarket/zapmarket/services/product-catalog-service/proto/productcatalogpb"
 )
 

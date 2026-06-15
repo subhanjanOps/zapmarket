@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 )
 
@@ -38,14 +39,14 @@ func (r *OAuthRepository) CreateOAuthAccount(ctx context.Context, account *domai
 	)
 
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to create oauth account: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to create oauth account: %v", err), err)
 	}
 
 	return nil
 }
 
-// GetOAuthAccountByProviderUID retrieves an OAuth account by provider and provider UID
-// Returns both the OAuth account and the associated user
+// GetOAuthAccountByProviderUID retrieves an OAuth account by provider and provider UID.
+// Returns both the OAuth account and the associated user.
 func (r *OAuthRepository) GetOAuthAccountByProviderUID(ctx context.Context, provider domain.OAuthProvider, providerUID string) (*domain.OAuthAccount, *domain.User, error) {
 	query := `
 		SELECT oa.id, oa.user_id, oa.provider, oa.provider_uid, oa.created_at, oa.updated_at, oa.deleted_at,
@@ -80,9 +81,9 @@ func (r *OAuthRepository) GetOAuthAccountByProviderUID(ctx context.Context, prov
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, domain.NewDomainError(domain.ErrUserNotFound, "oauth account not found")
+			return nil, nil, pkgerrors.NewNotFound("OAUTH_ACCOUNT_NOT_FOUND", "oauth account not found")
 		}
-		return nil, nil, domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get oauth account: %v", err))
+		return nil, nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get oauth account: %v", err), err)
 	}
 
 	return oauthAccount, user, nil
@@ -104,16 +105,16 @@ func (r *OAuthRepository) UpdateOAuthAccount(ctx context.Context, account *domai
 	)
 
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to update oauth account: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to update oauth account: %v", err), err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get rows affected: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get rows affected: %v", err), err)
 	}
 
 	if rowsAffected == 0 {
-		return domain.NewDomainError(domain.ErrUserNotFound, "oauth account not found")
+		return pkgerrors.NewNotFound("OAUTH_ACCOUNT_NOT_FOUND", "oauth account not found")
 	}
 
 	return nil
@@ -129,16 +130,16 @@ func (r *OAuthRepository) DeleteOAuthAccount(ctx context.Context, accountID uuid
 
 	result, err := r.db.ExecContext(ctx, query, time.Now(), time.Now(), accountID)
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to delete oauth account: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to delete oauth account: %v", err), err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get rows affected: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get rows affected: %v", err), err)
 	}
 
 	if rowsAffected == 0 {
-		return domain.NewDomainError(domain.ErrUserNotFound, "oauth account not found")
+		return pkgerrors.NewNotFound("OAUTH_ACCOUNT_NOT_FOUND", "oauth account not found")
 	}
 
 	return nil

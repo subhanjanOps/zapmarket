@@ -31,6 +31,15 @@ type Config struct {
 	FacebookClientSecret string
 	FacebookRedirectURL  string
 
+	// Redis
+	RedisURL string
+
+	// Elasticsearch
+	ElasticsearchURL string
+
+	// Downstream services
+	AuthServiceAddr string
+
 	// Service
 	HTTPPort int
 	GRPCPort int
@@ -61,6 +70,15 @@ func Load() (*Config, error) {
 		FacebookClientID:     getEnv("OAUTH2_FACEBOOK_CLIENT_ID", ""),
 		FacebookClientSecret: getEnv("OAUTH2_FACEBOOK_CLIENT_SECRET", ""),
 		FacebookRedirectURL:  getEnv("OAUTH2_FACEBOOK_REDIRECT_URL", "http://localhost:8080/auth/oauth/facebook/callback"),
+
+		// Redis
+		RedisURL: getEnv("REDIS_URL", "localhost:6379"),
+
+		// Elasticsearch
+		ElasticsearchURL: getEnv("ES_URL", "http://localhost:9200"),
+
+		// Downstream services
+		AuthServiceAddr: getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),
 
 		// Service
 		HTTPPort: getEnvInt("HTTP_PORT", 8080),

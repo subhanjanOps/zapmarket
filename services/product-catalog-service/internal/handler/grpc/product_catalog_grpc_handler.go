@@ -6,8 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 	pb "github.com/zapmarket/zapmarket/services/product-catalog-service/proto/productcatalogpb"
 	"google.golang.org/grpc/codes"
@@ -89,19 +89,7 @@ func (h *ProductCatalogGRPCHandler) GetSKUsByProduct(ctx context.Context, req *p
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func toGRPCError(err error) error {
-	if appError, ok := err.(*appErr.AppError); ok {
-		switch appError.Type {
-		case appErr.NotFound:
-			return status.Error(codes.NotFound, appError.Message)
-		case appErr.Validation:
-			return status.Error(codes.InvalidArgument, appError.Message)
-		case appErr.Conflict:
-			return status.Error(codes.AlreadyExists, appError.Message)
-		case appErr.Unauthorized:
-			return status.Error(codes.PermissionDenied, appError.Message)
-		}
-	}
-	return status.Error(codes.Internal, "internal server error")
+	return pkgerrors.ToGRPCStatus(err)
 }
 
 func domainProductToProto(p *domain.Product) *pb.ProductProto {

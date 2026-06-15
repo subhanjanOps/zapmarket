@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 )
 
 //go:generate mockgen -source=product_image_service.go -destination=../mocks/product_image_service.go -package=mocks
@@ -35,11 +35,11 @@ func NewProductImageService(repo ProductImageRepository, logger *slog.Logger) Pr
 
 func (pis *productImageService) CreateProductImage(ctx context.Context, image *domain.ProductImage) error {
 	if image.ProductID == uuid.Nil {
-		return appErr.ValidationError("product id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","product id is required")
 	}
 
 	if image.URL == "" {
-		return appErr.ValidationError("image url is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","image url is required")
 	}
 
 	pis.logger.Info("creating product image", "product_id", image.ProductID, "url", image.URL)
@@ -49,7 +49,7 @@ func (pis *productImageService) CreateProductImage(ctx context.Context, image *d
 
 func (pis *productImageService) GetImagesByProductID(ctx context.Context, productID uuid.UUID) ([]*domain.ProductImage, error) {
 	if productID == uuid.Nil {
-		return nil, appErr.ValidationError("product id is required", nil)
+		return nil, pkgerrors.NewValidation("INVALID_DATA","product id is required")
 	}
 
 	pis.logger.Info("fetching images by product id", "product_id", productID)
@@ -59,7 +59,7 @@ func (pis *productImageService) GetImagesByProductID(ctx context.Context, produc
 
 func (pis *productImageService) GetImagesBySKUID(ctx context.Context, skuID uuid.UUID) ([]*domain.ProductImage, error) {
 	if skuID == uuid.Nil {
-		return nil, appErr.ValidationError("sku id is required", nil)
+		return nil, pkgerrors.NewValidation("INVALID_DATA","sku id is required")
 	}
 
 	pis.logger.Info("fetching images by sku id", "sku_id", skuID)
@@ -69,11 +69,11 @@ func (pis *productImageService) GetImagesBySKUID(ctx context.Context, skuID uuid
 
 func (pis *productImageService) UpdateImagePosition(ctx context.Context, id uuid.UUID, position int) error {
 	if id == uuid.Nil {
-		return appErr.ValidationError("image id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","image id is required")
 	}
 
 	if position < 0 {
-		return appErr.ValidationError("position must be non-negative", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","position must be non-negative")
 	}
 
 	pis.logger.Info("updating image position", "id", id, "position", position)
@@ -83,7 +83,7 @@ func (pis *productImageService) UpdateImagePosition(ctx context.Context, id uuid
 
 func (pis *productImageService) DeleteProductImage(ctx context.Context, id uuid.UUID) error {
 	if id == uuid.Nil {
-		return appErr.ValidationError("image id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA","image id is required")
 	}
 
 	pis.logger.Info("deleting product image", "id", id)

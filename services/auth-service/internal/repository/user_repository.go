@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 )
 
@@ -42,9 +43,9 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) erro
 
 	if err != nil {
 		if err.Error() == "pq: duplicate key value violates unique constraint \"users_email_key\"" {
-			return domain.NewDomainError(domain.ErrUserExists, "user with this email already exists")
+			return pkgerrors.NewConflict("USER_ALREADY_EXISTS", "user with this email already exists")
 		}
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to create user: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to create user: %v", err), err)
 	}
 
 	return nil
@@ -74,9 +75,9 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, domain.NewDomainError(domain.ErrUserNotFound, "user not found")
+			return nil, pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
 		}
-		return nil, domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get user: %v", err))
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get user: %v", err), err)
 	}
 
 	return user, nil
@@ -106,9 +107,9 @@ func (r *UserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*do
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, domain.NewDomainError(domain.ErrUserNotFound, "user not found")
+			return nil, pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
 		}
-		return nil, domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get user: %v", err))
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get user: %v", err), err)
 	}
 
 	return user, nil
@@ -134,16 +135,16 @@ func (r *UserRepository) UpdateUser(ctx context.Context, user *domain.User) erro
 	)
 
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to update user: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to update user: %v", err), err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get rows affected: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get rows affected: %v", err), err)
 	}
 
 	if rowsAffected == 0 {
-		return domain.NewDomainError(domain.ErrUserNotFound, "user not found")
+		return pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
 	}
 
 	return nil
@@ -159,16 +160,16 @@ func (r *UserRepository) VerifyUser(ctx context.Context, userID uuid.UUID) error
 
 	result, err := r.db.ExecContext(ctx, query, time.Now(), userID)
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to verify user: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to verify user: %v", err), err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get rows affected: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get rows affected: %v", err), err)
 	}
 
 	if rowsAffected == 0 {
-		return domain.NewDomainError(domain.ErrUserNotFound, "user not found")
+		return pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
 	}
 
 	return nil
@@ -184,16 +185,16 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userID uuid.UUID) error
 
 	result, err := r.db.ExecContext(ctx, query, time.Now(), time.Now(), userID)
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to delete user: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to delete user: %v", err), err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return domain.NewDomainError(domain.ErrDatabaseError, fmt.Sprintf("failed to get rows affected: %v", err))
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get rows affected: %v", err), err)
 	}
 
 	if rowsAffected == 0 {
-		return domain.NewDomainError(domain.ErrUserNotFound, "user not found")
+		return pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
 	}
 
 	return nil

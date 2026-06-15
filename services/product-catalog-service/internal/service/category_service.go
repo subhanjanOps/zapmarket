@@ -5,8 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
 )
 
 //go:generate mockgen -source=category_service.go -destination=../mocks/category_service.go -package=mocks
@@ -34,11 +34,11 @@ func NewCategoryService(repo CategoryRepository, logger *slog.Logger) CategorySe
 
 func (cs *categoryService) CreateCategory(ctx context.Context, category *domain.Category) error {
 	if category.Slug == "" {
-		return appErr.ValidationError("category slug is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA", "category slug is required")
 	}
 
 	if category.Name == "" {
-		return appErr.ValidationError("category name is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA", "category name is required")
 	}
 
 	cs.logger.Info("creating category", "slug", category.Slug, "name", category.Name)
@@ -48,7 +48,7 @@ func (cs *categoryService) CreateCategory(ctx context.Context, category *domain.
 
 func (cs *categoryService) GetCategoryByID(ctx context.Context, id uuid.UUID) (*domain.Category, error) {
 	if id == uuid.Nil {
-		return nil, appErr.ValidationError("category id is required", nil)
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "category id is required")
 	}
 
 	cs.logger.Info("fetching category by id", "id", id)
@@ -58,7 +58,7 @@ func (cs *categoryService) GetCategoryByID(ctx context.Context, id uuid.UUID) (*
 
 func (cs *categoryService) GetCategoryBySlug(ctx context.Context, slug string) (*domain.Category, error) {
 	if slug == "" {
-		return nil, appErr.ValidationError("category slug is required", nil)
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "category slug is required")
 	}
 
 	cs.logger.Info("fetching category by slug", "slug", slug)
@@ -74,15 +74,15 @@ func (cs *categoryService) GetCategoryList(ctx context.Context, filters map[stri
 
 func (cs *categoryService) UpdateCategory(ctx context.Context, category *domain.Category) error {
 	if category.ID == uuid.Nil {
-		return appErr.ValidationError("category id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA", "category id is required")
 	}
 
 	if category.Name == "" {
-		return appErr.ValidationError("category name is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA", "category name is required")
 	}
 
 	if category.Slug == "" {
-		return appErr.ValidationError("category slug is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA", "category slug is required")
 	}
 
 	cs.logger.Info("updating category", "id", category.ID, "slug", category.Slug)
@@ -92,7 +92,7 @@ func (cs *categoryService) UpdateCategory(ctx context.Context, category *domain.
 
 func (cs *categoryService) DeleteCategory(ctx context.Context, id uuid.UUID) error {
 	if id == uuid.Nil {
-		return appErr.ValidationError("category id is required", nil)
+		return pkgerrors.NewValidation("INVALID_DATA", "category id is required")
 	}
 
 	cs.logger.Info("deleting category", "id", id)

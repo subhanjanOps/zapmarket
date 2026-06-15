@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	appErr "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
+	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 )
 
 // Response is a standard API response
@@ -30,45 +30,20 @@ func JSON(w http.ResponseWriter, statusCode int, data interface{}) {
 
 // SuccessResponse returns a successful response
 func SuccessResponse(w http.ResponseWriter, statusCode int, data interface{}) {
-	response := Response{
-		Success: true,
-		Data:    data,
-	}
-	JSON(w, statusCode, response)
+	JSON(w, statusCode, Response{Success: true, Data: data})
 }
 
 // ErrorResponse returns an error response
 func ErrorResponse(w http.ResponseWriter, statusCode int, code, message string) {
-	response := Response{
+	JSON(w, statusCode, Response{
 		Success: false,
-		Error: &ErrorInfo{
-			Code:    code,
-			Message: message,
-		},
-	}
-	JSON(w, statusCode, response)
+		Error:   &ErrorInfo{Code: code, Message: message},
+	})
 }
 
-// HandleError handles application errors and returns appropriate HTTP status codes
+// HandleError maps an AppError to the appropriate HTTP status and writes the response.
 func HandleError(w http.ResponseWriter, err error) {
-	appError, ok := err.(*appErr.AppError)
-	if !ok {
-		ErrorResponse(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", err.Error())
-		return
-	}
-
-	switch appError.Type {
-	case appErr.NotFound:
-		ErrorResponse(w, http.StatusNotFound, string(appError.Code), appError.Message)
-	case appErr.Conflict:
-		ErrorResponse(w, http.StatusConflict, string(appError.Code), appError.Message)
-	case appErr.Validation:
-		ErrorResponse(w, http.StatusBadRequest, string(appError.Code), appError.Message)
-	case appErr.Unauthorized:
-		ErrorResponse(w, http.StatusUnauthorized, string(appError.Code), appError.Message)
-	default:
-		ErrorResponse(w, http.StatusInternalServerError, string(appError.Code), appError.Message)
-	}
+	pkgerrors.HandleHTTP(w, err)
 }
 
 // DecodeJSON decodes JSON request body
