@@ -39,7 +39,7 @@ import (
 
 	httpSwagger "github.com/swaggo/http-swagger"
 	"github.com/zapmarket/zapmarket/pkg/config"
-	"github.com/zapmarket/zapmarket/services/auth-service/authpb"
+	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
 	grpcHandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"

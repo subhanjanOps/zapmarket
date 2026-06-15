@@ -11,6 +11,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/config v0.0.0
 	github.com/zapmarket/zapmarket/pkg/crypto v0.0.0
 	github.com/zapmarket/zapmarket/pkg/errors v0.0.0
+	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
@@ -51,4 +52,5 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/config => ../../pkg/config
 	github.com/zapmarket/zapmarket/pkg/crypto => ../../pkg/crypto
 	github.com/zapmarket/zapmarket/pkg/errors => ../../pkg/errors
+	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 )

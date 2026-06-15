@@ -12,8 +12,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 	"github.com/zapmarket/zapmarket/pkg/crypto"
 
-	// NOTE: Proto stubs should be imported here after code generation
-	authpb "github.com/zapmarket/zapmarket/services/auth-service/authpb"
+	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
 )
 
 // AuthServer implements the gRPC AuthService server
