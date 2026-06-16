@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package inventory;
+
+option go_package = "github.com/zapmarket/zapmarket/pkg/proto/inventory;inventorypb";
+
+// AddStock increases qty_on_hand for a SKU at the default warehouse,
+// creating the inventory row if it doesn't exist yet. This is the minimal
+// "create" side of inventory CRUD — there's no public catalog of warehouses
+// or bulk stock-take tooling yet, just enough to get stock into the system.
+message AddStockRequest {
+  string sku_id = 1;
+  int32 quantity = 2;
+}
+
+message AddStockResponse {
+  int32 qty_on_hand = 1;
+  string error_message = 2;
+}
+
+message ReserveStockRequest {
+  string sku_id = 1;
+  string order_id = 2;
+  int32 quantity = 3;
+}
+
+message ReserveStockResponse {
+  bool reserved = 1;
+  string reservation_id = 2;
+  string error_message = 3;
+}
+
+message ReleaseStockRequest {
+  string reservation_id = 1;
+}
+
+message ReleaseStockResponse {
+  bool released = 1;
+  string error_message = 2;
+}
+
+// DeductStock confirms a reservation as a permanent sale (after payment
+// succeeds), moving qty_on_hand down and qty_reserved down by the same
+// amount so qty_available is unaffected by this step (it was already
+// reduced at reservation time).
+message DeductStockRequest {
+  string reservation_id = 1;
+}
+
+message DeductStockResponse {
+  bool deducted = 1;
+  string error_message = 2;
+}
+
+message GetStockRequest {
+  string sku_id = 1;
+}
+
+message GetStockResponse {
+  int32 qty_on_hand = 1;
+  int32 qty_reserved = 2;
+  int32 qty_available = 3;
+  string error_message = 4;
+}
+
+service InventoryService {
+  rpc AddStock(AddStockRequest) returns (AddStockResponse);
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+  rpc ReleaseStock(ReleaseStockRequest) returns (ReleaseStockResponse);
+  rpc DeductStock(DeductStockRequest) returns (DeductStockResponse);
+  rpc GetStock(GetStockRequest) returns (GetStockResponse);
+}

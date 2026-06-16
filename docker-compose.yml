@@ -152,6 +152,29 @@ services:
       - zapnet
     restart: unless-stopped
 
+  inventory-service:
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
+    container_name: zapmarket-inventory-service
+    depends_on:
+      - postgres
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=inventory
+      - HTTP_PORT=8082
+      - GRPC_PORT=50053
+      - APP_ENV=development
+    ports:
+      - "8082:8082"
+      - "50053:50053"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     container_name: zapmarket-postgres

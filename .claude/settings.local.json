@@ -60,7 +60,22 @@
       "Bash(gofmt -l internal main.go)",
       "Bash(python3 -c \"print\\(1781610122\\)\")",
       "Bash(printf '\\\\x89PNG\\\\r\\\\n\\\\x1a\\\\n\\\\x00\\\\x00\\\\x00\\\\x0dIHDR\\\\x00\\\\x00\\\\x00\\\\x01\\\\x00\\\\x00\\\\x00\\\\x01\\\\x08\\\\x06\\\\x00\\\\x00\\\\x00\\\\x1f\\\\x15\\\\xc4\\\\x89\\\\x00\\\\x00\\\\x00\\\\x0aIDATx\\\\x9cc\\\\x00\\\\x01\\\\x00\\\\x00\\\\x05\\\\x00\\\\x01\\\\x0d\\\\x0a\\\\x2d\\\\xb4\\\\x00\\\\x00\\\\x00\\\\x00IEND\\\\xaeB`\\\\x82')",
-      "Bash(file test.png)"
+      "Bash(file test.png)",
+      "Bash(protoc --go_out=. --go-grpc_out=. inventory/inventory.proto)",
+      "Bash(find . -newer inventory/inventory.proto -name \"*.go\")",
+      "Bash(protoc --version)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(mv github.com/zapmarket/zapmarket/pkg/proto/inventory/inventory.pb.go inventory/inventory.pb.go)",
+      "Bash(mv github.com/zapmarket/zapmarket/pkg/proto/inventory/inventory_grpc.pb.go inventory/inventory_grpc.pb.go)",
+      "Bash(rm -rf github.com)",
+      "Bash(uuidgen)",
+      "Bash(python3 -c \"import uuid; print\\(uuid.uuid4\\(\\)\\)\")",
+      "Bash(grpcurl -plaintext localhost:50053 list)",
+      "Bash(grpcurl -plaintext -d '{\"sku_id\":\"22222222-2222-2222-2222-222222222222\",\"quantity\":50}' localhost:50053 inventory.InventoryService/AddStock)",
+      "Bash(grpcurl -plaintext -d '{\"sku_id\":\"22222222-2222-2222-2222-222222222222\"}' localhost:50053 inventory.InventoryService/GetStock)",
+      "Bash(grpcurl -plaintext -d '{\"sku_id\":\"__TRACKED_VAR__\"}' localhost:50053 inventory.InventoryService/GetStock)",
+      "Bash(xargs -I{} cat {})",
+      "Bash(rm -rf /tmp/concur_results)"
     ]
   }
 }

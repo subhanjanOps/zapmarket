@@ -28,7 +28,7 @@ and Payment expose gRPC servers).
 1. **[Stage 1 — Foundation Hardening](01-foundation-hardening.md)** ✅ **Complete** — finished Phases 1, 4, 6 of the checklist (shared package adoption, domain contracts, migrations) before adding new services on top of shaky ground.
 2. **[Stage 2 — Catalog Hardening](02-catalog-hardening.md)** ✅ **Complete** — Phase 7: filters, pagination, sorting on the one read-heavy service already live.
 2b. **[Stage 2b — Product Image Upload via MinIO](02b-image-upload-minio.md)** ✅ **Complete** — not in the original checklist; bumped ahead of Stage 3 at explicit request. Real multipart upload for product images, backed by the MinIO bucket already provisioned in `docker-compose.yml`.
-3. **[Stage 3 — Inventory Service](03-inventory-service.md)** — Phase 8: build from scratch, gRPC `ReserveStock`/`ReleaseStock`, Postgres ledger.
+3. **[Stage 3 — Inventory Service](03-inventory-service.md)** ✅ **Complete** — Phase 8: build from scratch, gRPC `ReserveStock`/`ReleaseStock`, Postgres ledger.
 4. **[Stage 4 — Payment Service](04-payment-service.md)** — Phase 10: build from scratch, gRPC `ChargeCard`, idempotent ledger.
 5. **[Stage 5 — Order Management & Saga](05-order-management-saga.md)** — Phase 9 + 12: order FSM, saga orchestration calling Inventory/Payment, transactional outbox.
 6. **[Stage 6 — Notification Service](06-notification-service.md)** — Phase 11: Kafka consumer-only service, the natural integration test of the event bus.

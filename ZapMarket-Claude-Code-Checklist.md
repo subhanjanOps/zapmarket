@@ -160,11 +160,14 @@ Standard response:
 
 # Phase 8 — Inventory Service
 
-- [ ] Inventory CRUD
-- [ ] Stock reservation
-- [ ] Stock release
-- [ ] Stock deduction
-- [ ] Kafka integration
+- [x] Inventory CRUD (create/add side only — `AddStock`; no update/delete of inventory
+      rows yet, not needed by any current consumer)
+- [x] Stock reservation (`ReserveStock`, atomic, race-tested with 20 concurrent requests
+      against a stock of 10 — no oversell)
+- [x] Stock release (`ReleaseStock`, rejects double-release as a conflict)
+- [x] Stock deduction (`DeductStock`, confirms a reservation as a permanent sale)
+- [ ] Kafka integration (deferred to Stage 7 per `planning/03-inventory-service.md` —
+      Order Management talks to Inventory via gRPC only until Kafka is turned on)
 
 Events:
 
