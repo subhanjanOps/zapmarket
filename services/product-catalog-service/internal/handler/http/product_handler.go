@@ -1,11 +1,13 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/httpx"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/authctx"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 )
@@ -61,9 +63,22 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// In a real app, seller_id would come from the authenticated user context
-	// For now, we'll require it in the request or use a default
-	sellerID := uuid.New() // This should come from auth context in production
+	user := authctx.UserFromContext(r.Context())
+	if user == nil {
+		ErrorResponse(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+	sellerID, err := uuid.Parse(user.Id)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "INVALID_USER_ID", "authenticated user id is not a valid UUID")
+		return
+	}
+
+	attrs, err := attributesToRawMessage(req.Attributes)
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ATTRIBUTES", "attributes must be valid JSON")
+		return
+	}
 
 	product := &domain.Product{
 		CategoryID:  req.CategoryID,
@@ -71,14 +86,8 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		Slug:        req.Slug,
 		Description: req.Description,
+		Attributes:  attrs,
 		Status:      domain.ProductStatus(req.Status),
-	}
-
-	// Handle attributes convertion if provided
-	if req.Attributes != nil {
-		// In a real app, you would marshal this to json.RawMessage
-		// For now, we'll initialize as empty
-		product.Attributes = nil
 	}
 
 	if err := h.productService.CreateProduct(r.Context(), product); err != nil {
@@ -87,6 +96,23 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SuccessResponse(w, http.StatusCreated, product)
+}
+
+// attributesToRawMessage marshals a decoded JSON value (or nil) back into
+// json.RawMessage. The products.attributes column is NOT NULL with a '{}'
+// default at the schema level, but that default only applies when the
+// column is omitted from an INSERT/UPDATE entirely — since the repository
+// always supplies an explicit value, a nil here would insert SQL NULL and
+// violate the constraint. Defaulting nil to "{}" up front avoids that.
+func attributesToRawMessage(v interface{}) (json.RawMessage, error) {
+	if v == nil {
+		return json.RawMessage("{}"), nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(b), nil
 }
 
 // GetProductByID returns a product by ID
@@ -237,6 +263,16 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	attrs := existingProduct.Attributes
+	if req.Attributes != nil {
+		var err error
+		attrs, err = attributesToRawMessage(req.Attributes)
+		if err != nil {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_ATTRIBUTES", "attributes must be valid JSON")
+			return
+		}
+	}
+
 	product := &domain.Product{
 		ID:          id,
 		CategoryID:  req.CategoryID,
@@ -244,6 +280,7 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		Slug:        req.Slug,
 		Description: req.Description,
+		Attributes:  attrs,
 		Status:      domain.ProductStatus(req.Status),
 	}
 

@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,13 +8,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	httputil "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/http"
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/authctx"
+	httputil "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/http"
 )
-
-type contextKey string
-
-const userContextKey contextKey = "auth_user"
 
 // AuthMiddleware validates JWTs via the auth-service gRPC endpoint.
 type AuthMiddleware struct {
@@ -57,7 +53,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), userContextKey, resp.User)
+		ctx := authctx.WithUser(r.Context(), resp.User)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -72,7 +68,7 @@ func (m *AuthMiddleware) RequireRole(roles ...string) func(http.Handler) http.Ha
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user := UserFromContext(r.Context())
+			user := authctx.UserFromContext(r.Context())
 			if user == nil {
 				httputil.ErrorResponse(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
 				return
@@ -86,13 +82,6 @@ func (m *AuthMiddleware) RequireRole(roles ...string) func(http.Handler) http.Ha
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// UserFromContext retrieves the authenticated user from the request context.
-// Returns nil if the context carries no user (unauthenticated request).
-func UserFromContext(ctx context.Context) *authpb.User {
-	user, _ := ctx.Value(userContextKey).(*authpb.User)
-	return user
 }
 
 // extractBearerToken parses "Authorization: Bearer <token>" from the request header.

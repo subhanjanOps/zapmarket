@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 )
@@ -56,6 +57,15 @@ func (pr *ProductRepository) CreateProduct(
 	)
 
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			switch pqErr.Code {
+			case "23505":
+				return pkgerrors.NewConflict("PRODUCT_ALREADY_EXISTS", fmt.Sprintf("product with slug '%s' already exists", product.Slug))
+			case "23503":
+				return pkgerrors.NewValidation("INVALID_DATA", "category does not exist")
+			}
+		}
 		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to create product", err)
 	}
 
@@ -308,6 +318,15 @@ func (pr *ProductRepository) UpdateProduct(ctx context.Context, product *domain.
 	)
 
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			switch pqErr.Code {
+			case "23505":
+				return pkgerrors.NewConflict("PRODUCT_ALREADY_EXISTS", fmt.Sprintf("product with slug '%s' already exists", product.Slug))
+			case "23503":
+				return pkgerrors.NewValidation("INVALID_DATA", "category does not exist")
+			}
+		}
 		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to update product", err)
 	}
 

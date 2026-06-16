@@ -47,7 +47,9 @@
       "Bash(curl -s -o /dev/null -w \"swagger.json: %{http_code}\\\\n\" http://localhost:8081/v1/docs/swagger.json)",
       "Bash(curl -s -o /dev/null -w \"index.html:   %{http_code}\\\\n\" http://localhost:8081/v1/docs/index.html)",
       "Bash(curl -s http://localhost:8081/v1/docs/swagger.json)",
-      "Bash(curl -s http://localhost:8080/v1/docs/swagger.json)"
+      "Bash(curl -s http://localhost:8080/v1/docs/swagger.json)",
+      "Bash(curl -s -X POST http://localhost:8081/api/v1/products -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHphcG1hcmtldC5jb20iLCJleHAiOjE3ODE2MDY0NTcsImlhdCI6MTc4MTYwMjg1Nywicm9sZSI6InNlbGxlciIsInR5cGUiOiJhY2Nlc3MiLCJ1c2VyX2lkIjoiMWIwYzkxZTUtZDI5MC00OTc2LWFlMTgtMzA0YWQ0MWUwNWQyIn0.jZj56XJkxIl6JN70gGkMwQEAX19y3Q5jgH1QtLCjJ3M' -H 'Content-Type: application/json' -d '{\"attributes\":\"any\",\"category_id\":\"02cf6bef-239e-4974-8e5a-12264f5e457d\",\"description\":\"any\",\"name\":\"Product A\",\"slug\":\"prod-a\",\"status\":\"active\"}')",
+      "Bash(curl *)"
     ]
   }
 }
