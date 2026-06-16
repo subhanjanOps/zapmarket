@@ -139,22 +139,22 @@ Standard response:
 # Phase 7 — Product Catalog Hardening
 
 ### Category Filters
-- [ ] Typed filter structs
-- [ ] Pagination
-- [ ] Sorting
+- [x] Typed filter structs (`domain.CategoryFilters`: parent ID, search, pagination, sort)
+- [x] Pagination (shared `httpx.Paginated` envelope with `total`/`page`/`page_size`)
+- [x] Sorting (`name|created_at|updated_at`, validated — invalid field returns 400)
 
 ### Product Filters
-- [ ] Category filtering
-- [ ] Seller filtering
-- [ ] Search support
-- [ ] Pagination
-- [ ] Sorting
+- [x] Category filtering
+- [x] Seller filtering
+- [x] Search support (name/description `ILIKE`)
+- [x] Pagination
+- [x] Sorting (`name|created_at|updated_at`, validated)
 
 ### SKU Filters
-- [ ] Product filtering
-- [ ] Active status filtering
-- [ ] Pagination
-- [ ] Sorting
+- [x] Product filtering
+- [x] Active status filtering
+- [x] Pagination
+- [x] Sorting (`sku_code|price_amount|created_at|updated_at`, validated)
 
 ---
 

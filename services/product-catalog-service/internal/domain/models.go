@@ -18,8 +18,22 @@ type Category struct {
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
+// DefaultPageSize and MaxPageSize bound every list endpoint's limit/offset
+// query params so a client can't force an unbounded table scan.
+const (
+	DefaultPageSize = 20
+	MaxPageSize     = 100
+)
+
 type CategoryFilters struct {
 	ParentID *uuid.UUID
+	Search   string
+
+	Limit  int
+	Offset int
+
+	SortBy    string
+	SortOrder string
 }
 
 type Product struct {

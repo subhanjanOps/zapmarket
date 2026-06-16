@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -120,21 +121,80 @@ func (cr *CategoryRepository) GetCategoryBySlug(ctx context.Context, slug string
 	return category, nil
 }
 
-func (cr *CategoryRepository) GetCategoryList(ctx context.Context, filters map[string]string, limit int, offset int) ([]*domain.Category, error) {
-	query := `
-		SELECT id, name, slug, parent_id, created_at, updated_at
-		FROM categories
-		WHERE deleted_at IS NULL AND parent_id IS NULL
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2;
-	`
+// categoryListWhere builds the shared WHERE clause + args for both the
+// COUNT and SELECT queries in GetCategoryList, so the two queries can never
+// drift apart (a common source of pagination bugs: filtering one way for
+// the page and another for the total).
+func categoryListWhere(filters *domain.CategoryFilters) (string, []interface{}) {
+	where := "WHERE deleted_at IS NULL"
+	args := make([]interface{}, 0)
+	argPos := 1
+
+	if filters == nil {
+		return where, args
+	}
+
+	if filters.ParentID != nil {
+		where += fmt.Sprintf(" AND parent_id = $%d", argPos)
+		args = append(args, *filters.ParentID)
+		argPos++
+	}
+
+	if filters.Search != "" {
+		where += fmt.Sprintf(" AND name ILIKE $%d", argPos)
+		args = append(args, "%"+filters.Search+"%")
+		argPos++
+	}
+
+	return where, args
+}
+
+func (cr *CategoryRepository) GetCategoryList(ctx context.Context, filters *domain.CategoryFilters) ([]*domain.Category, int64, error) {
+	where, args := categoryListWhere(filters)
+
+	var total int64
+	countQuery := "SELECT COUNT(*) FROM categories " + where
+	if err := cr.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to count categories", err)
+	}
+
+	sortBy := "created_at"
+	sortOrder := "DESC"
+	if filters != nil {
+		switch filters.SortBy {
+		case "name", "created_at", "updated_at":
+			sortBy = filters.SortBy
+		}
+		if strings.EqualFold(filters.SortOrder, "ASC") {
+			sortOrder = "ASC"
+		}
+	}
+
+	query := fmt.Sprintf(
+		"SELECT id, name, slug, parent_id, created_at, updated_at FROM categories %s ORDER BY %s %s",
+		where, sortBy, sortOrder,
+	)
+
+	argPos := len(args) + 1
+	limit := domain.DefaultPageSize
+	if filters != nil && filters.Limit > 0 {
+		limit = filters.Limit
+	}
+	offset := 0
+	if filters != nil && filters.Offset > 0 {
+		offset = filters.Offset
+	}
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, limit, offset)
 
 	categories := make([]*domain.Category, 0)
 
-	rows, err := cr.db.QueryContext(ctx, query, limit, offset)
+	rows, err := cr.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch categories", err)
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch categories", err)
 	}
+	defer rows.Close()
+
 	for rows.Next() {
 		var category domain.Category
 
@@ -147,13 +207,17 @@ func (cr *CategoryRepository) GetCategoryList(ctx context.Context, filters map[s
 			&category.UpdatedAt,
 		)
 		if err != nil {
-			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan category", err)
+			return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan category", err)
 		}
 
 		categories = append(categories, &category)
 	}
 
-	return categories, nil
+	if err := rows.Err(); err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to iterate categories", err)
+	}
+
+	return categories, total, nil
 }
 
 func (cr *CategoryRepository) UpdateCategory(

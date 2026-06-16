@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 )
@@ -121,26 +122,51 @@ func (h *CategoryHandler) GetCategoryBySlug(w http.ResponseWriter, r *http.Reque
 	SuccessResponse(w, http.StatusOK, category)
 }
 
-// GetCategoryList returns a list of categories
+// GetCategoryList returns a paginated list of categories
 //
 //	@Summary		List categories
 //	@Tags			categories
 //	@Produce		json
-//	@Param			limit	query		int		false	"Page size (default 20)"
-//	@Param			offset	query		int		false	"Page offset (default 0)"
-//	@Success		200		{object}	Response{data=[]domain.Category}
+//	@Param			limit		query		int		false	"Page size (default 20, max 100)"
+//	@Param			offset		query		int		false	"Page offset (default 0)"
+//	@Param			parent_id	query		string	false	"Filter by parent category UUID"
+//	@Param			search		query		string	false	"Search by name"
+//	@Param			sort_by		query		string	false	"Sort field: name|created_at|updated_at"
+//	@Param			sort_order	query		string	false	"Sort direction: asc|desc"
+//	@Success		200			{object}	Response{data=[]domain.Category}
+//	@Failure		400			{object}	Response
 //	@Router			/api/v1/categories [get]
 func (h *CategoryHandler) GetCategoryList(w http.ResponseWriter, r *http.Request) {
-	limit, offset := GetLimitOffset(r, 20, 0)
-	filters := map[string]string{}
+	limit, offset := GetLimitOffset(r, domain.DefaultPageSize, 0)
 
-	categories, err := h.categoryService.GetCategoryList(r.Context(), filters, limit, offset)
+	filters := &domain.CategoryFilters{
+		Search:    r.URL.Query().Get("search"),
+		SortBy:    r.URL.Query().Get("sort_by"),
+		SortOrder: r.URL.Query().Get("sort_order"),
+		Limit:     limit,
+		Offset:    offset,
+	}
+
+	if parentIDStr := r.URL.Query().Get("parent_id"); parentIDStr != "" {
+		parentID, err := uuid.Parse(parentIDStr)
+		if err != nil {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_PARENT_ID", "invalid parent_id")
+			return
+		}
+		filters.ParentID = &parentID
+	}
+
+	categories, total, err := h.categoryService.GetCategoryList(r.Context(), filters)
 	if err != nil {
 		HandleError(w, err)
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, categories)
+	page := 1
+	if filters.Limit > 0 {
+		page = filters.Offset/filters.Limit + 1
+	}
+	httpx.Paginated(w, http.StatusOK, categories, total, page, filters.Limit)
 }
 
 // UpdateCategory updates a category

@@ -12,11 +12,23 @@ import (
 
 //go:generate mockgen -source=category_service.go -destination=../mocks/category_service.go -package=mocks
 
+// validCategorySortFields are the only column names callers may sort
+// category lists by; anything else is rejected rather than silently
+// defaulting, so API clients get a clear signal instead of unexpectedly
+// sorted results.
+var validCategorySortFields = map[string]bool{
+	"name":       true,
+	"created_at": true,
+	"updated_at": true,
+}
+
 type CategoryService interface {
 	CreateCategory(ctx context.Context, category *domain.Category) error
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (*domain.Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (*domain.Category, error)
-	GetCategoryList(ctx context.Context, filters map[string]string, limit, offset int) ([]*domain.Category, error)
+	// GetCategoryList returns the matching page of categories plus the total
+	// count of rows matching filters (ignoring limit/offset), for pagination.
+	GetCategoryList(ctx context.Context, filters *domain.CategoryFilters) ([]*domain.Category, int64, error)
 	UpdateCategory(ctx context.Context, category *domain.Category) error
 	DeleteCategory(ctx context.Context, id uuid.UUID) error
 }
@@ -67,10 +79,20 @@ func (cs *categoryService) GetCategoryBySlug(ctx context.Context, slug string) (
 	return cs.categoryRepo.GetCategoryBySlug(ctx, slug)
 }
 
-func (cs *categoryService) GetCategoryList(ctx context.Context, filters map[string]string, limit, offset int) ([]*domain.Category, error) {
-	cs.logger.Info("fetching category list", "limit", limit, "offset", offset)
+func (cs *categoryService) GetCategoryList(ctx context.Context, filters *domain.CategoryFilters) ([]*domain.Category, int64, error) {
+	if filters == nil {
+		filters = &domain.CategoryFilters{}
+	}
 
-	return cs.categoryRepo.GetCategoryList(ctx, filters, limit, offset)
+	if err := validateSortField(filters.SortBy, validCategorySortFields); err != nil {
+		return nil, 0, err
+	}
+
+	filters.Limit = capPageSize(filters.Limit, domain.DefaultPageSize, domain.MaxPageSize)
+
+	cs.logger.Info("fetching category list", "limit", filters.Limit, "offset", filters.Offset)
+
+	return cs.categoryRepo.GetCategoryList(ctx, filters)
 }
 
 func (cs *categoryService) UpdateCategory(ctx context.Context, category *domain.Category) error {

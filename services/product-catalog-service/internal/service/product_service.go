@@ -12,12 +12,22 @@ import (
 
 //go:generate mockgen -source=product_service.go -destination=../mocks/product_service.go -package=mocks
 
+// validProductSortFields are the only column names callers may sort product
+// lists by; anything else is rejected rather than silently defaulting.
+var validProductSortFields = map[string]bool{
+	"name":       true,
+	"created_at": true,
+	"updated_at": true,
+}
+
 // ProductService defines the interface for product operations
 type ProductService interface {
 	CreateProduct(ctx context.Context, product *domain.Product) error
 	GetProductByID(ctx context.Context, id uuid.UUID) (*domain.Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (*domain.Product, error)
-	GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, error)
+	// GetProductList returns the matching page of products plus the total
+	// count of rows matching filters (ignoring limit/offset), for pagination.
+	GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, int64, error)
 	UpdateProduct(ctx context.Context, product *domain.Product) error
 	DeleteProduct(ctx context.Context, id uuid.UUID) error
 }
@@ -81,7 +91,17 @@ func (ps *productService) GetProductBySlug(ctx context.Context, slug string) (*d
 	return ps.productRepo.GetProductBySlug(ctx, slug)
 }
 
-func (ps *productService) GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, error) {
+func (ps *productService) GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, int64, error) {
+	if filters == nil {
+		filters = &domain.ProductFilters{}
+	}
+
+	if err := validateSortField(filters.SortBy, validProductSortFields); err != nil {
+		return nil, 0, err
+	}
+
+	filters.Limit = capPageSize(filters.Limit, domain.DefaultPageSize, domain.MaxPageSize)
+
 	ps.logger.Info("fetching product list", "filters", filters)
 
 	return ps.productRepo.GetProductList(ctx, filters)

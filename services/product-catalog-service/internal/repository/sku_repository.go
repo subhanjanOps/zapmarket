@@ -122,93 +122,88 @@ func (sr *SkuRepository) GetSkuByID(
 	return sku, nil
 }
 
-func (sr *SkuRepository) GetSkuList(
-	ctx context.Context,
-	filters *domain.SKUFilters,
-) ([]*domain.SKU, error) {
-
-	query := `
-		SELECT
-			id,
-			product_id,
-			sku_code,
-			variant_attrs,
-			price_amount,
-			compare_price,
-			currency,
-			weight_grams,
-			is_active,
-			created_at,
-			updated_at,
-			deleted_at
-		FROM skus
-		WHERE deleted_at IS NULL
-	`
-
+// skuListWhere builds the shared WHERE clause + args for both the COUNT and
+// SELECT queries in GetSkuList, so the two queries can never drift apart (a
+// common source of pagination bugs: filtering one way for the page and
+// another for the total).
+func skuListWhere(filters *domain.SKUFilters) (string, []interface{}) {
+	where := "WHERE deleted_at IS NULL"
 	args := make([]interface{}, 0)
 	argPos := 1
 
-	if filters != nil {
-		if filters.ProductID != nil {
-			query += fmt.Sprintf(" AND product_id = $%d", argPos)
-			args = append(args, *filters.ProductID)
-			argPos++
-		}
+	if filters == nil {
+		return where, args
+	}
 
-		if filters.SKUCode != nil {
-			query += fmt.Sprintf(" AND sku_code ILIKE $%d", argPos)
-			args = append(args, "%"+*filters.SKUCode+"%")
-			argPos++
-		}
+	if filters.ProductID != nil {
+		where += fmt.Sprintf(" AND product_id = $%d", argPos)
+		args = append(args, *filters.ProductID)
+		argPos++
+	}
 
-		if filters.IsActive != nil {
-			query += fmt.Sprintf(" AND is_active = $%d", argPos)
-			args = append(args, *filters.IsActive)
-			argPos++
-		}
+	if filters.SKUCode != nil {
+		where += fmt.Sprintf(" AND sku_code ILIKE $%d", argPos)
+		args = append(args, "%"+*filters.SKUCode+"%")
+		argPos++
+	}
+
+	if filters.IsActive != nil {
+		where += fmt.Sprintf(" AND is_active = $%d", argPos)
+		args = append(args, *filters.IsActive)
+		argPos++
+	}
+
+	return where, args
+}
+
+func (sr *SkuRepository) GetSkuList(
+	ctx context.Context,
+	filters *domain.SKUFilters,
+) ([]*domain.SKU, int64, error) {
+	where, args := skuListWhere(filters)
+
+	var total int64
+	countQuery := "SELECT COUNT(*) FROM skus " + where
+	if err := sr.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to count skus", err)
 	}
 
 	sortBy := "created_at"
 	sortOrder := "DESC"
-
 	if filters != nil {
 		switch filters.SortBy {
 		case "created_at", "updated_at", "price_amount", "sku_code":
 			sortBy = filters.SortBy
 		}
-
-		switch strings.ToUpper(filters.SortOrder) {
-		case "ASC":
+		if strings.EqualFold(filters.SortOrder, "ASC") {
 			sortOrder = "ASC"
-		case "DESC":
-			sortOrder = "DESC"
 		}
 	}
 
-	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, sortOrder)
+	query := fmt.Sprintf(
+		"SELECT id, product_id, sku_code, variant_attrs, price_amount, compare_price, currency, weight_grams, is_active, created_at, updated_at, deleted_at FROM skus %s ORDER BY %s %s",
+		where, sortBy, sortOrder,
+	)
 
-	limit := 50
+	argPos := len(args) + 1
+	limit := domain.DefaultPageSize
+	if filters != nil && filters.Limit > 0 {
+		limit = filters.Limit
+	}
 	offset := 0
-
-	if filters != nil {
-		if filters.Limit > 0 {
-			limit = filters.Limit
-		}
-		if filters.Offset >= 0 {
-			offset = filters.Offset
-		}
+	if filters != nil && filters.Offset > 0 {
+		offset = filters.Offset
 	}
-
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, limit, offset)
 
 	rows, err := sr.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get sku list", err)
+		return nil, 0, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get sku list", err)
 	}
 	defer rows.Close()
 
-	var skus []*domain.SKU
+	skus := make([]*domain.SKU, 0)
 
 	for rows.Next() {
 		sku := &domain.SKU{}
@@ -229,17 +224,17 @@ func (sr *SkuRepository) GetSkuList(
 		)
 
 		if err != nil {
-			return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to scan sku", err)
+			return nil, 0, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to scan sku", err)
 		}
 
 		skus = append(skus, sku)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed while iterating skus", err)
+		return nil, 0, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed while iterating skus", err)
 	}
 
-	return skus, nil
+	return skus, total, nil
 }
 
 func (sr *SkuRepository) UpdateSku(

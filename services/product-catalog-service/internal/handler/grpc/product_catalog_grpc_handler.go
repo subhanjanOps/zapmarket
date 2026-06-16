@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
+	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
-	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -73,7 +73,7 @@ func (h *ProductCatalogGRPCHandler) GetSKUsByProduct(ctx context.Context, req *p
 		filters.IsActive = &t
 	}
 
-	skus, err := h.skuSvc.GetSKUList(ctx, filters)
+	skus, _, err := h.skuSvc.GetSKUList(ctx, filters)
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

@@ -26,7 +26,19 @@
       "Bash(curl -s http://localhost:8081/api/v1/categories)",
       "Bash(curl -s http://localhost:8080/health)",
       "Bash(pkill -f \"go run\")",
-      "Bash(rm -f \"C:/Users/subha/Downloads/Projects/zapMarket/services/product-catalog-service/.env\")"
+      "Bash(rm -f \"C:/Users/subha/Downloads/Projects/zapMarket/services/product-catalog-service/.env\")",
+      "Bash(gofmt -l .)",
+      "Bash(gofmt -w internal/domain/models.go internal/handler/grpc/product_catalog_grpc_handler.go)",
+      "Bash(go vet *)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 29804 //T)",
+      "Bash(taskkill //F //PID 4924 //T)",
+      "Bash(curl -s -o /tmp/resp.json -w \"%{http_code}\\\\n\" \"http://localhost:8081/api/v1/products?sort_by=bogus\")",
+      "Bash(curl -s -o /tmp/resp2.json -w \"%{http_code}\\\\n\" \"http://localhost:8081/api/v1/categories?parent_id=not-a-uuid\")",
+      "Bash(curl -s \"http://localhost:8081/api/v1/skus?sort_by=price_amount&sort_order=asc\")",
+      "Bash(curl -s \"http://localhost:8081/api/v1/products?offset=500&limit=10\")",
+      "Bash(curl -s \"http://localhost:8081/api/v1/products?limit=9999\")",
+      "Bash(curl -s -X POST http://localhost:8081/api/v1/categories -H \"Content-Type: application/json\" -d '{\"name\":\"Electronics\",\"slug\":\"electronics\"}' -w \"\\\\nHTTP:%{http_code}\\\\n\")"
     ]
   }
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 )
@@ -141,48 +142,63 @@ func (h *ProductHandler) GetProductBySlug(w http.ResponseWriter, r *http.Request
 	SuccessResponse(w, http.StatusOK, product)
 }
 
-// GetProductList returns a list of products
+// GetProductList returns a paginated list of products
 //
 //	@Summary		List products
 //	@Tags			products
 //	@Produce		json
-//	@Param			limit		query		int		false	"Page size (default 20)"
+//	@Param			limit		query		int		false	"Page size (default 20, max 100)"
 //	@Param			offset		query		int		false	"Page offset (default 0)"
 //	@Param			category_id	query		string	false	"Filter by category UUID"
+//	@Param			seller_id	query		string	false	"Filter by seller UUID"
 //	@Param			status		query		string	false	"Filter by status (draft|active|inactive|archived)"
 //	@Param			search		query		string	false	"Search by name or description"
+//	@Param			sort_by		query		string	false	"Sort field: name|created_at|updated_at"
+//	@Param			sort_order	query		string	false	"Sort direction: asc|desc"
 //	@Success		200			{object}	Response{data=[]domain.Product}
+//	@Failure		400			{object}	Response
 //	@Router			/api/v1/products [get]
 func (h *ProductHandler) GetProductList(w http.ResponseWriter, r *http.Request) {
-	limit, offset := GetLimitOffset(r, 20, 0)
+	limit, offset := GetLimitOffset(r, domain.DefaultPageSize, 0)
 
 	filters := &domain.ProductFilters{
-		Limit:  limit,
-		Offset: offset,
+		Status:    r.URL.Query().Get("status"),
+		Search:    r.URL.Query().Get("search"),
+		SortBy:    r.URL.Query().Get("sort_by"),
+		SortOrder: r.URL.Query().Get("sort_order"),
+		Limit:     limit,
+		Offset:    offset,
 	}
 
-	// Optional filters from query params
 	if categoryIDStr := r.URL.Query().Get("category_id"); categoryIDStr != "" {
-		if categoryID, err := uuid.Parse(categoryIDStr); err == nil {
-			filters.CategoryID = &categoryID
+		categoryID, err := uuid.Parse(categoryIDStr)
+		if err != nil {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_CATEGORY_ID", "invalid category_id")
+			return
 		}
+		filters.CategoryID = &categoryID
 	}
 
-	if status := r.URL.Query().Get("status"); status != "" {
-		filters.Status = status
+	if sellerIDStr := r.URL.Query().Get("seller_id"); sellerIDStr != "" {
+		sellerID, err := uuid.Parse(sellerIDStr)
+		if err != nil {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_SELLER_ID", "invalid seller_id")
+			return
+		}
+		filters.SellerID = &sellerID
 	}
 
-	if search := r.URL.Query().Get("search"); search != "" {
-		filters.Search = search
-	}
-
-	products, err := h.productService.GetProductList(r.Context(), filters)
+	products, total, err := h.productService.GetProductList(r.Context(), filters)
 	if err != nil {
 		HandleError(w, err)
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, products)
+	page := 1
+	if filters.Limit > 0 {
+		page = filters.Offset/filters.Limit + 1
+	}
+	httpx.Paginated(w, http.StatusOK, products, total, page, filters.Limit)
 }
 
 // UpdateProduct updates a product

@@ -12,11 +12,22 @@ import (
 
 //go:generate mockgen -source=sku_service.go -destination=../mocks/sku_service.go -package=mocks
 
+// validSKUSortFields are the only column names callers may sort SKU lists
+// by; anything else is rejected rather than silently defaulting.
+var validSKUSortFields = map[string]bool{
+	"created_at":   true,
+	"updated_at":   true,
+	"price_amount": true,
+	"sku_code":     true,
+}
+
 // SKUService defines the interface for SKU operations
 type SKUService interface {
 	CreateSKU(ctx context.Context, sku *domain.SKU) error
 	GetSKUByID(ctx context.Context, id uuid.UUID) (*domain.SKU, error)
-	GetSKUList(ctx context.Context, filters *domain.SKUFilters) ([]*domain.SKU, error)
+	// GetSKUList returns the matching page of SKUs plus the total count of
+	// rows matching filters (ignoring limit/offset), for pagination.
+	GetSKUList(ctx context.Context, filters *domain.SKUFilters) ([]*domain.SKU, int64, error)
 	UpdateSKU(ctx context.Context, sku *domain.SKU) error
 	DeleteSKU(ctx context.Context, id uuid.UUID) error
 }
@@ -66,7 +77,17 @@ func (ss *skuService) GetSKUByID(ctx context.Context, id uuid.UUID) (*domain.SKU
 	return ss.skuRepo.GetSkuByID(ctx, id)
 }
 
-func (ss *skuService) GetSKUList(ctx context.Context, filters *domain.SKUFilters) ([]*domain.SKU, error) {
+func (ss *skuService) GetSKUList(ctx context.Context, filters *domain.SKUFilters) ([]*domain.SKU, int64, error) {
+	if filters == nil {
+		filters = &domain.SKUFilters{}
+	}
+
+	if err := validateSortField(filters.SortBy, validSKUSortFields); err != nil {
+		return nil, 0, err
+	}
+
+	filters.Limit = capPageSize(filters.Limit, domain.DefaultPageSize, domain.MaxPageSize)
+
 	ss.logger.Info("fetching sku list", "filters", filters)
 
 	return ss.skuRepo.GetSkuList(ctx, filters)

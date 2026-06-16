@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 )
@@ -109,31 +110,38 @@ func (h *SKUHandler) GetSKUByID(w http.ResponseWriter, r *http.Request) {
 	SuccessResponse(w, http.StatusOK, sku)
 }
 
-// GetSKUList returns a list of SKUs
+// GetSKUList returns a paginated list of SKUs
 //
 //	@Summary		List SKUs
 //	@Tags			skus
 //	@Produce		json
-//	@Param			limit		query		int		false	"Page size (default 20)"
+//	@Param			limit		query		int		false	"Page size (default 20, max 100)"
 //	@Param			offset		query		int		false	"Page offset (default 0)"
 //	@Param			product_id	query		string	false	"Filter by product UUID"
 //	@Param			sku_code	query		string	false	"Filter by SKU code (partial match)"
 //	@Param			is_active	query		bool	false	"Filter by active status"
+//	@Param			sort_by		query		string	false	"Sort field: sku_code|price_amount|created_at|updated_at"
+//	@Param			sort_order	query		string	false	"Sort direction: asc|desc"
 //	@Success		200			{object}	Response{data=[]domain.SKU}
+//	@Failure		400			{object}	Response
 //	@Router			/api/v1/skus [get]
 func (h *SKUHandler) GetSKUList(w http.ResponseWriter, r *http.Request) {
-	limit, offset := GetLimitOffset(r, 20, 0)
+	limit, offset := GetLimitOffset(r, domain.DefaultPageSize, 0)
 
 	filters := &domain.SKUFilters{
-		Limit:  limit,
-		Offset: offset,
+		SortBy:    r.URL.Query().Get("sort_by"),
+		SortOrder: r.URL.Query().Get("sort_order"),
+		Limit:     limit,
+		Offset:    offset,
 	}
 
-	// Optional filters from query params
 	if productIDStr := r.URL.Query().Get("product_id"); productIDStr != "" {
-		if productID, err := uuid.Parse(productIDStr); err == nil {
-			filters.ProductID = &productID
+		productID, err := uuid.Parse(productIDStr)
+		if err != nil {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_PRODUCT_ID", "invalid product_id")
+			return
 		}
+		filters.ProductID = &productID
 	}
 
 	if skuCode := r.URL.Query().Get("sku_code"); skuCode != "" {
@@ -145,13 +153,17 @@ func (h *SKUHandler) GetSKUList(w http.ResponseWriter, r *http.Request) {
 		filters.IsActive = &isActive
 	}
 
-	skus, err := h.skuService.GetSKUList(r.Context(), filters)
+	skus, total, err := h.skuService.GetSKUList(r.Context(), filters)
 	if err != nil {
 		HandleError(w, err)
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, skus)
+	page := 1
+	if filters.Limit > 0 {
+		page = filters.Offset/filters.Limit + 1
+	}
+	httpx.Paginated(w, http.StatusOK, skus, total, page, filters.Limit)
 }
 
 // UpdateSKU updates a SKU

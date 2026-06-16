@@ -17,7 +17,9 @@ type CategoryRepository interface {
 	CreateCategory(ctx context.Context, category *domain.Category) error
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (*domain.Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (*domain.Category, error)
-	GetCategoryList(ctx context.Context, filters map[string]string, limit, offset int) ([]*domain.Category, error)
+	// GetCategoryList returns the matching page of categories plus the total
+	// count of rows matching filters (ignoring limit/offset), for pagination.
+	GetCategoryList(ctx context.Context, filters *domain.CategoryFilters) ([]*domain.Category, int64, error)
 	UpdateCategory(ctx context.Context, category *domain.Category) error
 	DeleteCategory(ctx context.Context, id uuid.UUID) error
 }
@@ -27,7 +29,9 @@ type ProductRepository interface {
 	CreateProduct(ctx context.Context, product *domain.Product) error
 	GetProductByID(ctx context.Context, id uuid.UUID) (*domain.Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (*domain.Product, error)
-	GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, error)
+	// GetProductList returns the matching page of products plus the total
+	// count of rows matching filters (ignoring limit/offset), for pagination.
+	GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, int64, error)
 	UpdateProduct(ctx context.Context, product *domain.Product) error
 	DeleteProduct(ctx context.Context, id uuid.UUID) error
 }
@@ -36,7 +40,9 @@ type ProductRepository interface {
 type SKURepository interface {
 	CreateSku(ctx context.Context, sku *domain.SKU) error
 	GetSkuByID(ctx context.Context, id uuid.UUID) (*domain.SKU, error)
-	GetSkuList(ctx context.Context, filters *domain.SKUFilters) ([]*domain.SKU, error)
+	// GetSkuList returns the matching page of SKUs plus the total count of
+	// rows matching filters (ignoring limit/offset), for pagination.
+	GetSkuList(ctx context.Context, filters *domain.SKUFilters) ([]*domain.SKU, int64, error)
 	UpdateSku(ctx context.Context, sku *domain.SKU) error
 	DeleteSku(ctx context.Context, id uuid.UUID) error
 }

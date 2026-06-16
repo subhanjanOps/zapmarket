@@ -158,88 +158,93 @@ func (pr *ProductRepository) GetProductBySlug(
 	return product, nil
 }
 
-func (pr *ProductRepository) GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, error) {
-	query := `
-		SELECT id, category_id, seller_id, name, slug, description, attributes, status, created_at, updated_at, deleted_at
-		FROM products
-		WHERE deleted_at IS NULL
-	`
-
+// productListWhere builds the shared WHERE clause + args for both the COUNT
+// and SELECT queries in GetProductList, so the two queries can never drift
+// apart (a common source of pagination bugs: filtering one way for the page
+// and another for the total).
+func productListWhere(filters *domain.ProductFilters) (string, []interface{}) {
+	where := "WHERE deleted_at IS NULL"
 	args := make([]interface{}, 0)
 	argPos := 1
 
-	if filters != nil {
-		if filters.CategoryID != nil {
-			query += fmt.Sprintf(" AND category_id = $%d", argPos)
-			args = append(args, *filters.CategoryID)
-			argPos++
-		}
+	if filters == nil {
+		return where, args
+	}
 
-		if filters.SellerID != nil {
-			query += fmt.Sprintf(" AND seller_id = $%d", argPos)
-			args = append(args, *filters.SellerID)
-			argPos++
-		}
+	if filters.CategoryID != nil {
+		where += fmt.Sprintf(" AND category_id = $%d", argPos)
+		args = append(args, *filters.CategoryID)
+		argPos++
+	}
 
-		if filters.Status != "" {
-			query += fmt.Sprintf(" AND status = $%d", argPos)
-			args = append(args, filters.Status)
-			argPos++
-		}
+	if filters.SellerID != nil {
+		where += fmt.Sprintf(" AND seller_id = $%d", argPos)
+		args = append(args, *filters.SellerID)
+		argPos++
+	}
 
-		if filters.Slug != "" {
-			query += fmt.Sprintf(" AND slug = $%d", argPos)
-			args = append(args, filters.Slug)
-			argPos++
-		}
+	if filters.Status != "" {
+		where += fmt.Sprintf(" AND status = $%d", argPos)
+		args = append(args, filters.Status)
+		argPos++
+	}
 
-		if filters.Search != "" {
-			query += fmt.Sprintf(`
-				AND (
-					name ILIKE $%d
-					OR description ILIKE $%d
-				)
-			`, argPos, argPos)
+	if filters.Slug != "" {
+		where += fmt.Sprintf(" AND slug = $%d", argPos)
+		args = append(args, filters.Slug)
+		argPos++
+	}
 
-			args = append(args, "%"+filters.Search+"%")
-			argPos++
-		}
+	if filters.Search != "" {
+		where += fmt.Sprintf(" AND (name ILIKE $%d OR description ILIKE $%d)", argPos, argPos)
+		args = append(args, "%"+filters.Search+"%")
+		argPos++
+	}
+
+	return where, args
+}
+
+func (pr *ProductRepository) GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, int64, error) {
+	where, args := productListWhere(filters)
+
+	var total int64
+	countQuery := "SELECT COUNT(*) FROM products " + where
+	if err := pr.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to count products", err)
 	}
 
 	sortBy := "created_at"
 	sortOrder := "DESC"
-
 	if filters != nil {
 		switch filters.SortBy {
 		case "name", "created_at", "updated_at":
 			sortBy = filters.SortBy
 		}
-
-		switch strings.ToUpper(filters.SortOrder) {
-		case "ASC":
+		if strings.EqualFold(filters.SortOrder, "ASC") {
 			sortOrder = "ASC"
-		case "DESC":
-			sortOrder = "DESC"
 		}
 	}
 
-	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, sortOrder)
+	query := fmt.Sprintf(
+		"SELECT id, category_id, seller_id, name, slug, description, attributes, status, created_at, updated_at, deleted_at FROM products %s ORDER BY %s %s",
+		where, sortBy, sortOrder,
+	)
 
+	argPos := len(args) + 1
+	limit := domain.DefaultPageSize
 	if filters != nil && filters.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT $%d", argPos)
-		args = append(args, filters.Limit)
-		argPos++
+		limit = filters.Limit
 	}
-
+	offset := 0
 	if filters != nil && filters.Offset > 0 {
-		query += fmt.Sprintf(" OFFSET $%d", argPos)
-		args = append(args, filters.Offset)
-		argPos++
+		offset = filters.Offset
 	}
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, limit, offset)
 
 	rows, err := pr.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to fetch products", err)
+		return nil, 0, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to fetch products", err)
 	}
 	defer rows.Close()
 
@@ -262,17 +267,17 @@ func (pr *ProductRepository) GetProductList(ctx context.Context, filters *domain
 			&product.DeletedAt,
 		)
 		if err != nil {
-			return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to scan product", err)
+			return nil, 0, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to scan product", err)
 		}
 
 		products = append(products, product)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to iterate products", err)
+		return nil, 0, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to iterate products", err)
 	}
 
-	return products, nil
+	return products, total, nil
 }
 
 func (pr *ProductRepository) UpdateProduct(ctx context.Context, product *domain.Product) error {
