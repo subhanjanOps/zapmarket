@@ -29,3 +29,5 @@ use ./pkg/logger
 use ./pkg/migrate
 
 use ./pkg/proto
+
+use ./pkg/swaggerx

@@ -38,7 +38,16 @@
       "Bash(curl -s \"http://localhost:8081/api/v1/skus?sort_by=price_amount&sort_order=asc\")",
       "Bash(curl -s \"http://localhost:8081/api/v1/products?offset=500&limit=10\")",
       "Bash(curl -s \"http://localhost:8081/api/v1/products?limit=9999\")",
-      "Bash(curl -s -X POST http://localhost:8081/api/v1/categories -H \"Content-Type: application/json\" -d '{\"name\":\"Electronics\",\"slug\":\"electronics\"}' -w \"\\\\nHTTP:%{http_code}\\\\n\")"
+      "Bash(curl -s -X POST http://localhost:8081/api/v1/categories -H \"Content-Type: application/json\" -d '{\"name\":\"Electronics\",\"slug\":\"electronics\"}' -w \"\\\\nHTTP:%{http_code}\\\\n\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080/v1/docs/swagger.json)",
+      "Bash(curl -s -o /dev/null -w \"doc.json: %{http_code}\\\\n\" http://localhost:8081/docs/doc.json)",
+      "Bash(curl -s -o /dev/null -w \"index.html: %{http_code}\\\\n\" http://localhost:8081/docs/index.html)",
+      "Bash(curl -s -o /dev/null -w \"swagger.json: %{http_code}\\\\n\" http://localhost:8080/v1/docs/swagger.json)",
+      "Bash(curl -s -o /dev/null -w \"index.html:   %{http_code}\\\\n\" http://localhost:8080/v1/docs/index.html)",
+      "Bash(curl -s -o /dev/null -w \"swagger.json: %{http_code}\\\\n\" http://localhost:8081/v1/docs/swagger.json)",
+      "Bash(curl -s -o /dev/null -w \"index.html:   %{http_code}\\\\n\" http://localhost:8081/v1/docs/index.html)",
+      "Bash(curl -s http://localhost:8081/v1/docs/swagger.json)",
+      "Bash(curl -s http://localhost:8080/v1/docs/swagger.json)"
     ]
   }
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
+	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/product-catalog-service/docs"
 	grpchandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/grpc"
 	httpHandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/http"
@@ -145,9 +146,12 @@ func main() {
 		})
 	})
 
-	// Swagger UI
-	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("/swagger/doc.json"),
+	// Swagger: spec served from the embedded swag doc (see docs/docs.go,
+	// regenerated via `swag init -g main.go`), not a file on disk.
+	// See pkg/swaggerx for why these two routes are split.
+	r.Get("/v1/docs/swagger.json", swaggerx.JSONHandler(""))
+	r.Get("/v1/docs/*", httpSwagger.Handler(
+		httpSwagger.URL("/v1/docs/swagger.json"),
 	))
 
 	httpServer := &http.Server{

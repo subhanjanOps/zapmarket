@@ -42,6 +42,8 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
+	"github.com/zapmarket/zapmarket/pkg/swaggerx"
+	_ "github.com/zapmarket/zapmarket/services/auth-service/docs"
 	grpcHandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
@@ -101,12 +103,10 @@ func main() {
 	mux.HandleFunc("/v1/auth/oauth/facebook/url", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthURL))
 	mux.HandleFunc("/v1/auth/oauth/facebook/callback", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthCallback))
 
-	// Serve Swagger JSON
-	mux.HandleFunc("/v1/docs/swagger.json", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./docs/swagger.json")
-	})
-
-	// Serve Swagger UI
+	// Swagger: spec served from the embedded swag doc (see docs/docs.go,
+	// regenerated via `swag init -g cmd/main.go`), not a file on disk.
+	// See pkg/swaggerx for why these two routes are split.
+	mux.HandleFunc("/v1/docs/swagger.json", swaggerx.JSONHandler(""))
 	mux.Handle("/v1/docs/", httpSwagger.Handler(httpSwagger.URL("/v1/docs/swagger.json")))
 
 	// Health check endpoint

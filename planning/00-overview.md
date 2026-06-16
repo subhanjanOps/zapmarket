@@ -38,6 +38,15 @@ and Payment expose gRPC servers).
 11. **[Stage 11 — Kubernetes & CI/CD](11-k8s-cicd.md)** — Phases 16 + 17.
 12. **[Stage 12 — Production Readiness](12-production-readiness.md)** — Phase 18: security hardening, reliability patterns, final completion criteria sign-off.
 
+## Cross-cutting conventions established so far
+
+- **Swagger/OpenAPI**: every service with a public HTTP API uses `pkg/swaggerx` +
+  `swag init`-generated `docs/docs.go` (blank-imported), with the spec served at the
+  literal path `/v1/docs/swagger.json` and the UI at `/v1/docs/*`. Never use
+  `http.ServeFile` for the spec or `COPY docs/` in the Dockerfile — the spec is compiled
+  into the binary. Full rationale in memory (`feedback_swagger_standard`). Apply this
+  from day one in Stages 3-6, not as an afterthought.
+
 ## Why this order
 
 - Inventory and Payment must exist with working gRPC servers **before** Order Management's

@@ -27,6 +27,6 @@ COPY services/product-catalog-service/migrations /app/migrations
 EXPOSE 8081 50052
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
-    CMD wget -qO- http://localhost:8081/categories?limit=1 || exit 1
+    CMD wget -qO- "http://localhost:8081/api/v1/categories?limit=1" || exit 1
 
 CMD ["/app/product-catalog-service"]
