@@ -68,6 +68,8 @@ func (ps *productService) CreateProduct(ctx context.Context, product *domain.Pro
 
 	ps.logger.Info("creating product", "name", product.Name, "slug", product.Slug, "seller_id", product.SellerID)
 
+	product.ID = uuid.New()
+
 	return ps.productRepo.CreateProduct(ctx, product)
 }
 

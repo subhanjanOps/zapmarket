@@ -62,6 +62,8 @@ func (ss *skuService) CreateSKU(ctx context.Context, sku *domain.SKU) error {
 		sku.Currency = "INR"
 	}
 
+	sku.ID = uuid.New()
+
 	ss.logger.Info("creating sku", "sku_code", sku.SKUCode, "product_id", sku.ProductID)
 
 	return ss.skuRepo.CreateSku(ctx, sku)

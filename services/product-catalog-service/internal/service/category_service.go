@@ -54,6 +54,8 @@ func (cs *categoryService) CreateCategory(ctx context.Context, category *domain.
 		return pkgerrors.NewValidation("INVALID_DATA", "category name is required")
 	}
 
+	category.ID = uuid.New()
+
 	cs.logger.Info("creating category", "slug", category.Slug, "name", category.Name)
 
 	return cs.categoryRepo.CreateCategory(ctx, category)

@@ -43,6 +43,8 @@ func (pis *productImageService) CreateProductImage(ctx context.Context, image *d
 		return pkgerrors.NewValidation("INVALID_DATA", "image url is required")
 	}
 
+	image.ID = uuid.New()
+
 	pis.logger.Info("creating product image", "product_id", image.ProductID, "url", image.URL)
 
 	return pis.imageRepo.CreateProductImage(ctx, image)
