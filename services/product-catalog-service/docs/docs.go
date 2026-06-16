@@ -27,7 +27,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Page size (default 20)",
+                        "description": "Page size (default 20, max 100)",
                         "name": "limit",
                         "in": "query"
                     },
@@ -35,6 +35,30 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Page offset (default 0)",
                         "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by parent category UUID",
+                        "name": "parent_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search by name",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field: name|created_at|updated_at",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort direction: asc|desc",
+                        "name": "sort_order",
                         "in": "query"
                     }
                 ],
@@ -44,7 +68,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -58,6 +82,12 @@ const docTemplate = `{
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -95,7 +125,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -111,25 +141,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -159,7 +189,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -175,13 +205,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -211,7 +241,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -227,13 +257,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -278,7 +308,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -294,25 +324,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -343,25 +373,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -379,7 +409,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Page size (default 20)",
+                        "description": "Page size (default 20, max 100)",
                         "name": "limit",
                         "in": "query"
                     },
@@ -397,6 +427,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Filter by seller UUID",
+                        "name": "seller_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "Filter by status (draft|active|inactive|archived)",
                         "name": "status",
                         "in": "query"
@@ -406,6 +442,18 @@ const docTemplate = `{
                         "description": "Search by name or description",
                         "name": "search",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field: name|created_at|updated_at",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort direction: asc|desc",
+                        "name": "sort_order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -414,7 +462,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -428,6 +476,12 @@ const docTemplate = `{
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -465,7 +519,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -481,25 +535,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -529,7 +583,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -545,13 +599,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -581,7 +635,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -597,13 +651,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -648,7 +702,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -664,25 +718,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -713,25 +767,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -761,7 +815,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -780,7 +834,7 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -792,7 +846,7 @@ const docTemplate = `{
                     }
                 ],
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -800,7 +854,7 @@ const docTemplate = `{
                 "tags": [
                     "product-images"
                 ],
-                "summary": "Add product image",
+                "summary": "Upload a product image",
                 "parameters": [
                     {
                         "type": "string",
@@ -810,13 +864,17 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Image payload",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/http.CreateProductImageRequest"
-                        }
+                        "type": "string",
+                        "description": "SKU UUID (optional)",
+                        "name": "sku_id",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "Image file (png, jpeg, webp, or gif; max 5MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -825,7 +883,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -841,19 +899,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -890,7 +948,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -909,7 +967,7 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -949,25 +1007,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -1019,25 +1077,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -1055,7 +1113,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Page size (default 20)",
+                        "description": "Page size (default 20, max 100)",
                         "name": "limit",
                         "in": "query"
                     },
@@ -1082,6 +1140,18 @@ const docTemplate = `{
                         "description": "Filter by active status",
                         "name": "is_active",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field: sku_code|price_amount|created_at|updated_at",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort direction: asc|desc",
+                        "name": "sort_order",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1090,7 +1160,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -1104,6 +1174,12 @@ const docTemplate = `{
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -1141,7 +1217,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -1157,25 +1233,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -1205,7 +1281,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -1221,13 +1297,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -1272,7 +1348,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                                    "$ref": "#/definitions/http.Response"
                                 },
                                 {
                                     "type": "object",
@@ -1288,25 +1364,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -1337,25 +1413,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response"
+                            "$ref": "#/definitions/http.Response"
                         }
                     }
                 }
@@ -1393,10 +1469,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "attributes": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                    "type": "object"
                 },
                 "category_id": {
                     "type": "string"
@@ -1508,25 +1581,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "variant_attributes": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                    "type": "object"
                 },
                 "weight_grams": {
                     "type": "integer"
-                }
-            }
-        },
-        "github_com_zapmarket_zapmarket_services_product-catalog-service_internal_handler_http.Response": {
-            "type": "object",
-            "properties": {
-                "data": {},
-                "error": {
-                    "$ref": "#/definitions/http.ErrorInfo"
-                },
-                "success": {
-                    "type": "boolean"
                 }
             }
         },
@@ -1540,20 +1598,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "slug": {
-                    "type": "string"
-                }
-            }
-        },
-        "http.CreateProductImageRequest": {
-            "type": "object",
-            "properties": {
-                "product_id": {
-                    "type": "string"
-                },
-                "sku_id": {
-                    "type": "string"
-                },
-                "url": {
                     "type": "string"
                 }
             }
@@ -1606,14 +1650,18 @@ const docTemplate = `{
                 }
             }
         },
-        "http.ErrorInfo": {
+        "http.Response": {
             "type": "object",
             "properties": {
                 "code": {
                     "type": "string"
                 },
+                "data": {},
                 "message": {
                     "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         },

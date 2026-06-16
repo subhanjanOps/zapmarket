@@ -1,11 +1,12 @@
 package http
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 )
 
@@ -19,46 +20,101 @@ func NewProductImageHandler(imageService service.ProductImageService) *ProductIm
 	return &ProductImageHandler{imageService}
 }
 
-// CreateProductImageRequest represents the request to create a product image
-type CreateProductImageRequest struct {
-	ProductID uuid.UUID  `json:"product_id"`
-	SKUID     *uuid.UUID `json:"sku_id,omitempty"`
-	URL       string     `json:"url"`
-}
+// maxImageUploadBytes caps the request body read for an image upload,
+// rejecting oversized files before they're fully buffered in memory.
+const maxImageUploadBytes = 5 << 20 // 5 MiB
 
-// CreateProductImage creates a new product image
+// CreateProductImage uploads a new product image to object storage and
+// records it.
 //
-//	@Summary		Add product image
+//	@Summary		Upload a product image
 //	@Tags			product-images
-//	@Accept			json
+//	@Accept			mpfd
 //	@Produce		json
 //	@Security		BearerAuth
-//	@Param			product_id	path		string						true	"Product UUID"
-//	@Param			body		body		CreateProductImageRequest	true	"Image payload"
+//	@Param			product_id	path		string	true	"Product UUID"
+//	@Param			sku_id		formData	string	false	"SKU UUID (optional)"
+//	@Param			file		formData	file	true	"Image file (png, jpeg, webp, or gif; max 5MB)"
 //	@Success		201			{object}	Response{data=domain.ProductImage}
 //	@Failure		400			{object}	Response
 //	@Failure		401			{object}	Response
 //	@Failure		403			{object}	Response
 //	@Router			/api/v1/products/{product_id}/images [post]
 func (h *ProductImageHandler) CreateProductImage(w http.ResponseWriter, r *http.Request) {
-	var req CreateProductImageRequest
-	if err := DecodeJSON(r, &req); err != nil {
-		ErrorResponse(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+	productIDStr := chi.URLParam(r, "product_id")
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ID", "invalid product id")
 		return
 	}
 
-	image := &domain.ProductImage{
-		ProductID: req.ProductID,
-		SKUId:     req.SKUID,
-		URL:       req.URL,
+	r.Body = http.MaxBytesReader(w, r.Body, maxImageUploadBytes)
+	if err := r.ParseMultipartForm(maxImageUploadBytes); err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "FILE_TOO_LARGE", "file exceeds the 5MB upload limit")
+		return
 	}
 
-	if err := h.imageService.CreateProductImage(r.Context(), image); err != nil {
+	var skuID *uuid.UUID
+	if skuIDStr := r.FormValue("sku_id"); skuIDStr != "" {
+		parsed, err := uuid.Parse(skuIDStr)
+		if err != nil {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_SKU_ID", "invalid sku_id")
+			return
+		}
+		skuID = &parsed
+	}
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "MISSING_FILE", "file is required")
+		return
+	}
+	defer file.Close()
+
+	// Sniff the real content type from the file bytes rather than trusting
+	// a client-supplied header, which is easy to spoof and tells us nothing
+	// about what's actually in the body.
+	sniffBuf := make([]byte, 512)
+	n, err := file.Read(sniffBuf)
+	if err != nil && err != io.EOF {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_FILE", "could not read uploaded file")
+		return
+	}
+	contentType := http.DetectContentType(sniffBuf[:n])
+
+	// Reassemble a reader over the sniffed bytes + the rest of the file,
+	// since the sniff read already consumed the first 512 bytes.
+	fullReader := io.MultiReader(bytes.NewReader(sniffBuf[:n]), file)
+
+	size, err := formFileSize(r, "file")
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_FILE", "could not determine file size")
+		return
+	}
+
+	image, err := h.imageService.UploadProductImage(r.Context(), service.UploadProductImageInput{
+		ProductID:   productID,
+		SKUID:       skuID,
+		Reader:      fullReader,
+		Size:        size,
+		ContentType: contentType,
+	})
+	if err != nil {
 		HandleError(w, err)
 		return
 	}
 
 	SuccessResponse(w, http.StatusCreated, image)
+}
+
+// formFileSize reads the Size of the named multipart file part without
+// consuming its reader, by going through the parsed multipart form header
+// rather than the (already partially-read) file handle.
+func formFileSize(r *http.Request, field string) (int64, error) {
+	if r.MultipartForm == nil || r.MultipartForm.File[field] == nil || len(r.MultipartForm.File[field]) == 0 {
+		return 0, http.ErrMissingFile
+	}
+	return r.MultipartForm.File[field][0].Size, nil
 }
 
 // GetImagesByProductID returns images by product ID

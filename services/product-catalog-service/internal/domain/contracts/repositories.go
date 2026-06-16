@@ -5,6 +5,7 @@ package contracts
 
 import (
 	"context"
+	"io"
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
@@ -50,8 +51,19 @@ type SKURepository interface {
 // ProductImageRepository defines the interface for product image repository
 type ProductImageRepository interface {
 	CreateProductImage(ctx context.Context, prdImage *domain.ProductImage) error
+	GetImageByID(ctx context.Context, id uuid.UUID) (*domain.ProductImage, error)
 	GetImageByProductID(ctx context.Context, productID uuid.UUID) ([]*domain.ProductImage, error)
 	GetImageBySKUID(ctx context.Context, skuID uuid.UUID) ([]*domain.ProductImage, error)
 	UpdateProductImagePosition(ctx context.Context, id uuid.UUID, position int) error
 	DeleteProductImage(ctx context.Context, id uuid.UUID) error
+}
+
+// ObjectStorage defines the interface for the object store backing
+// user-uploaded files (product images today). Concrete implementation is
+// pkg/storage.Client; the service layer depends only on this interface so
+// it never imports the concrete MinIO/S3 SDK type directly.
+type ObjectStorage interface {
+	Upload(ctx context.Context, key string, r io.Reader, size int64, contentType string) (string, error)
+	Delete(ctx context.Context, key string) error
+	PublicURL(key string) string
 }

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -12,9 +14,31 @@ import (
 
 //go:generate mockgen -source=product_image_service.go -destination=../mocks/product_image_service.go -package=mocks
 
+// allowedImageContentTypes is the allow-list of content types accepted for
+// product image uploads. Anything else is rejected before it ever reaches
+// object storage.
+var allowedImageContentTypes = map[string]string{
+	"image/png":  ".png",
+	"image/jpeg": ".jpg",
+	"image/webp": ".webp",
+	"image/gif":  ".gif",
+}
+
+// UploadProductImageInput carries an in-flight file upload through to the
+// service layer. Reader/Size/ContentType describe the actual file bytes;
+// the content type here must already be the sniffed value (from
+// http.DetectContentType), not a client-supplied header taken on faith.
+type UploadProductImageInput struct {
+	ProductID   uuid.UUID
+	SKUID       *uuid.UUID
+	Reader      io.Reader
+	Size        int64
+	ContentType string
+}
+
 // ProductImageService defines the interface for product image operations
 type ProductImageService interface {
-	CreateProductImage(ctx context.Context, image *domain.ProductImage) error
+	UploadProductImage(ctx context.Context, in UploadProductImageInput) (*domain.ProductImage, error)
 	GetImagesByProductID(ctx context.Context, productID uuid.UUID) ([]*domain.ProductImage, error)
 	GetImagesBySKUID(ctx context.Context, skuID uuid.UUID) ([]*domain.ProductImage, error)
 	UpdateImagePosition(ctx context.Context, id uuid.UUID, position int) error
@@ -23,31 +47,57 @@ type ProductImageService interface {
 
 type productImageService struct {
 	imageRepo contracts.ProductImageRepository
+	storage   contracts.ObjectStorage
 	logger    *slog.Logger
 }
 
 // NewProductImageService creates a new product image service
-func NewProductImageService(repo contracts.ProductImageRepository, logger *slog.Logger) ProductImageService {
+func NewProductImageService(repo contracts.ProductImageRepository, objectStorage contracts.ObjectStorage, logger *slog.Logger) ProductImageService {
 	return &productImageService{
 		imageRepo: repo,
+		storage:   objectStorage,
 		logger:    logger,
 	}
 }
 
-func (pis *productImageService) CreateProductImage(ctx context.Context, image *domain.ProductImage) error {
-	if image.ProductID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA", "product id is required")
+func (pis *productImageService) UploadProductImage(ctx context.Context, in UploadProductImageInput) (*domain.ProductImage, error) {
+	if in.ProductID == uuid.Nil {
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "product id is required")
 	}
 
-	if image.URL == "" {
-		return pkgerrors.NewValidation("INVALID_DATA", "image url is required")
+	ext, ok := allowedImageContentTypes[in.ContentType]
+	if !ok {
+		return nil, pkgerrors.NewValidation("INVALID_CONTENT_TYPE", "file must be one of: png, jpeg, webp, gif")
 	}
 
-	image.ID = uuid.New()
+	id := uuid.New()
+	key := fmt.Sprintf("products/%s/%s%s", in.ProductID, id, ext)
 
-	pis.logger.Info("creating product image", "product_id", image.ProductID, "url", image.URL)
+	if _, err := pis.storage.Upload(ctx, key, in.Reader, in.Size, in.ContentType); err != nil {
+		pis.logger.Error("failed to upload product image to object storage", "key", key, "error", err)
+		return nil, pkgerrors.NewInternal("UPLOAD_FAILED", "failed to upload image", err)
+	}
 
-	return pis.imageRepo.CreateProductImage(ctx, image)
+	image := &domain.ProductImage{
+		ID:        id,
+		ProductID: in.ProductID,
+		SKUId:     in.SKUID,
+		ObjectKey: key,
+		URL:       pis.storage.PublicURL(key),
+	}
+
+	pis.logger.Info("uploading product image", "product_id", image.ProductID, "key", key)
+
+	if err := pis.imageRepo.CreateProductImage(ctx, image); err != nil {
+		// The DB write failed after the object was already stored — clean
+		// up the orphan rather than leaving a file with no DB record.
+		if delErr := pis.storage.Delete(ctx, key); delErr != nil {
+			pis.logger.Error("failed to clean up orphaned object after DB write failure", "key", key, "error", delErr)
+		}
+		return nil, err
+	}
+
+	return image, nil
 }
 
 func (pis *productImageService) GetImagesByProductID(ctx context.Context, productID uuid.UUID) ([]*domain.ProductImage, error) {
@@ -89,7 +139,24 @@ func (pis *productImageService) DeleteProductImage(ctx context.Context, id uuid.
 		return pkgerrors.NewValidation("INVALID_DATA", "image id is required")
 	}
 
+	image, err := pis.imageRepo.GetImageByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
 	pis.logger.Info("deleting product image", "id", id)
 
-	return pis.imageRepo.DeleteProductImage(ctx, id)
+	if err := pis.imageRepo.DeleteProductImage(ctx, id); err != nil {
+		return err
+	}
+
+	// Best-effort: an orphaned MinIO object is a cheap cleanup problem,
+	// failing the whole delete because storage hiccuped is a worse one.
+	if image.ObjectKey != "" {
+		if err := pis.storage.Delete(ctx, image.ObjectKey); err != nil {
+			pis.logger.Error("failed to delete object from storage after DB delete", "key", image.ObjectKey, "error", err)
+		}
+	}
+
+	return nil
 }

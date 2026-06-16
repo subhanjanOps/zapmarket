@@ -30,4 +30,6 @@ use ./pkg/migrate
 
 use ./pkg/proto
 
+use ./pkg/storage
+
 use ./pkg/swaggerx

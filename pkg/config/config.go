@@ -37,6 +37,18 @@ type Config struct {
 	// Elasticsearch
 	ElasticsearchURL string
 
+	// MinIO / S3-compatible object storage. Endpoint is the internal address
+	// (e.g. "minio:9000" inside Docker) used to talk to the server;
+	// PublicURL is the externally-reachable address (e.g.
+	// "http://localhost:9000") used to build URLs returned to API clients.
+	// These differ under Docker Compose and must not be conflated.
+	MinIOEndpoint  string
+	MinIOPublicURL string
+	MinIOAccessKey string
+	MinIOSecretKey string
+	MinIOBucket    string
+	MinIOUseSSL    bool
+
 	// Downstream services
 	AuthServiceAddr string
 
@@ -82,6 +94,14 @@ func Load() (*Config, error) {
 
 		// Elasticsearch
 		ElasticsearchURL: getEnv("ES_URL", "http://localhost:9200"),
+
+		// MinIO / S3-compatible object storage
+		MinIOEndpoint:  getEnv("MINIO_ENDPOINT", "localhost:9000"),
+		MinIOPublicURL: getEnv("MINIO_PUBLIC_URL", "http://localhost:9000"),
+		MinIOAccessKey: getEnv("MINIO_ACCESS_KEY", "minioadmin"),
+		MinIOSecretKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
+		MinIOBucket:    getEnv("MINIO_BUCKET", "zapmarket"),
+		MinIOUseSSL:    getEnvBool("MINIO_USE_SSL", false),
 
 		// Downstream services
 		AuthServiceAddr: getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),

@@ -49,7 +49,18 @@
       "Bash(curl -s http://localhost:8081/v1/docs/swagger.json)",
       "Bash(curl -s http://localhost:8080/v1/docs/swagger.json)",
       "Bash(curl -s -X POST http://localhost:8081/api/v1/products -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHphcG1hcmtldC5jb20iLCJleHAiOjE3ODE2MDY0NTcsImlhdCI6MTc4MTYwMjg1Nywicm9sZSI6InNlbGxlciIsInR5cGUiOiJhY2Nlc3MiLCJ1c2VyX2lkIjoiMWIwYzkxZTUtZDI5MC00OTc2LWFlMTgtMzA0YWQ0MWUwNWQyIn0.jZj56XJkxIl6JN70gGkMwQEAX19y3Q5jgH1QtLCjJ3M' -H 'Content-Type: application/json' -d '{\"attributes\":\"any\",\"category_id\":\"02cf6bef-239e-4974-8e5a-12264f5e457d\",\"description\":\"any\",\"name\":\"Product A\",\"slug\":\"prod-a\",\"status\":\"active\"}')",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(gofmt -w config.go)",
+      "Bash(go run *)",
+      "Bash(swag init *)",
+      "Bash(go install *)",
+      "Bash(swag --version)",
+      "Bash(go env *)",
+      "Bash(ls -la \"$\\(go env GOPATH\\)/bin/\")",
+      "Bash(gofmt -l internal main.go)",
+      "Bash(python3 -c \"print\\(1781610122\\)\")",
+      "Bash(printf '\\\\x89PNG\\\\r\\\\n\\\\x1a\\\\n\\\\x00\\\\x00\\\\x00\\\\x0dIHDR\\\\x00\\\\x00\\\\x00\\\\x01\\\\x00\\\\x00\\\\x00\\\\x01\\\\x08\\\\x06\\\\x00\\\\x00\\\\x00\\\\x1f\\\\x15\\\\xc4\\\\x89\\\\x00\\\\x00\\\\x00\\\\x0aIDATx\\\\x9cc\\\\x00\\\\x01\\\\x00\\\\x00\\\\x05\\\\x00\\\\x01\\\\x0d\\\\x0a\\\\x2d\\\\xb4\\\\x00\\\\x00\\\\x00\\\\x00IEND\\\\xaeB`\\\\x82')",
+      "Bash(file test.png)"
     ]
   }
 }

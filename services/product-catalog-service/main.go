@@ -33,6 +33,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
+	"github.com/zapmarket/zapmarket/pkg/storage"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/product-catalog-service/docs"
 	grpchandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/grpc"
@@ -77,6 +78,14 @@ func main() {
 	}
 	log.Info("connected to auth-service", "addr", cfg.AuthServiceAddr)
 
+	// ── Object storage ────────────────────────────────────────────────────────
+	objectStorage, err := storage.New(context.Background(), cfg)
+	if err != nil {
+		log.Error("failed to connect to object storage", "error", err)
+		os.Exit(1)
+	}
+	log.Info("connected to object storage", "endpoint", cfg.MinIOEndpoint, "bucket", cfg.MinIOBucket)
+
 	// ── Repositories ───────────────────────────────────────────────────────────
 	categoryRepo := repository.NewCategoryRepository(db)
 	productRepo := repository.NewProductRepository(db)
@@ -87,7 +96,7 @@ func main() {
 	categorySvc := service.NewCategoryService(categoryRepo, log)
 	productSvc := service.NewProductService(productRepo, log)
 	skuSvc := service.NewSKUService(skuRepo, log)
-	imageSvc := service.NewProductImageService(imageRepo, log)
+	imageSvc := service.NewProductImageService(imageRepo, objectStorage, log)
 
 	// ── HTTP handlers ──────────────────────────────────────────────────────────
 	categoryH := httpHandler.NewCategoryHandler(categorySvc)

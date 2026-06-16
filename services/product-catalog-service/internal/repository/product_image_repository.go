@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/google/uuid"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
@@ -28,6 +29,7 @@ func (pir *ProductImageRepository) CreateProductImage(
 			product_id,
 			sku_id,
 			url,
+			object_key,
 			position,
 			created_at,
 			updated_at
@@ -37,6 +39,7 @@ func (pir *ProductImageRepository) CreateProductImage(
 			$2,
 			$3,
 			$4,
+			$5,
 			COALESCE(
 				(
 					SELECT MAX(position) + 1
@@ -59,6 +62,7 @@ func (pir *ProductImageRepository) CreateProductImage(
 		prdImage.ProductID,
 		prdImage.SKUId,
 		prdImage.URL,
+		prdImage.ObjectKey,
 	)
 
 	if err != nil {
@@ -66,6 +70,53 @@ func (pir *ProductImageRepository) CreateProductImage(
 	}
 
 	return nil
+}
+
+func (pir *ProductImageRepository) GetImageByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (*domain.ProductImage, error) {
+	query := `
+		SELECT
+			id,
+			product_id,
+			sku_id,
+			url,
+			object_key,
+			position,
+			created_at,
+			updated_at,
+			deleted_at
+		FROM product_images
+		WHERE
+			id = $1
+			AND deleted_at IS NULL
+	`
+
+	image := &domain.ProductImage{}
+	var objectKey sql.NullString
+
+	err := pir.db.QueryRowContext(ctx, query, id).Scan(
+		&image.ID,
+		&image.ProductID,
+		&image.SKUId,
+		&image.URL,
+		&objectKey,
+		&image.Position,
+		&image.CreatedAt,
+		&image.UpdatedAt,
+		&image.DeletedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, pkgerrors.NewNotFound("IMAGE_NOT_FOUND", "product image not found")
+		}
+		return nil, pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to get product image", err)
+	}
+	image.ObjectKey = objectKey.String
+
+	return image, nil
 }
 
 func (pir *ProductImageRepository) GetImageByProductID(

@@ -43,7 +43,7 @@ type Product struct {
 	Name        string          `json:"name"`
 	Slug        string          `json:"slug"`
 	Description *string         `json:"description,omitempty"`
-	Attributes  json.RawMessage `json:"attributes,omitempty"`
+	Attributes  json.RawMessage `json:"attributes,omitempty" swaggertype:"object"`
 	Status      ProductStatus   `json:"status"`
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
@@ -77,7 +77,7 @@ type SKU struct {
 	ID           uuid.UUID       `json:"id"`
 	ProductID    uuid.UUID       `json:"product_id"`
 	SKUCode      string          `json:"sku_code"`
-	VariantAttrs json.RawMessage `json:"variant_attributes,omitempty"`
+	VariantAttrs json.RawMessage `json:"variant_attributes,omitempty" swaggertype:"object"`
 	PriceAmount  int64           `json:"price_amount"`
 	ComparePrice *int64          `json:"compare_price,omitempty"`
 	Currency     string          `json:"currency"`
@@ -98,7 +98,12 @@ type SKUFilters struct {
 	SortOrder string
 }
 type ProductImage struct {
-	ID        uuid.UUID  `json:"id"`
+	ID uuid.UUID `json:"id"`
+	// ObjectKey is the MinIO/S3 object key this image was uploaded to (empty
+	// for any legacy rows that only ever had an externally-supplied URL).
+	// It's the source of truth for storage operations (deletion); URL is a
+	// derived, display-only value built from it.
+	ObjectKey string     `json:"-"`
 	ProductID uuid.UUID  `json:"product_id"`
 	SKUId     *uuid.UUID `json:"sku_id,omitempty"`
 	URL       string     `json:"url"`

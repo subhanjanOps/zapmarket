@@ -9,6 +9,18 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/httpx"
 )
 
+// Response documents the standard API envelope shape for swag/swagger
+// generation (`swag init` needs a concrete, exported type to reference in
+// `@Success`/`@Failure` annotations). It is not used at runtime — actual
+// responses are written by httpx.JSON/Success/Error in pkg/httpx, whose
+// envelope this type must stay in sync with.
+type Response struct {
+	Success bool        `json:"success"`
+	Code    string      `json:"code,omitempty"`
+	Message string      `json:"message,omitempty"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
 // JSON writes a JSON response. Thin alias over pkg/httpx so handlers in this
 // package don't need to import httpx directly.
 func JSON(w http.ResponseWriter, statusCode int, data interface{}) {

@@ -68,10 +68,13 @@ services:
     restart: unless-stopped
 
   # One-shot job: waits for minio to be healthy, then creates the
-  # `zapmarket` bucket if it doesn't already exist, then exits. The official
-  # minio/minio image has no built-in "create this bucket on boot" env var
-  # (that's a bitnami/minio-only feature) — `mc mb --ignore-existing` is the
-  # standard way to get the same effect idempotently.
+  # `zapmarket` bucket if it doesn't already exist and sets it to allow
+  # anonymous (public) downloads, then exits. The official minio/minio image
+  # has no built-in "create this bucket on boot" env var (that's a
+  # bitnami/minio-only feature) — `mc mb --ignore-existing` is the standard
+  # way to get the same effect idempotently. Anonymous download is needed so
+  # uploaded product images are servable via a plain URL, consistent with
+  # the rest of the catalog's public, unauthenticated read endpoints.
   minio-init:
     image: minio/mc:latest
     container_name: zapmarket-minio-init
@@ -84,7 +87,8 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin &&
       mc mb --ignore-existing local/zapmarket &&
-      echo 'bucket zapmarket ready'
+      mc anonymous set download local/zapmarket &&
+      echo 'bucket zapmarket ready (public download)'
       "
     restart: "no"
 
@@ -123,6 +127,7 @@ services:
     depends_on:
       - postgres
       - auth-service
+      - minio-init
     environment:
       - DB_HOST=zapmarket-postgres
       - DB_PORT=5432
@@ -134,6 +139,12 @@ services:
       - HTTP_PORT=8081
       - GRPC_PORT=50052
       - APP_ENV=development
+      - MINIO_ENDPOINT=zapmarket-minio:9000
+      - MINIO_PUBLIC_URL=http://localhost:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=zapmarket
+      - MINIO_USE_SSL=false
     ports:
       - "8081:8081"
       - "50052:50052"
