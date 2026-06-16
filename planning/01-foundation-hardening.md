@@ -1,5 +1,7 @@
 # Stage 1 — Foundation Hardening
 
+**Status: ✅ Complete (2026-06-16)**
+
 Corresponds to checklist **Phase 1 (remainder), Phase 4, Phase 6**.
 
 ## Goal
@@ -16,41 +18,39 @@ None — this is the next unit of work on top of the current `main`.
 ## Tasks
 
 ### 1.1 Shared package adoption audit (Phase 1 remainder)
-- [ ] Grep both live services for any service-local `config` or `crypto` package that
+- [x] Grep both live services for any service-local `config` or `crypto` package that
       duplicates `pkg/config` / `pkg/crypto` and delete the duplicate, repointing imports.
-- [ ] Confirm `auth-service` and `product-catalog-service` both import `pkg/database`,
+      (None found duplicating config/crypto; catalog's `internal/errors` and
+      `internal/handler/http/base.go` duplicated `pkg/errors`/`pkg/httpx` logic instead —
+      `base.go` now delegates to `pkg/httpx`.)
+- [x] Confirm `auth-service` and `product-catalog-service` both import `pkg/database`,
       `pkg/errors`, `pkg/grpcx`, `pkg/httpx`, `pkg/logger` rather than ad-hoc equivalents.
-- [ ] Run `go work sync` and `go build ./...` from repo root after the sweep.
+- [x] Run `go work sync` and `go build ./...` from repo root after the sweep.
 
 ### 1.2 Domain contract cleanup (Phase 4)
-- [ ] `services/product-catalog-service/internal/service/repository_interfaces.go` currently
-      lives in the `service` package. Move the interfaces into a new
-      `internal/domain/contracts` package (or `internal/repository/contracts.go` if that
-      reads more naturally with the existing layout — pick one and apply it consistently).
-- [ ] Confirm `internal/service/*.go` depends only on the interface types, not on concrete
-      `internal/repository` structs (no `repository.NewProductRepository` calls inside
-      `service` — those should be wired in `main.go`).
-- [ ] Repeat the same audit for `auth-service` — its `internal/service` likely has the same
-      interface-in-service-package pattern; give it the same contracts location.
-- [ ] This is the template the four new services (Stages 3-6) must follow from day one —
-      write contracts in `internal/domain/contracts` before writing the repository struct.
+- [x] `services/product-catalog-service/internal/service/repository_interfaces.go` moved to
+      `internal/domain/contracts/repositories.go`.
+- [x] Confirm `internal/service/*.go` depends only on the interface types, not on concrete
+      `internal/repository` structs.
+- [x] Repeat the same audit for `auth-service` — found it had **no** interfaces at all
+      (service layer depended directly on `*repository.UserRepository` etc.); added
+      `internal/domain/contracts/repositories.go` and rewired `AuthService`/`OAuthService`.
+- [x] Template established in `internal/domain/contracts` for Stages 3-6 to follow.
 
 ### 1.3 Database migrations (Phase 6)
-- [ ] Add `golang-migrate` (`github.com/golang-migrate/migrate/v4`) as a dependency in
-      `pkg/database` or a new `pkg/migrate` helper — decide based on whether migration
-      logic needs DB-pool internals or just a DSN string (likely just a DSN, so a thin
-      `pkg/migrate` wrapper is cleaner).
-- [ ] Create `migrations/` directories per service (e.g.
-      `services/auth-service/migrations/0001_init.up.sql` /
-      `.down.sql`) capturing the **current** schema as migration 0001, since these tables
-      already exist from manual setup — this makes migrations the source of truth going
-      forward instead of a parallel undocumented schema.
-- [ ] Add a `migrate` subcommand or a small `cmd/migrate/main.go` per service that runs
-      pending up migrations against `DB_HOST`/`DB_PORT`/etc. from env.
-- [ ] Wire migration execution into `docker-entrypoint-initdb.d/` or into each service's
-      startup path (decide: run-on-boot vs. explicit `go run ./cmd/migrate` step in
-      docker-compose `depends_on` — run-on-boot is simpler for local dev, explicit step is
-      safer for prod; recommend run-on-boot guarded by an env flag).
+- [x] Added `pkg/migrate`, a thin wrapper module around `golang-migrate/migrate/v4`
+      (DSN-based, no DB-pool internals needed).
+- [x] Created `migrations/0001_init.up.sql` / `.down.sql` for both `auth-service` and
+      `product-catalog-service`, capturing the current schema. Trimmed
+      `docker-entrypoint-initdb.d/init.sql` down to just `CREATE DATABASE` statements for
+      these two services (inventory/order/payment schemas left in init.sql until those
+      services are built in Stages 3-5).
+- [x] Decided run-on-boot over a separate `cmd/migrate`: `migrate.Up` runs from each
+      service's `main.go`, guarded by `MIGRATE_ON_BOOT` (default `true`).
+- [x] Wired into Docker: both Dockerfiles now copy `migrations/` into the final image so
+      `MIGRATE_ON_BOOT` works in containers too, not just local `go run`.
+- [x] Verified live: started Postgres + both services, confirmed `schema_migrations` was
+      populated and `/health` and `/api/v1/categories` responded correctly.
 
 ## Out of scope
 - New service scaffolding (Stages 3-6).

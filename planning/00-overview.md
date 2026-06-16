@@ -25,7 +25,7 @@ and Payment expose gRPC servers).
 
 ## Stage sequence
 
-1. **[Stage 1 — Foundation Hardening](01-foundation-hardening.md)** — finish Phases 1, 4, 6 of the checklist (shared package adoption, domain contracts, migrations) before adding new services on top of shaky ground.
+1. **[Stage 1 — Foundation Hardening](01-foundation-hardening.md)** ✅ **Complete** — finished Phases 1, 4, 6 of the checklist (shared package adoption, domain contracts, migrations) before adding new services on top of shaky ground.
 2. **[Stage 2 — Catalog Hardening](02-catalog-hardening.md)** — Phase 7: filters, pagination, sorting on the one read-heavy service already live.
 3. **[Stage 3 — Inventory Service](03-inventory-service.md)** — Phase 8: build from scratch, gRPC `ReserveStock`/`ReleaseStock`, Postgres ledger.
 4. **[Stage 4 — Payment Service](04-payment-service.md)** — Phase 10: build from scratch, gRPC `ChargeCard`, idempotent ledger.
