@@ -6,39 +6,25 @@ import (
 	"strconv"
 
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
 )
 
-// Response is a standard API response
-type Response struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   *ErrorInfo  `json:"error,omitempty"`
-}
-
-// ErrorInfo contains error details
-type ErrorInfo struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-// JSON writes a JSON response
+// JSON writes a JSON response. Thin alias over pkg/httpx so handlers in this
+// package don't need to import httpx directly.
 func JSON(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(data)
+	httpx.JSON(w, statusCode, data)
 }
 
-// SuccessResponse returns a successful response
+// SuccessResponse returns a successful response, delegating to pkg/httpx for
+// the standard envelope shape shared across services.
 func SuccessResponse(w http.ResponseWriter, statusCode int, data interface{}) {
-	JSON(w, statusCode, Response{Success: true, Data: data})
+	httpx.Success(w, statusCode, data)
 }
 
-// ErrorResponse returns an error response
+// ErrorResponse returns an error response, delegating to pkg/httpx for the
+// standard envelope shape shared across services.
 func ErrorResponse(w http.ResponseWriter, statusCode int, code, message string) {
-	JSON(w, statusCode, Response{
-		Success: false,
-		Error:   &ErrorInfo{Code: code, Message: message},
-	})
+	httpx.Error(w, statusCode, code, message)
 }
 
 // HandleError maps an AppError to the appropriate HTTP status and writes the response.

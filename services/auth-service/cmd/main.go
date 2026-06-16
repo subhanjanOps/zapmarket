@@ -22,7 +22,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net"
@@ -34,11 +33,14 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 	"github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/database"
+	"github.com/zapmarket/zapmarket/pkg/grpcx"
+	"github.com/zapmarket/zapmarket/pkg/logger"
+	"github.com/zapmarket/zapmarket/pkg/migrate"
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
 	grpcHandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/http"
@@ -58,7 +60,7 @@ func main() {
 	}
 
 	// Connect to PostgreSQL
-	db, err := connectDB(cfg)
+	db, err := database.New(cfg)
 	if err != nil {
 		slog.Error("Failed to connect to database", "error", err)
 		os.Exit(1)
@@ -66,6 +68,14 @@ func main() {
 	defer db.Close()
 
 	slog.Info("Connected to database", "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName)
+
+	if cfg.MigrateOnBoot {
+		if err := migrate.Up(cfg, "migrations"); err != nil {
+			slog.Error("Failed to run migrations", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("Migrations applied")
+	}
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
@@ -133,7 +143,7 @@ func main() {
 			sigChan <- syscall.SIGTERM
 			return
 		}
-		grpcSrv := grpc.NewServer()
+		grpcSrv := grpcx.NewServer()
 		grpcServer := grpcHandler.NewAuthServer(authService, cfg)
 		authpb.RegisterAuthServiceServer(grpcSrv, grpcServer)
 		reflection.Register(grpcSrv)
@@ -158,41 +168,8 @@ func main() {
 	slog.Info("Auth service stopped")
 }
 
-// connectDB establishes a PostgreSQL connection
-func connectDB(cfg *config.Config) (*sql.DB, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		cfg.DBHost,
-		cfg.DBPort,
-		cfg.DBUser,
-		cfg.DBPassword,
-		cfg.DBName,
-	)
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	// Test the connection
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Set connection pool settings
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-
-	return db, nil
-}
-
 func init() {
-	// Configure structured logging
-	logger := slog.New(
-		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		}),
-	)
-	slog.SetDefault(logger)
+	// Configure structured logging; APP_ENV isn't available yet at init time
+	// (config.Load runs in main), so default to development formatting here.
+	slog.SetDefault(logger.New(os.Getenv("APP_ENV")))
 }

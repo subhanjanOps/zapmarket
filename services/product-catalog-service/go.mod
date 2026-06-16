@@ -10,7 +10,12 @@ require (
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	github.com/zapmarket/zapmarket/pkg/config v0.0.0
+	github.com/zapmarket/zapmarket/pkg/database v0.0.0
 	github.com/zapmarket/zapmarket/pkg/errors v0.0.0
+	github.com/zapmarket/zapmarket/pkg/grpcx v0.0.0
+	github.com/zapmarket/zapmarket/pkg/httpx v0.0.0
+	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
+	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	google.golang.org/grpc v1.81.1
 )
@@ -21,9 +26,13 @@ require (
 	github.com/go-openapi/jsonreference v0.20.0 // indirect
 	github.com/go-openapi/spec v0.20.6 // indirect
 	github.com/go-openapi/swag v0.19.15 // indirect
+	github.com/golang-migrate/migrate/v4 v4.18.1 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
@@ -37,6 +46,11 @@ require (
 
 replace (
 	github.com/zapmarket/zapmarket/pkg/config => ../../pkg/config
+	github.com/zapmarket/zapmarket/pkg/database => ../../pkg/database
 	github.com/zapmarket/zapmarket/pkg/errors => ../../pkg/errors
+	github.com/zapmarket/zapmarket/pkg/grpcx => ../../pkg/grpcx
+	github.com/zapmarket/zapmarket/pkg/httpx => ../../pkg/httpx
+	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
+	github.com/zapmarket/zapmarket/pkg/migrate => ../../pkg/migrate
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 )

@@ -8,7 +8,25 @@
       "Bash(go get *)",
       "Bash(go mod *)",
       "Bash(GOWORK=off go mod tidy)",
-      "Bash(GOWORK=off go build ./...)"
+      "Bash(GOWORK=off go build ./...)",
+      "Bash(gofmt -w internal/service/category_service.go internal/service/product_image_service.go internal/service/product_service.go internal/service/sku_service.go)",
+      "Bash(gofmt -l internal/service)",
+      "Bash(timeout 10 go env GOPROXY GOFLAGS)",
+      "Bash(timeout 15 curl -sI https://proxy.golang.org)",
+      "Bash(go work *)",
+      "Bash(docker compose *)",
+      "Bash(timeout 20 go run ./cmd/...)",
+      "Bash(kill %1)",
+      "Bash(wait)",
+      "Bash(docker exec zapmarket-postgres *)",
+      "Bash(nohup go run ./cmd/...)",
+      "Read(//tmp/**)",
+      "Bash(cp .env.example .env)",
+      "Bash(nohup go run .)",
+      "Bash(curl -s http://localhost:8081/api/v1/categories)",
+      "Bash(curl -s http://localhost:8080/health)",
+      "Bash(pkill -f \"go run\")",
+      "Bash(rm -f \"C:/Users/subha/Downloads/Projects/zapMarket/services/product-catalog-service/.env\")"
     ]
   }
 }

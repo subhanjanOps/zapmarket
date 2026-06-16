@@ -19,11 +19,11 @@ Transform ZapMarket into a production-grade e-commerce microservices platform wi
 
 ## Shared Package Consolidation
 
-- [ ] Remove service-local config packages
-- [ ] Remove service-local crypto packages
-- [ ] Use root shared packages exclusively
-- [ ] Update imports across all services
-- [ ] Verify go.work dependency resolution
+- [x] Remove service-local config packages
+- [x] Remove service-local crypto packages
+- [x] Use root shared packages exclusively (auth-service and product-catalog-service now use pkg/database, pkg/grpcx, pkg/httpx, pkg/logger in addition to pkg/config/crypto/errors/proto)
+- [x] Update imports across all services
+- [x] Verify go.work dependency resolution
 
 Target:
 
@@ -102,9 +102,9 @@ pkg/proto
 
 # Phase 4 — Domain Contract Cleanup
 
-- [ ] Move repository interfaces out of service package
-- [ ] Define interfaces in domain/contracts layer
-- [ ] Ensure services depend only on interfaces
+- [x] Move repository interfaces out of service package (both auth-service and product-catalog-service)
+- [x] Define interfaces in domain/contracts layer (`internal/domain/contracts`)
+- [x] Ensure services depend only on interfaces (auth-service's service layer previously depended on concrete `*repository.X` structs directly — now depends on `contracts.X` interfaces)
 
 ---
 
@@ -129,10 +129,10 @@ Standard response:
 
 # Phase 6 — Database Migrations
 
-- [ ] Add golang-migrate
-- [ ] Create migration runner
-- [ ] Add up/down migrations
-- [ ] Integrate with Docker startup
+- [x] Add golang-migrate (new `pkg/migrate` module)
+- [x] Create migration runner (`migrate.Up`/`migrate.Down` in `pkg/migrate`, run on boot via `MIGRATE_ON_BOOT`)
+- [x] Add up/down migrations (auth-service, product-catalog-service — current schema captured as `0001_init`)
+- [x] Integrate with Docker startup (Dockerfiles copy `migrations/` into the final image; `docker-entrypoint-initdb.d/init.sql` trimmed to just `CREATE DATABASE` for the two migrated services)
 
 ---
 

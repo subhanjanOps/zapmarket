@@ -1,4 +1,7 @@
-package service
+// Package contracts defines the repository interfaces that internal/service
+// depends on. Concrete implementations live in internal/repository; service
+// code must depend only on these interfaces, never on the concrete structs.
+package contracts
 
 import (
 	"context"
@@ -7,7 +10,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 )
 
-//go:generate mockgen -source=repository_interfaces.go -destination=../mocks/repository_interfaces.go -package=mocks
+//go:generate mockgen -source=repositories.go -destination=../../mocks/repository_interfaces.go -package=mocks
 
 // CategoryRepository defines the interface for category repository
 type CategoryRepository interface {

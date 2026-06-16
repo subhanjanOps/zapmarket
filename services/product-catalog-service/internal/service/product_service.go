@@ -5,8 +5,9 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain/contracts"
 )
 
 //go:generate mockgen -source=product_service.go -destination=../mocks/product_service.go -package=mocks
@@ -22,12 +23,12 @@ type ProductService interface {
 }
 
 type productService struct {
-	productRepo ProductRepository
+	productRepo contracts.ProductRepository
 	logger      *slog.Logger
 }
 
 // NewProductService creates a new product service
-func NewProductService(repo ProductRepository, logger *slog.Logger) ProductService {
+func NewProductService(repo contracts.ProductRepository, logger *slog.Logger) ProductService {
 	return &productService{
 		productRepo: repo,
 		logger:      logger,
@@ -36,19 +37,19 @@ func NewProductService(repo ProductRepository, logger *slog.Logger) ProductServi
 
 func (ps *productService) CreateProduct(ctx context.Context, product *domain.Product) error {
 	if product.Name == "" {
-		return pkgerrors.NewValidation("INVALID_DATA","product name is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "product name is required")
 	}
 
 	if product.Slug == "" {
-		return pkgerrors.NewValidation("INVALID_DATA","product slug is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "product slug is required")
 	}
 
 	if product.CategoryID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","category id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "category id is required")
 	}
 
 	if product.SellerID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","seller id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "seller id is required")
 	}
 
 	if product.Status == "" {
@@ -62,7 +63,7 @@ func (ps *productService) CreateProduct(ctx context.Context, product *domain.Pro
 
 func (ps *productService) GetProductByID(ctx context.Context, id uuid.UUID) (*domain.Product, error) {
 	if id == uuid.Nil {
-		return nil, pkgerrors.NewValidation("INVALID_DATA","product id is required")
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "product id is required")
 	}
 
 	ps.logger.Info("fetching product by id", "id", id)
@@ -72,7 +73,7 @@ func (ps *productService) GetProductByID(ctx context.Context, id uuid.UUID) (*do
 
 func (ps *productService) GetProductBySlug(ctx context.Context, slug string) (*domain.Product, error) {
 	if slug == "" {
-		return nil, pkgerrors.NewValidation("INVALID_DATA","product slug is required")
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "product slug is required")
 	}
 
 	ps.logger.Info("fetching product by slug", "slug", slug)
@@ -88,19 +89,19 @@ func (ps *productService) GetProductList(ctx context.Context, filters *domain.Pr
 
 func (ps *productService) UpdateProduct(ctx context.Context, product *domain.Product) error {
 	if product.ID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","product id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "product id is required")
 	}
 
 	if product.Name == "" {
-		return pkgerrors.NewValidation("INVALID_DATA","product name is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "product name is required")
 	}
 
 	if product.Slug == "" {
-		return pkgerrors.NewValidation("INVALID_DATA","product slug is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "product slug is required")
 	}
 
 	if product.CategoryID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","category id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "category id is required")
 	}
 
 	ps.logger.Info("updating product", "id", product.ID, "name", product.Name)
@@ -110,7 +111,7 @@ func (ps *productService) UpdateProduct(ctx context.Context, product *domain.Pro
 
 func (ps *productService) DeleteProduct(ctx context.Context, id uuid.UUID) error {
 	if id == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","product id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "product id is required")
 	}
 
 	ps.logger.Info("deleting product", "id", id)

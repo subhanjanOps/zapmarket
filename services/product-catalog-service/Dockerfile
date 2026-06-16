@@ -19,7 +19,10 @@ FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata
 
+WORKDIR /app
+
 COPY --from=builder /app/product-catalog-service /app/product-catalog-service
+COPY services/product-catalog-service/migrations /app/migrations
 
 EXPOSE 8081 50052
 

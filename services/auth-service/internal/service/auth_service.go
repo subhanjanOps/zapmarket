@@ -10,22 +10,22 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/crypto"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
-	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
 )
 
 // AuthService handles authentication business logic
 type AuthService struct {
-	userRepo  *repository.UserRepository
-	oauthRepo *repository.OAuthRepository
-	tokenRepo *repository.RefreshTokenRepository
+	userRepo  contracts.UserRepository
+	oauthRepo contracts.OAuthRepository
+	tokenRepo contracts.RefreshTokenRepository
 	cfg       *config.Config
 }
 
 // NewAuthService creates a new auth service
 func NewAuthService(
-	userRepo *repository.UserRepository,
-	oauthRepo *repository.OAuthRepository,
-	tokenRepo *repository.RefreshTokenRepository,
+	userRepo contracts.UserRepository,
+	oauthRepo contracts.OAuthRepository,
+	tokenRepo contracts.RefreshTokenRepository,
 	cfg *config.Config,
 ) *AuthService {
 	return &AuthService{

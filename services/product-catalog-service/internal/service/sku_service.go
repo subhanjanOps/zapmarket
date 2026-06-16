@@ -5,8 +5,9 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain/contracts"
 )
 
 //go:generate mockgen -source=sku_service.go -destination=../mocks/sku_service.go -package=mocks
@@ -21,29 +22,29 @@ type SKUService interface {
 }
 
 type skuService struct {
-	skuRepo  SKURepository
-	logger   *slog.Logger
+	skuRepo contracts.SKURepository
+	logger  *slog.Logger
 }
 
 // NewSKUService creates a new SKU service
-func NewSKUService(repo SKURepository, logger *slog.Logger) SKUService {
+func NewSKUService(repo contracts.SKURepository, logger *slog.Logger) SKUService {
 	return &skuService{
-		skuRepo:  repo,
-		logger:   logger,
+		skuRepo: repo,
+		logger:  logger,
 	}
 }
 
 func (ss *skuService) CreateSKU(ctx context.Context, sku *domain.SKU) error {
 	if sku.SKUCode == "" {
-		return pkgerrors.NewValidation("INVALID_DATA","sku code is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "sku code is required")
 	}
 
 	if sku.ProductID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","product id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "product id is required")
 	}
 
 	if sku.PriceAmount <= 0 {
-		return pkgerrors.NewValidation("INVALID_DATA","price amount must be greater than zero")
+		return pkgerrors.NewValidation("INVALID_DATA", "price amount must be greater than zero")
 	}
 
 	if sku.Currency == "" {
@@ -57,7 +58,7 @@ func (ss *skuService) CreateSKU(ctx context.Context, sku *domain.SKU) error {
 
 func (ss *skuService) GetSKUByID(ctx context.Context, id uuid.UUID) (*domain.SKU, error) {
 	if id == uuid.Nil {
-		return nil, pkgerrors.NewValidation("INVALID_DATA","sku id is required")
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "sku id is required")
 	}
 
 	ss.logger.Info("fetching sku by id", "id", id)
@@ -73,19 +74,19 @@ func (ss *skuService) GetSKUList(ctx context.Context, filters *domain.SKUFilters
 
 func (ss *skuService) UpdateSKU(ctx context.Context, sku *domain.SKU) error {
 	if sku.ID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","sku id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "sku id is required")
 	}
 
 	if sku.SKUCode == "" {
-		return pkgerrors.NewValidation("INVALID_DATA","sku code is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "sku code is required")
 	}
 
 	if sku.ProductID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","product id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "product id is required")
 	}
 
 	if sku.PriceAmount <= 0 {
-		return pkgerrors.NewValidation("INVALID_DATA","price amount must be greater than zero")
+		return pkgerrors.NewValidation("INVALID_DATA", "price amount must be greater than zero")
 	}
 
 	ss.logger.Info("updating sku", "id", sku.ID, "sku_code", sku.SKUCode)
@@ -95,7 +96,7 @@ func (ss *skuService) UpdateSKU(ctx context.Context, sku *domain.SKU) error {
 
 func (ss *skuService) DeleteSKU(ctx context.Context, id uuid.UUID) error {
 	if id == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA","sku id is required")
+		return pkgerrors.NewValidation("INVALID_DATA", "sku id is required")
 	}
 
 	ss.logger.Info("deleting sku", "id", id)

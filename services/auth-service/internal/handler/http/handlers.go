@@ -31,6 +31,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/crypto"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 )
@@ -208,11 +209,10 @@ type UserResponse struct {
 	CreatedAt string `json:"created_at" example:"2023-01-01T00:00:00Z"`
 }
 
-// writeResponse writes a JSON response
+// writeResponse writes a JSON response. Delegates to pkg/httpx so the
+// wire-level JSON plumbing isn't duplicated per service.
 func (h *Handler) writeResponse(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(data)
+	httpx.JSON(w, statusCode, data)
 }
 
 // writeError writes an error response

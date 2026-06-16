@@ -10,7 +10,12 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/zapmarket/zapmarket/pkg/config v0.0.0
 	github.com/zapmarket/zapmarket/pkg/crypto v0.0.0
+	github.com/zapmarket/zapmarket/pkg/database v0.0.0
 	github.com/zapmarket/zapmarket/pkg/errors v0.0.0
+	github.com/zapmarket/zapmarket/pkg/grpcx v0.0.0
+	github.com/zapmarket/zapmarket/pkg/httpx v0.0.0
+	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
+	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/grpc v1.81.1
@@ -31,10 +36,14 @@ require (
 	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+	github.com/golang-migrate/migrate/v4 v4.18.1 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/swaggo/files v0.0.0-20220610200504-28940afbdbfe // indirect
+	go.uber.org/atomic v1.7.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/mod v0.36.0 // indirect
@@ -51,6 +60,11 @@ require (
 replace (
 	github.com/zapmarket/zapmarket/pkg/config => ../../pkg/config
 	github.com/zapmarket/zapmarket/pkg/crypto => ../../pkg/crypto
+	github.com/zapmarket/zapmarket/pkg/database => ../../pkg/database
 	github.com/zapmarket/zapmarket/pkg/errors => ../../pkg/errors
+	github.com/zapmarket/zapmarket/pkg/grpcx => ../../pkg/grpcx
+	github.com/zapmarket/zapmarket/pkg/httpx => ../../pkg/httpx
+	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
+	github.com/zapmarket/zapmarket/pkg/migrate => ../../pkg/migrate
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 )

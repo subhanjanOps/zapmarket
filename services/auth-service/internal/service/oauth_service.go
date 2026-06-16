@@ -12,7 +12,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/config"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
-	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/facebook"
 	"golang.org/x/oauth2/google"
@@ -28,9 +28,9 @@ type OAuthUserInfo struct {
 
 // OAuthService handles OAuth authentication logic
 type OAuthService struct {
-	userRepo       *repository.UserRepository
-	oauthRepo      *repository.OAuthRepository
-	tokenRepo      *repository.RefreshTokenRepository
+	userRepo       contracts.UserRepository
+	oauthRepo      contracts.OAuthRepository
+	tokenRepo      contracts.RefreshTokenRepository
 	googleConfig   *oauth2.Config
 	facebookConfig *oauth2.Config
 	cfg            *config.Config
@@ -38,9 +38,9 @@ type OAuthService struct {
 
 // NewOAuthService creates a new OAuth service
 func NewOAuthService(
-	userRepo *repository.UserRepository,
-	oauthRepo *repository.OAuthRepository,
-	tokenRepo *repository.RefreshTokenRepository,
+	userRepo contracts.UserRepository,
+	oauthRepo contracts.OAuthRepository,
+	tokenRepo contracts.RefreshTokenRepository,
 	cfg *config.Config,
 ) *OAuthService {
 	svc := &OAuthService{

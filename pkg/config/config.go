@@ -44,6 +44,12 @@ type Config struct {
 	HTTPPort int
 	GRPCPort int
 	AppEnv   string
+
+	// MigrateOnBoot runs pending migrations from ./migrations on startup
+	// when true. Defaults to true for frictionless local dev; set
+	// MIGRATE_ON_BOOT=false where migrations are run as an explicit deploy
+	// step instead.
+	MigrateOnBoot bool
 }
 
 // Load reads configuration from environment variables
@@ -84,6 +90,8 @@ func Load() (*Config, error) {
 		HTTPPort: getEnvInt("HTTP_PORT", 8080),
 		GRPCPort: getEnvInt("GRPC_PORT", 50051),
 		AppEnv:   getEnv("APP_ENV", "development"),
+
+		MigrateOnBoot: getEnvBool("MIGRATE_ON_BOOT", true),
 	}
 
 	// Validate required fields
@@ -113,6 +121,16 @@ func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intVal, err := strconv.Atoi(value); err == nil {
 			return intVal
+		}
+	}
+	return defaultValue
+}
+
+// getEnvBool returns an environment variable as bool or a default value
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolVal, err := strconv.ParseBool(value); err == nil {
+			return boolVal
 		}
 	}
 	return defaultValue

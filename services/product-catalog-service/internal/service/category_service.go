@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/domain/contracts"
 )
 
 //go:generate mockgen -source=category_service.go -destination=../mocks/category_service.go -package=mocks
@@ -21,11 +22,11 @@ type CategoryService interface {
 }
 
 type categoryService struct {
-	categoryRepo CategoryRepository
+	categoryRepo contracts.CategoryRepository
 	logger       *slog.Logger
 }
 
-func NewCategoryService(repo CategoryRepository, logger *slog.Logger) CategoryService {
+func NewCategoryService(repo contracts.CategoryRepository, logger *slog.Logger) CategoryService {
 	return &categoryService{
 		categoryRepo: repo,
 		logger:       logger,

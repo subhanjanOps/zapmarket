@@ -5,142 +5,21 @@ CREATE DATABASE payment;
 CREATE DATABASE notification;
 CREATE DATABASE productcatalog;
 
+-- userauth and productcatalog schemas are now owned by golang-migrate:
+-- see services/auth-service/migrations and
+-- services/product-catalog-service/migrations. Only database creation
+-- (which migrate cannot do) stays here for those two.
 \connect userauth
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- User / Auth schema
-CREATE TABLE IF NOT EXISTS users (
-    id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    email          VARCHAR(255) NOT NULL UNIQUE,
-    phone          VARCHAR(20),
-    password_hash  TEXT,
-    full_name      VARCHAR(255),
-    role           VARCHAR(50)  NOT NULL DEFAULT 'buyer'
-                   CHECK (role IN ('buyer', 'seller', 'admin')),
-    is_verified    BOOLEAN      NOT NULL DEFAULT FALSE,
-    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at     TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_users_email ON users (email) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_users_phone ON users (phone) WHERE deleted_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS oauth_accounts (
-    id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id      UUID         NOT NULL REFERENCES users (id),
-    provider     VARCHAR(50)  NOT NULL,
-    provider_uid VARCHAR(255) NOT NULL,
-    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at   TIMESTAMPTZ,
-    UNIQUE (provider, provider_uid)
-);
-
-CREATE TABLE IF NOT EXISTS refresh_tokens (
-    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID        NOT NULL REFERENCES users (id),
-    token_hash  TEXT        NOT NULL UNIQUE,
-    expires_at  TIMESTAMPTZ NOT NULL,
-    revoked_at  TIMESTAMPTZ,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at  TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens (user_id) WHERE revoked_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS addresses (
-    id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID         NOT NULL REFERENCES users (id),
-    label      VARCHAR(50),
-    line1      TEXT         NOT NULL,
-    line2      TEXT,
-    city       VARCHAR(100) NOT NULL,
-    state      VARCHAR(100) NOT NULL,
-    country    CHAR(2)      NOT NULL DEFAULT 'IN',
-    pincode    VARCHAR(20)  NOT NULL,
-    is_default BOOLEAN      NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_addresses_user ON addresses (user_id) WHERE deleted_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS notification_preferences (
-    id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID         NOT NULL REFERENCES users (id),
-    channel    VARCHAR(50)  NOT NULL CHECK (channel IN ('email', 'sms', 'push')),
-    event_type VARCHAR(100) NOT NULL,
-    enabled    BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ,
-    UNIQUE (user_id, channel, event_type)
-);
 
 \connect productcatalog
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE IF NOT EXISTS categories (
-    id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    parent_id  UUID         REFERENCES categories (id),
-    name       VARCHAR(255) NOT NULL,
-    slug       VARCHAR(255) NOT NULL UNIQUE,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ
-);
-
-CREATE TABLE IF NOT EXISTS products (
-    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    category_id UUID         NOT NULL REFERENCES categories (id),
-    seller_id   UUID         NOT NULL,
-    name        VARCHAR(500) NOT NULL,
-    slug        VARCHAR(500) NOT NULL UNIQUE,
-    description TEXT,
-    attributes  JSONB        NOT NULL DEFAULT '{}',
-    status      VARCHAR(50)  NOT NULL DEFAULT 'draft'
-                CHECK (status IN ('draft', 'active', 'archived')),
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at  TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_products_category ON products (category_id) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_products_seller   ON products (seller_id)   WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_products_status   ON products (status)      WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_products_attrs    ON products USING GIN (attributes);
-
-CREATE TABLE IF NOT EXISTS skus (
-    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_id    UUID         NOT NULL REFERENCES products (id),
-    sku_code      VARCHAR(100) NOT NULL UNIQUE,
-    variant_attrs JSONB        NOT NULL DEFAULT '{}',
-    price_amount  BIGINT       NOT NULL,
-    currency      CHAR(3)      NOT NULL DEFAULT 'INR',
-    compare_price BIGINT,
-    weight_grams  INT,
-    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at    TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_skus_product ON skus (product_id) WHERE deleted_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS product_images (
-    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_id UUID        NOT NULL REFERENCES products (id),
-    sku_id     UUID        REFERENCES skus (id),
-    url        TEXT        NOT NULL,
-    position   SMALLINT    NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ
-);
-
+-- The schemas below (inventory, ordermgmt, payment) are not yet owned by a
+-- service migration directory since those services are still scaffolds.
+-- They'll move to services/<name>/migrations when each service is built
+-- (see planning/03-inventory-service.md, 04-payment-service.md,
+-- 05-order-management-saga.md).
 \connect inventory
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 

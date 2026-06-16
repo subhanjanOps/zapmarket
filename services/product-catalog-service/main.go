@@ -11,7 +11,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net"
@@ -26,54 +25,56 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
-	googlegrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/database"
+	"github.com/zapmarket/zapmarket/pkg/grpcx"
+	"github.com/zapmarket/zapmarket/pkg/logger"
+	"github.com/zapmarket/zapmarket/pkg/migrate"
+	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
 	_ "github.com/zapmarket/zapmarket/services/product-catalog-service/docs"
 	grpchandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/grpc"
 	httpHandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/middleware"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
-	"github.com/zapmarket/zapmarket/pkg/config"
-	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
 )
 
 func main() {
 	_ = godotenv.Load()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Error("failed to load config", "error", err)
+		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
 
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName,
-	)
-	db, err := sql.Open("postgres", dsn)
+	log := logger.New(cfg.AppEnv)
+
+	db, err := database.New(cfg)
 	if err != nil {
-		logger.Error("failed to open database", "error", err)
+		log.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
+	log.Info("connected to database")
 
-	if err := db.Ping(); err != nil {
-		logger.Error("failed to connect to database", "error", err)
-		os.Exit(1)
+	if cfg.MigrateOnBoot {
+		if err := migrate.Up(cfg, "migrations"); err != nil {
+			log.Error("failed to run migrations", "error", err)
+			os.Exit(1)
+		}
+		log.Info("migrations applied")
 	}
-	logger.Info("connected to database")
 
 	// ── Auth middleware ────────────────────────────────────────────────────────
-	authMW, err := middleware.NewAuthMiddleware(cfg.AuthServiceAddr, logger)
+	authMW, err := middleware.NewAuthMiddleware(cfg.AuthServiceAddr, log)
 	if err != nil {
-		logger.Error("failed to connect to auth-service", "error", err)
+		log.Error("failed to connect to auth-service", "error", err)
 		os.Exit(1)
 	}
-	logger.Info("connected to auth-service", "addr", cfg.AuthServiceAddr)
+	log.Info("connected to auth-service", "addr", cfg.AuthServiceAddr)
 
 	// ── Repositories ───────────────────────────────────────────────────────────
 	categoryRepo := repository.NewCategoryRepository(db)
@@ -82,10 +83,10 @@ func main() {
 	imageRepo := repository.NewProductImageRepository(db)
 
 	// ── Services ───────────────────────────────────────────────────────────────
-	categorySvc := service.NewCategoryService(categoryRepo, logger)
-	productSvc := service.NewProductService(productRepo, logger)
-	skuSvc := service.NewSKUService(skuRepo, logger)
-	imageSvc := service.NewProductImageService(imageRepo, logger)
+	categorySvc := service.NewCategoryService(categoryRepo, log)
+	productSvc := service.NewProductService(productRepo, log)
+	skuSvc := service.NewSKUService(skuRepo, log)
+	imageSvc := service.NewProductImageService(imageRepo, log)
 
 	// ── HTTP handlers ──────────────────────────────────────────────────────────
 	categoryH := httpHandler.NewCategoryHandler(categorySvc)
@@ -158,14 +159,14 @@ func main() {
 	}
 
 	// ── gRPC server ────────────────────────────────────────────────────────────
-	grpcHandler := grpchandler.NewProductCatalogGRPCHandler(productSvc, skuSvc, logger)
-	grpcServer := googlegrpc.NewServer()
+	grpcHandler := grpchandler.NewProductCatalogGRPCHandler(productSvc, skuSvc, log)
+	grpcServer := grpcx.NewServer()
 	pb.RegisterProductCatalogServiceServer(grpcServer, grpcHandler)
 	reflection.Register(grpcServer)
 
 	grpcListener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPCPort))
 	if err != nil {
-		logger.Error("failed to listen for gRPC", "error", err)
+		log.Error("failed to listen for gRPC", "error", err)
 		os.Exit(1)
 	}
 
@@ -174,29 +175,29 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		logger.Info("starting HTTP server", "port", cfg.HTTPPort)
+		log.Info("starting HTTP server", "port", cfg.HTTPPort)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("HTTP server error", "error", err)
+			log.Error("HTTP server error", "error", err)
 		}
 	}()
 
 	go func() {
-		logger.Info("starting gRPC server", "port", cfg.GRPCPort)
+		log.Info("starting gRPC server", "port", cfg.GRPCPort)
 		if err := grpcServer.Serve(grpcListener); err != nil {
-			logger.Error("gRPC server error", "error", err)
+			log.Error("gRPC server error", "error", err)
 		}
 	}()
 
 	<-quit
-	logger.Info("shutting down servers")
+	log.Info("shutting down servers")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := httpServer.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error", "error", err)
+		log.Error("HTTP server shutdown error", "error", err)
 	}
 	grpcServer.GracefulStop()
 
-	logger.Info("servers stopped")
+	log.Info("servers stopped")
 }
