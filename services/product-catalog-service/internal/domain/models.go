@@ -67,10 +67,10 @@ type ProductFilters struct {
 type ProductStatus string
 
 const (
-	ProductStatusDraft    ProductStatus = "draft"
-	ProductStatusActive   ProductStatus = "active"
-	ProductStatusInactive ProductStatus = "inactive"
-	ProductStatusArchived ProductStatus = "archived"
+	ProductStatusDraft    ProductStatus = "DRAFT"
+	ProductStatusActive   ProductStatus = "ACTIVE"
+	ProductStatusInactive ProductStatus = "INACTIVE"
+	ProductStatusArchived ProductStatus = "ARCHIVED"
 )
 
 type SKU struct {

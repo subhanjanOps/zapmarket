@@ -82,7 +82,7 @@ func (r *InventoryRepository) ReserveStock(ctx context.Context, skuID, orderID u
 
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO inventory_reservations (id, inventory_id, order_id, sku_id, qty, status, expires_at)
-			VALUES ($1, $2, $3, $4, $5, 'reserved', $6)
+			VALUES ($1, $2, $3, $4, $5, 'RESERVED', $6)
 		`, id, inventoryID, orderID, skuID, qty, expiresAt)
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to create reservation", err)
@@ -114,10 +114,10 @@ func (r *InventoryRepository) ReleaseStock(ctx context.Context, reservationID uu
 
 		err := tx.QueryRowContext(ctx, `
 			UPDATE inventory_reservations
-			SET status = 'released',
+			SET status = 'RELEASED',
 				updated_at = NOW()
 			WHERE id = $1
-				AND status = 'reserved'
+				AND status = 'RESERVED'
 				AND deleted_at IS NULL
 			RETURNING inventory_id, qty
 		`, reservationID).Scan(&inventoryID, &qty)
@@ -152,10 +152,10 @@ func (r *InventoryRepository) DeductStock(ctx context.Context, reservationID uui
 
 		err := tx.QueryRowContext(ctx, `
 			UPDATE inventory_reservations
-			SET status = 'confirmed',
+			SET status = 'CONFIRMED',
 				updated_at = NOW()
 			WHERE id = $1
-				AND status = 'reserved'
+				AND status = 'RESERVED'
 				AND deleted_at IS NULL
 			RETURNING inventory_id, qty
 		`, reservationID).Scan(&inventoryID, &qty)

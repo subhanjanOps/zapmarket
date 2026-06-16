@@ -433,7 +433,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Filter by status (draft|active|inactive|archived)",
+                        "description": "Filter by status (DRAFT|ACTIVE|INACTIVE|ARCHIVED)",
                         "name": "status",
                         "in": "query"
                     },
@@ -1535,10 +1535,10 @@ const docTemplate = `{
         "domain.ProductStatus": {
             "type": "string",
             "enum": [
-                "draft",
-                "active",
-                "inactive",
-                "archived"
+                "DRAFT",
+                "ACTIVE",
+                "INACTIVE",
+                "ARCHIVED"
             ],
             "x-enum-varnames": [
                 "ProductStatusDraft",

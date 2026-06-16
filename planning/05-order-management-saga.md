@@ -32,7 +32,9 @@ capstone stage that proves Stages 3-4 actually work together.
       `created_at`, `published_at` (nullable — null means Debezium/publisher hasn't
       picked it up yet).
 - [ ] States per `design.md`: `PENDING -> RESERVED -> PAID -> CONFIRMED`, with
-      `CANCELLED` reachable from `PENDING` and `RESERVED`.
+      `CANCELLED` reachable from `PENDING` and `RESERVED`. Status string values must
+      be `UPPER_SNAKE_CASE` in Go constants, SQL literals, migration CHECK constraints,
+      and proto/JSON fields — same convention as inventory and payment (see `00-overview.md`).
 - [ ] Implement the FSM as an explicit allowed-transitions map in `internal/domain`, not
       ad-hoc if-chains in the service layer — reject illegal transitions with
       `errors.NewValidation`.

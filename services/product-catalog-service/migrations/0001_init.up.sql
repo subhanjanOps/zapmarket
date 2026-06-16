@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS products (
     slug        VARCHAR(500) NOT NULL UNIQUE,
     description TEXT,
     attributes  JSONB        NOT NULL DEFAULT '{}',
-    status      VARCHAR(50)  NOT NULL DEFAULT 'draft'
-                CHECK (status IN ('draft', 'active', 'archived')),
+    status      VARCHAR(50)  NOT NULL DEFAULT 'DRAFT'
+                CHECK (status IN ('DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED')),
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deleted_at  TIMESTAMPTZ

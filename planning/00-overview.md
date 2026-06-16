@@ -1,6 +1,6 @@
 # ZapMarket — Upcoming Stages Overview
 
-_Last reviewed: 2026-06-16_
+_Last reviewed: 2026-06-17_
 
 This folder sequences the remaining work from `ZapMarket-Claude-Code-Checklist.md` into
 buildable stages, ordered by dependency. Each stage file lists concrete tasks, file-level
@@ -15,8 +15,8 @@ and Payment expose gRPC servers).
 | `auth-service` | Implemented — HTTP (net/http ServeMux) + gRPC `ValidateToken`, JWT issuing |
 | `product-catalog-service` | Implemented — chi router, categories/products/SKUs/images, gRPC handler |
 | `order-management-service` | **Scaffold only** — `go.mod` + `main.go` placeholder |
-| `inventory-service` | **Scaffold only** — `go.mod` + `main.go` placeholder |
-| `payment-service` | **Scaffold only** — `go.mod` + `main.go` placeholder |
+| `inventory-service` | Implemented — gRPC `ReserveStock`/`ReleaseStock`/`DeductStock`/`AddStock`/`GetStock`, Postgres ledger, reservation FSM |
+| `payment-service` | Implemented — gRPC `ChargeCard`/`RefundPayment`/`GetTransaction`, double-entry ledger, idempotency via unique constraint, webhook endpoint |
 | `notification-service` | **Scaffold only** — `go.mod` + `main.go` placeholder |
 | `pkg/config`, `pkg/crypto`, `pkg/database`, `pkg/errors`, `pkg/grpcx`, `pkg/httpx`, `pkg/logger` | Exist, used by auth + catalog |
 | `pkg/proto` | Exists with `auth/` and `catalog/` proto packages centralized (most recent commits). `inventory/`, `order/`, `payment/` proto packages do not exist yet — created when those services are built |
@@ -41,6 +41,12 @@ and Payment expose gRPC servers).
 13. **[Stage 13 — Web UI](13-web-ui.md)** 📋 **Planned** — not in the original checklist; new scope added at user request. Next.js app with a minimal BFF layer (route handlers, not a separate service) covering storefront, seller dashboard, admin panel, and warehouse management. Largely buildable *now* in parallel with Stage 5+ (most of its phases only depend on Stages 1-4, already done) — see the stage file for which specific features are blocked on Order Management.
 
 ## Cross-cutting conventions established so far
+
+- **Status enum casing**: all status string values (payment, refund, reservation, product)
+  use `UPPER_SNAKE_CASE` — e.g. `PENDING`, `CAPTURED`, `PARTIALLY_REFUNDED`, `RESERVED`.
+  This applies to Go domain constants, SQL literals in repository queries, migration CHECK
+  constraints and DEFAULT values, and any JSON/gRPC field that carries a status. Apply
+  from day one in Stages 5-6, not as a retrofit.
 
 - **Swagger/OpenAPI**: every service with a public HTTP API uses `pkg/swaggerx` +
   `swag init`-generated `docs/docs.go` (blank-imported), with the spec served at the

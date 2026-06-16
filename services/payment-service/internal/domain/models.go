@@ -10,12 +10,12 @@ import (
 type PaymentStatus string
 
 const (
-	PaymentPending           PaymentStatus = "pending"
-	PaymentAuthorised        PaymentStatus = "authorised"
-	PaymentCaptured          PaymentStatus = "captured"
-	PaymentFailed            PaymentStatus = "failed"
-	PaymentRefunded          PaymentStatus = "refunded"
-	PaymentPartiallyRefunded PaymentStatus = "partially_refunded"
+	PaymentPending           PaymentStatus = "PENDING"
+	PaymentAuthorised        PaymentStatus = "AUTHORISED"
+	PaymentCaptured          PaymentStatus = "CAPTURED"
+	PaymentFailed            PaymentStatus = "FAILED"
+	PaymentRefunded          PaymentStatus = "REFUNDED"
+	PaymentPartiallyRefunded PaymentStatus = "PARTIALLY_REFUNDED"
 )
 
 type Payment struct {
@@ -58,9 +58,9 @@ type LedgerEntry struct {
 type RefundStatus string
 
 const (
-	RefundPending   RefundStatus = "pending"
-	RefundProcessed RefundStatus = "processed"
-	RefundFailed    RefundStatus = "failed"
+	RefundPending   RefundStatus = "PENDING"
+	RefundProcessed RefundStatus = "PROCESSED"
+	RefundFailed    RefundStatus = "FAILED"
 )
 
 type Refund struct {

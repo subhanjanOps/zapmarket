@@ -30,9 +30,10 @@ Management's saga needs.
 - [x] Used the **authoritative** schema from `db-design.md` §5 (same approach as Stage
       3's inventory schema) rather than the simplified `transactions` table this plan
       originally sketched: `payments` (not `transactions` — matches db-design.md's
-      naming), `payment_taxes`, `ledger_entries`, `refunds`, `outbox`. Status enum is the
-      schema's real one (`pending|authorised|captured|failed|refunded|partially_refunded`),
-      not the plan's invented `PENDING`/`SUCCEEDED`/`FAILED`/`REFUNDED`.
+      naming), `payment_taxes`, `ledger_entries`, `refunds`, `outbox`. Status enum
+      values are `UPPER_SNAKE_CASE` (`PENDING`, `AUTHORISED`, `CAPTURED`, `FAILED`,
+      `REFUNDED`, `PARTIALLY_REFUNDED`) — retrofitted 2026-06-17 to match the
+      project-wide casing convention (see `00-overview.md`).
 - [x] Migration `0001_init.up/down.sql`, and trimmed the now-redundant copy of this
       schema out of `docker-entrypoint-initdb.d/init.sql` (same pattern as Stages 1 & 3).
 - [x] `payment_taxes` table exists per the schema but nothing writes to it yet — no tax

@@ -68,9 +68,9 @@ type LedgerEntry struct {
 type ReservationStatus string
 
 const (
-	ReservationReserved  ReservationStatus = "reserved"
-	ReservationConfirmed ReservationStatus = "confirmed"
-	ReservationReleased  ReservationStatus = "released"
+	ReservationReserved  ReservationStatus = "RESERVED"
+	ReservationConfirmed ReservationStatus = "CONFIRMED"
+	ReservationReleased  ReservationStatus = "RELEASED"
 )
 
 // Reservation TTL: how long a `reserved` row is honored before it's

@@ -48,7 +48,7 @@ func (r *PaymentRepository) MarkCaptured(ctx context.Context, paymentID uuid.UUI
 	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `
 			UPDATE payments
-			SET status = 'captured',
+			SET status = 'CAPTURED',
 				gateway_txn_id = $2,
 				updated_at = NOW()
 			WHERE id = $1
@@ -73,7 +73,7 @@ func (r *PaymentRepository) MarkCaptured(ctx context.Context, paymentID uuid.UUI
 func (r *PaymentRepository) MarkFailed(ctx context.Context, paymentID uuid.UUID, reason string) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE payments
-		SET status = 'failed',
+		SET status = 'FAILED',
 			failure_reason = $2,
 			updated_at = NOW()
 		WHERE id = $1

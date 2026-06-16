@@ -34,7 +34,7 @@ func NewWebhookHandler(svc service.PaymentService, secret string, logger *slog.L
 
 type webhookPayload struct {
 	PaymentID     string `json:"payment_id"`
-	Status        string `json:"status"` // "captured" or "failed"
+	Status        string `json:"status"` // "CAPTURED" or "FAILED"
 	GatewayTxnID  string `json:"gateway_txn_id,omitempty"`
 	FailureReason string `json:"failure_reason,omitempty"`
 }
@@ -75,9 +75,9 @@ func (h *WebhookHandler) HandlePaymentWebhook(w http.ResponseWriter, r *http.Req
 	}
 
 	switch payload.Status {
-	case "captured":
+	case "CAPTURED":
 		err = h.svc.HandleCaptureWebhook(r.Context(), paymentID, payload.GatewayTxnID)
-	case "failed":
+	case "FAILED":
 		err = h.svc.HandleFailureWebhook(r.Context(), paymentID, payload.FailureReason)
 	default:
 		http.Error(w, "unrecognized status", http.StatusBadRequest)

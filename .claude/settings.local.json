@@ -82,7 +82,11 @@
       "Bash(gofmt -w internal/domain/models.go)",
       "PowerShell(Get-Process *)",
       "Bash(grpcurl *)",
-      "Bash(npm --version)"
+      "Bash(npm --version)",
+      "Bash(npm view *)",
+      "mcp__obsidian__obsidian_complex_search",
+      "mcp__obsidian__obsidian_list_files_in_vault",
+      "mcp__obsidian__obsidian_append_content"
     ]
   }
 }

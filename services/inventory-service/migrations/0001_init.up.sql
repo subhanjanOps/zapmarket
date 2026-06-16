@@ -62,8 +62,8 @@ CREATE TABLE IF NOT EXISTS inventory_reservations (
     order_id     UUID        NOT NULL,
     sku_id       UUID        NOT NULL,
     qty          INT         NOT NULL CHECK (qty > 0),
-    status       VARCHAR(50) NOT NULL DEFAULT 'reserved'
-                 CHECK (status IN ('reserved', 'confirmed', 'released')),
+    status       VARCHAR(50) NOT NULL DEFAULT 'RESERVED'
+                 CHECK (status IN ('RESERVED', 'CONFIRMED', 'RELEASED')),
     expires_at   TIMESTAMPTZ NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS inventory_reservations (
 
 CREATE INDEX IF NOT EXISTS idx_reservations_order   ON inventory_reservations (order_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_expires ON inventory_reservations (expires_at)
-    WHERE status = 'reserved';
+    WHERE status = 'RESERVED';
 
 -- Single default warehouse for this stage — the proto/RPC surface doesn't
 -- take a warehouse_id yet (see pkg/proto/inventory/inventory.proto), so

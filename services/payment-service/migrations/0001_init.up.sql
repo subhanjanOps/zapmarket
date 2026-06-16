@@ -7,14 +7,14 @@ CREATE TABLE IF NOT EXISTS payments (
     order_id         UUID         NOT NULL,
     user_id          UUID         NOT NULL,
     idempotency_key  UUID         NOT NULL UNIQUE,
-    status           VARCHAR(50)  NOT NULL DEFAULT 'pending'
+    status           VARCHAR(50)  NOT NULL DEFAULT 'PENDING'
                      CHECK (status IN (
-                         'pending',
-                         'authorised',
-                         'captured',
-                         'failed',
-                         'refunded',
-                         'partially_refunded'
+                         'PENDING',
+                         'AUTHORISED',
+                         'CAPTURED',
+                         'FAILED',
+                         'REFUNDED',
+                         'PARTIALLY_REFUNDED'
                      )),
     amount           BIGINT       NOT NULL, -- smallest currency unit (paise for INR)
     currency         CHAR(3)      NOT NULL DEFAULT 'INR',
@@ -69,8 +69,8 @@ CREATE TABLE IF NOT EXISTS refunds (
     amount            BIGINT      NOT NULL,
     currency          CHAR(3)     NOT NULL DEFAULT 'INR',
     reason            VARCHAR(255),
-    status            VARCHAR(50) NOT NULL DEFAULT 'pending'
-                      CHECK (status IN ('pending', 'processed', 'failed')),
+    status            VARCHAR(50) NOT NULL DEFAULT 'PENDING'
+                      CHECK (status IN ('PENDING', 'PROCESSED', 'FAILED')),
     gateway_refund_id VARCHAR(255),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
