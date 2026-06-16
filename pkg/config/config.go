@@ -49,6 +49,11 @@ type Config struct {
 	MinIOBucket    string
 	MinIOUseSSL    bool
 
+	// PaymentWebhookSecret signs/verifies the payment gateway's async
+	// webhook callbacks (HMAC-SHA256 over the raw request body). Only
+	// payment-service uses this.
+	PaymentWebhookSecret string
+
 	// Downstream services
 	AuthServiceAddr string
 
@@ -102,6 +107,8 @@ func Load() (*Config, error) {
 		MinIOSecretKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
 		MinIOBucket:    getEnv("MINIO_BUCKET", "zapmarket"),
 		MinIOUseSSL:    getEnvBool("MINIO_USE_SSL", false),
+
+		PaymentWebhookSecret: getEnv("PAYMENT_WEBHOOK_SECRET", "your-webhook-secret-change-in-production"),
 
 		// Downstream services
 		AuthServiceAddr: getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),

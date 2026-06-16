@@ -1,5 +1,7 @@
 # Stage 4 — Payment Service
 
+**Status: ✅ Complete (2026-06-16)**
+
 Corresponds to checklist **Phase 10**.
 
 ## Goal
@@ -16,46 +18,60 @@ Management's saga needs.
 ## Tasks
 
 ### 4.1 Scaffolding
-- [ ] Same layout convention as Stage 3: `internal/domain`, `internal/repository`,
-      `internal/service`, `internal/handler/grpc`, `migrations/`, `pkg/config` wiring.
-- [ ] `.env.example` with `DB_NAME=payment`, `GRPC_PORT`, and placeholder gateway
-      credentials (`PAYMENT_GATEWAY_API_KEY` etc. — never commit real keys, `.env.example`
-      should have empty/placeholder values only).
+- [x] Same layout convention as Stage 3 (root `main.go`, not `cmd/main.go`):
+      `internal/domain`, `internal/domain/contracts`, `internal/repository`,
+      `internal/gateway` (concrete `PaymentGateway` implementations), `internal/service`,
+      `internal/handler/grpc`, `internal/handler/http`, `migrations/`, `pkg/config` wiring.
+- [x] `.env.example` with `DB_NAME=payment`, `HTTP_PORT=8083`, `GRPC_PORT=50054` (next
+      free ports after inventory's 8082/50053), and `PAYMENT_WEBHOOK_SECRET` as a
+      placeholder. No `PAYMENT_GATEWAY_API_KEY` — see 4.5, no real gateway this stage.
 
 ### 4.2 Domain model
-- [ ] `transactions` table: `id`, `order_id`, `amount`, `currency`, `status`
-      (`PENDING`/`SUCCEEDED`/`FAILED`/`REFUNDED`), `idempotency_key`, `gateway_ref`,
-      `created_at`.
-- [ ] `ledger_entries` table: double-entry rows (`debit`/`credit`, `account`, `amount`,
-      `transaction_id`) per `design.md`'s "PG · Ledger" note.
-- [ ] Migration `0001_init.up/down.sql`.
+- [x] Used the **authoritative** schema from `db-design.md` §5 (same approach as Stage
+      3's inventory schema) rather than the simplified `transactions` table this plan
+      originally sketched: `payments` (not `transactions` — matches db-design.md's
+      naming), `payment_taxes`, `ledger_entries`, `refunds`, `outbox`. Status enum is the
+      schema's real one (`pending|authorised|captured|failed|refunded|partially_refunded`),
+      not the plan's invented `PENDING`/`SUCCEEDED`/`FAILED`/`REFUNDED`.
+- [x] Migration `0001_init.up/down.sql`, and trimmed the now-redundant copy of this
+      schema out of `docker-entrypoint-initdb.d/init.sql` (same pattern as Stages 1 & 3).
+- [x] `payment_taxes` table exists per the schema but nothing writes to it yet — no tax
+      calculation logic exists in this stage. Flagged as a gap, not silently dropped.
 
 ### 4.3 Idempotency (without Redis yet)
-- [ ] Since Redis isn't on until Stage 9, enforce idempotency via a unique constraint on
-      `transactions.idempotency_key` at the Postgres level for now: a duplicate charge
-      request with the same key returns the existing transaction's result instead of
-      double-charging. This is a correct, if slower, substitute until Stage 9 adds the
-      Redis-cached fast path.
+- [x] `payments.idempotency_key` is `UUID NOT NULL UNIQUE`. `ChargeCard` checks for an
+      existing row by key first and returns it unchanged (even if its prior attempt
+      failed) rather than re-attempting the gateway call — verified live with two
+      identical `ChargeCard` calls returning the same `payment_id` and confirmed only one
+      row + one debit/credit ledger pair exists in Postgres.
 
 ### 4.4 Proto contract
-- [ ] `pkg/proto/payment/v1/payment.proto`:
-      `ChargeCard(order_id, amount, currency, idempotency_key) -> (transaction_id, status)`,
-      `RefundPayment(transaction_id) -> (status)`, `GetTransaction(transaction_id)`.
-- [ ] Generate stubs into `pkg/proto/payment`.
+- [x] `pkg/proto/payment/payment.proto` (flat package, no `v1/` subdirectory — matches
+      the existing `auth`/`catalog`/`inventory` packages' actual layout, not the plan's
+      `v1/` sketch): `ChargeCard`, `RefundPayment`, `GetTransaction`.
+- [x] Generated via `protoc --go_out=. --go-grpc_out=.`, same manual nested-directory
+      move as Stage 3's inventory proto required.
 
 ### 4.5 Gateway integration
-- [ ] Integrate one real gateway SDK behind an interface (`internal/domain/contracts.PaymentGateway`)
-      so the concrete Stripe/Razorpay client is swappable and mockable in tests. Pick
-      whichever gateway `design.md`'s "Razorpay / Stripe" note implies the team prefers —
-      ask the user if unspecified, don't guess silently since this affects which SDK and
-      webhook signature scheme gets wired in.
-- [ ] For local/dev, a `FakePaymentGateway` that always succeeds (or succeeds/fails based
-      on a magic amount, e.g. amount ending in `.13` fails) so the saga can be tested
-      end-to-end without a live gateway account.
+- [x] **Decision (asked, not guessed)**: user chose "Fake only for now" — no real
+      Razorpay/Stripe SDK wired this stage; defer until there's an actual gateway account
+      with real credentials.
+- [x] `contracts.PaymentGateway` interface (`Charge`, `Refund`) in `internal/domain/contracts`.
+- [x] `internal/gateway.FakePaymentGateway`: succeeds for any amount except one ending in
+      `13` in the smallest currency unit (e.g. paise amount `...13`), which simulates a
+      card decline — verified live with amount `5013` → `status: failed`, persisted
+      correctly and retrievable via `GetTransaction`.
 
 ### 4.6 Webhook handling
-- [ ] HTTP endpoint (`internal/handler/http`) for the gateway's async webhook
-      (payment confirmed/failed out-of-band) — verify signature, update transaction status.
+- [x] `POST /webhooks/payment` in `internal/handler/http`: verifies `X-Webhook-Signature`
+      (hex HMAC-SHA256 over the raw body, the same scheme Razorpay/Stripe both use) before
+      trusting anything in the payload, then dispatches to idempotent
+      `HandleCaptureWebhook`/`HandleFailureWebhook` service methods. Verified live: valid
+      signature → `200` (no-op since FakePaymentGateway already captured synchronously);
+      invalid signature → `401`.
+  - Note: since FakePaymentGateway resolves synchronously inside `ChargeCard`, nothing in
+    this stage's actual flow calls this endpoint — it exists ready for when a real async
+    gateway is wired in later, and was verified by hand-computing a valid signature.
 
 ## Out of scope
 - Kafka publishing of `payment.processed` / `payment.failed` — Stage 7.
@@ -64,8 +80,17 @@ Management's saga needs.
   workflow UI/process is not in the current checklist scope.
 
 ## Definition of done
-- `go run ./services/payment-service/...` starts a gRPC server.
-- Two identical `ChargeCard` calls with the same `idempotency_key` return the same
-  `transaction_id` and do not create two ledger entries.
-- `FakePaymentGateway` lets a local integration test exercise success and failure paths
-  without network calls.
+- [x] Service starts a gRPC server on the configured port. Verified via Docker
+  (`docker compose up payment-service` → `healthy`, logs show `starting gRPC server
+  port=50054`).
+- [x] Two identical `ChargeCard` calls with the same `idempotency_key` return the same
+  `payment_id` and do not create two ledger entries. Verified live via `grpcurl` +
+  direct Postgres query (1 payment row, 2 ledger rows total — one debit/credit pair,
+  not two).
+- [x] `FakePaymentGateway` lets a local integration test exercise both paths without
+  network calls. Verified live: normal amount → `captured`; amount ending in `13` →
+  `failed` with the decline reason persisted and retrievable.
+- [x] Bonus, beyond the original DoD: `RefundPayment` verified live (full refund →
+  `refunded` status; refunding an already-refunded payment correctly rejected as a
+  conflict) and the webhook endpoint verified live (valid/invalid HMAC signature →
+  `200`/`401`).

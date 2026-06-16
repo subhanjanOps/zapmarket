@@ -20,10 +20,14 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 \connect inventory
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- The schemas below (ordermgmt, payment) are not yet owned by a service
--- migration directory since those services are still scaffolds. They'll
--- move to services/<name>/migrations when each service is built (see
--- planning/04-payment-service.md, 05-order-management-saga.md).
+-- payment schema is now owned by golang-migrate:
+-- see services/payment-service/migrations.
+\connect payment
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ordermgmt is not yet owned by a service migration directory since that
+-- service is still a scaffold. It'll move to services/order-management-service/migrations
+-- when that service is built (see planning/05-order-management-saga.md).
 \connect ordermgmt
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -101,93 +105,6 @@ CREATE TABLE IF NOT EXISTS order_status_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_status_history_order ON order_status_history (order_id);
-
-CREATE TABLE IF NOT EXISTS outbox (
-    id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    aggregate_id   UUID         NOT NULL,
-    aggregate_type VARCHAR(100) NOT NULL,
-    event_type     VARCHAR(100) NOT NULL,
-    payload        JSONB        NOT NULL,
-    published_at   TIMESTAMPTZ,
-    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_outbox_unpublished ON outbox (created_at) WHERE published_at IS NULL;
-
-\connect payment
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-CREATE TABLE IF NOT EXISTS payments (
-    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id         UUID         NOT NULL,
-    user_id          UUID         NOT NULL,
-    idempotency_key  UUID         NOT NULL UNIQUE,
-    status           VARCHAR(50)  NOT NULL DEFAULT 'pending'
-                     CHECK (status IN (
-                         'pending',
-                         'authorised',
-                         'captured',
-                         'failed',
-                         'refunded',
-                         'partially_refunded'
-                     )),
-    amount           BIGINT       NOT NULL,
-    currency         CHAR(3)      NOT NULL DEFAULT 'INR',
-    gateway          VARCHAR(50)  NOT NULL,
-    gateway_txn_id   VARCHAR(255) UNIQUE,
-    gateway_response JSONB,
-    failure_reason   TEXT,
-    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at       TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_payments_order  ON payments (order_id);
-CREATE INDEX IF NOT EXISTS idx_payments_status ON payments (status) WHERE deleted_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS payment_taxes (
-    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    payment_id  UUID        NOT NULL REFERENCES payments (id),
-    tax_type    VARCHAR(50) NOT NULL CHECK (tax_type IN ('CGST', 'SGST', 'IGST', 'CESS')),
-    rate_bps    INT         NOT NULL,
-    base_amount BIGINT      NOT NULL,
-    tax_amount  BIGINT      NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at  TIMESTAMPTZ
-);
-
-CREATE TABLE IF NOT EXISTS ledger_entries (
-    id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    payment_id UUID         NOT NULL REFERENCES payments (id),
-    entry_type VARCHAR(50)  NOT NULL CHECK (entry_type IN ('debit', 'credit')),
-    account    VARCHAR(100) NOT NULL,
-    amount     BIGINT       NOT NULL CHECK (amount > 0),
-    currency   CHAR(3)      NOT NULL DEFAULT 'INR',
-    description TEXT,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_ledger_payment ON ledger_entries (payment_id);
-CREATE INDEX IF NOT EXISTS idx_ledger_account ON ledger_entries (account);
-
-CREATE TABLE IF NOT EXISTS refunds (
-    id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    payment_id        UUID        NOT NULL REFERENCES payments (id),
-    order_id          UUID        NOT NULL,
-    amount            BIGINT      NOT NULL,
-    currency          CHAR(3)     NOT NULL DEFAULT 'INR',
-    reason            VARCHAR(255),
-    status            VARCHAR(50) NOT NULL DEFAULT 'pending'
-                      CHECK (status IN ('pending', 'processed', 'failed')),
-    gateway_refund_id VARCHAR(255),
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at        TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_refunds_payment ON refunds (payment_id);
-CREATE INDEX IF NOT EXISTS idx_refunds_order   ON refunds (order_id);
 
 CREATE TABLE IF NOT EXISTS outbox (
     id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),

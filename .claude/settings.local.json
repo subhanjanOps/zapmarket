@@ -75,7 +75,14 @@
       "Bash(grpcurl -plaintext -d '{\"sku_id\":\"22222222-2222-2222-2222-222222222222\"}' localhost:50053 inventory.InventoryService/GetStock)",
       "Bash(grpcurl -plaintext -d '{\"sku_id\":\"__TRACKED_VAR__\"}' localhost:50053 inventory.InventoryService/GetStock)",
       "Bash(xargs -I{} cat {})",
-      "Bash(rm -rf /tmp/concur_results)"
+      "Bash(rm -rf /tmp/concur_results)",
+      "Bash(protoc --go_out=. --go-grpc_out=. payment/payment.proto)",
+      "Bash(mv github.com/zapmarket/zapmarket/pkg/proto/payment/payment.pb.go payment/payment.pb.go)",
+      "Bash(mv github.com/zapmarket/zapmarket/pkg/proto/payment/payment_grpc.pb.go payment/payment_grpc.pb.go)",
+      "Bash(gofmt -w internal/domain/models.go)",
+      "PowerShell(Get-Process *)",
+      "Bash(grpcurl *)",
+      "Bash(npm --version)"
     ]
   }
 }

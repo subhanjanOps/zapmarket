@@ -1,0 +1,63 @@
+// Package contracts defines the interfaces internal/service depends on.
+// Concrete implementations live in internal/repository (DB) and
+// internal/gateway (payment gateway); service code must depend only on
+// these interfaces (see planning/01-foundation-hardening.md for why).
+package contracts
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain"
+)
+
+// PaymentRepository defines the interface for payment persistence.
+type PaymentRepository interface {
+	// GetByIdempotencyKey returns the existing payment for key, or
+	// pkgerrors.NotFound if none exists yet. ChargeCard calls this first so
+	// a retried request returns the original result instead of charging
+	// twice.
+	GetByIdempotencyKey(ctx context.Context, key uuid.UUID) (*domain.Payment, error)
+
+	// CreatePayment inserts a new payment row in `pending` status.
+	CreatePayment(ctx context.Context, p *domain.Payment) error
+
+	// MarkCaptured transitions a payment to `captured`, records the
+	// gateway's transaction reference, and writes the two ledger.Entries
+	// in the same DB transaction — a captured payment must never exist
+	// without its ledger rows.
+	MarkCaptured(ctx context.Context, paymentID uuid.UUID, gatewayTxnID string, entries []*domain.LedgerEntry) error
+
+	// MarkFailed transitions a payment to `failed` and records why.
+	MarkFailed(ctx context.Context, paymentID uuid.UUID, reason string) error
+
+	// GetByID returns pkgerrors.NotFound if no such payment exists.
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.Payment, error)
+
+	// CreateRefund inserts a refund row, updates the parent payment's
+	// status (`refunded` or `partially_refunded`), and writes the
+	// reversing ledger entries — all in one DB transaction.
+	CreateRefund(ctx context.Context, refund *domain.Refund, newPaymentStatus domain.PaymentStatus, entries []*domain.LedgerEntry) error
+}
+
+// ChargeResult is what a PaymentGateway returns for a successful charge.
+type ChargeResult struct {
+	GatewayTxnID string
+}
+
+// PaymentGateway defines the interface for the actual payment processor.
+// The only implementation built so far is FakePaymentGateway — see
+// planning/04-payment-service.md for why a real Razorpay/Stripe
+// integration was deliberately deferred.
+type PaymentGateway interface {
+	// Charge attempts to charge amount (in the smallest currency unit) and
+	// returns a ChargeResult on success or an error on failure. The error
+	// message becomes the payment's failure_reason, so it should be safe
+	// to store and not leak secrets.
+	Charge(ctx context.Context, amount int64, currency string, idempotencyKey uuid.UUID) (*ChargeResult, error)
+
+	// Refund attempts to refund amount against a previously-successful
+	// charge identified by gatewayTxnID, returning the gateway's refund
+	// reference on success.
+	Refund(ctx context.Context, gatewayTxnID string, amount int64, currency string) (refundRef string, err error)
+}

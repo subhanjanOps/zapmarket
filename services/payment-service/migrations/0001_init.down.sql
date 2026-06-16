@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS outbox;
+DROP TABLE IF EXISTS refunds;
+DROP TABLE IF EXISTS ledger_entries;
+DROP TABLE IF EXISTS payment_taxes;
+DROP TABLE IF EXISTS payments;

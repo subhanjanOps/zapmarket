@@ -29,7 +29,7 @@ and Payment expose gRPC servers).
 2. **[Stage 2 — Catalog Hardening](02-catalog-hardening.md)** ✅ **Complete** — Phase 7: filters, pagination, sorting on the one read-heavy service already live.
 2b. **[Stage 2b — Product Image Upload via MinIO](02b-image-upload-minio.md)** ✅ **Complete** — not in the original checklist; bumped ahead of Stage 3 at explicit request. Real multipart upload for product images, backed by the MinIO bucket already provisioned in `docker-compose.yml`.
 3. **[Stage 3 — Inventory Service](03-inventory-service.md)** ✅ **Complete** — Phase 8: build from scratch, gRPC `ReserveStock`/`ReleaseStock`, Postgres ledger.
-4. **[Stage 4 — Payment Service](04-payment-service.md)** — Phase 10: build from scratch, gRPC `ChargeCard`, idempotent ledger.
+4. **[Stage 4 — Payment Service](04-payment-service.md)** ✅ **Complete** — Phase 10: build from scratch, gRPC `ChargeCard`, idempotent ledger.
 5. **[Stage 5 — Order Management & Saga](05-order-management-saga.md)** — Phase 9 + 12: order FSM, saga orchestration calling Inventory/Payment, transactional outbox.
 6. **[Stage 6 — Notification Service](06-notification-service.md)** — Phase 11: Kafka consumer-only service, the natural integration test of the event bus.
 7. **[Stage 7 — Event Bus & Outbox Activation](07-event-bus-outbox.md)** — Phase 12 (cont.) + turn on Kafka/Debezium in docker-compose, wire `pkg/kafka`.
@@ -38,6 +38,7 @@ and Payment expose gRPC servers).
 10. **[Stage 10 — Observability](10-observability.md)** — Phase 15: Prometheus, OpenTelemetry, Grafana.
 11. **[Stage 11 — Kubernetes & CI/CD](11-k8s-cicd.md)** — Phases 16 + 17.
 12. **[Stage 12 — Production Readiness](12-production-readiness.md)** — Phase 18: security hardening, reliability patterns, final completion criteria sign-off.
+13. **[Stage 13 — Web UI](13-web-ui.md)** 📋 **Planned** — not in the original checklist; new scope added at user request. Next.js app with a minimal BFF layer (route handlers, not a separate service) covering storefront, seller dashboard, admin panel, and warehouse management. Largely buildable *now* in parallel with Stage 5+ (most of its phases only depend on Stages 1-4, already done) — see the stage file for which specific features are blocked on Order Management.
 
 ## Cross-cutting conventions established so far
 
@@ -61,6 +62,9 @@ and Payment expose gRPC servers).
 - Redis, observability, k8s, and CI/CD are cross-cutting and deliberately pushed to the end so
   they're applied once across a stable surface instead of being half-retrofitted into every
   service as it gets built.
+- Stage 13 (Web UI) is listed last but isn't actually gated on Stages 5-12 — it's a
+  separate, parallel track. Its own file phases its tasks by which backend capability
+  each one needs, independent of this list's numbering.
 
 ## How to use these files
 

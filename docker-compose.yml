@@ -175,6 +175,30 @@ services:
       - zapnet
     restart: unless-stopped
 
+  payment-service:
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    container_name: zapmarket-payment-service
+    depends_on:
+      - postgres
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=payment
+      - HTTP_PORT=8083
+      - GRPC_PORT=50054
+      - APP_ENV=development
+      - PAYMENT_WEBHOOK_SECRET=change-me-webhook-secret
+    ports:
+      - "8083:8083"
+      - "50054:50054"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     container_name: zapmarket-postgres

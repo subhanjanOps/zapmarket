@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package payment;
+
+option go_package = "github.com/zapmarket/zapmarket/pkg/proto/payment;paymentpb";
+
+message ChargeCardRequest {
+  string order_id        = 1;
+  string user_id         = 2;
+  int64  amount          = 3; // smallest currency unit (paise for INR)
+  string currency        = 4; // ISO 4217, e.g. "INR"
+  string idempotency_key = 5; // UUID; a retry with the same key returns the
+                               // original result instead of charging twice
+}
+
+message ChargeCardResponse {
+  string payment_id    = 1;
+  string status         = 2; // pending|authorised|captured|failed|refunded|partially_refunded
+  string error_message = 3;
+}
+
+message RefundPaymentRequest {
+  string payment_id = 1;
+  int64  amount     = 2; // 0 means refund the full captured amount
+  string reason      = 3;
+}
+
+message RefundPaymentResponse {
+  string refund_id     = 1;
+  string status         = 2; // pending|processed|failed
+  string error_message = 3;
+}
+
+message GetTransactionRequest {
+  string payment_id = 1;
+}
+
+message GetTransactionResponse {
+  string payment_id     = 1;
+  string order_id       = 2;
+  string status          = 3;
+  int64  amount          = 4;
+  string currency        = 5;
+  string gateway_txn_id = 6;
+  string error_message  = 7;
+}
+
+service PaymentService {
+  rpc ChargeCard(ChargeCardRequest) returns (ChargeCardResponse);
+  rpc RefundPayment(RefundPaymentRequest) returns (RefundPaymentResponse);
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse);
+}

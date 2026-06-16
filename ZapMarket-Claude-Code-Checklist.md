@@ -200,10 +200,14 @@ States:
 
 # Phase 10 — Payment Service
 
-- [ ] Payment creation
-- [ ] Webhook handling
-- [ ] Idempotency support
-- [ ] Refund workflow
+- [x] Payment creation (`ChargeCard`, via `FakePaymentGateway` — no real gateway SDK
+      wired yet, by explicit user decision; see `planning/04-payment-service.md`)
+- [x] Webhook handling (signature-verified, idempotent; not reachable from the current
+      synchronous Fake-gateway flow, but built and verified standalone)
+- [x] Idempotency support (Postgres unique constraint on `idempotency_key`, verified live
+      — no double-charge, no double ledger entries)
+- [x] Refund workflow (basic `RefundPayment` RPC — full refund only tested; partial-refund
+      arithmetic exists in code but wasn't separately exercised)
 
 ---
 
