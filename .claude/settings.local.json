@@ -157,7 +157,9 @@
       "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/internal/admin)",
       "Bash(pkill -9 -f \"go-build.*api-gateway\")",
       "Bash(pkill -9 -f \"api-gateway.exe\")",
-      "PowerShell(Stop-Process *)"
+      "PowerShell(Stop-Process *)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway//**)"
     ]
   }
 }
