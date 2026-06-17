@@ -146,7 +146,8 @@
       "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/internal/middleware)",
       "Bash(cp /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/.env.example /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/.env)",
       "Bash(GOWORK=off go run .)",
-      "Bash(pkill -f \"api-gateway\")"
+      "Bash(pkill -f \"api-gateway\")",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/order-management-service/migrations//**)"
     ]
   }
 }
