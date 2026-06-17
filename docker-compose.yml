@@ -201,11 +201,17 @@ services:
         condition: service_started
     environment:
       - HTTP_PORT=8000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=apigateway
       - REDIS_URL=zapmarket-redis:6379
       - AUTH_SERVICE_ADDR=zapmarket-auth-service:50051
       - AUTH_SERVICE_HTTP_URL=http://zapmarket-auth-service:8080
       - CATALOG_SERVICE_HTTP_URL=http://zapmarket-product-catalog-service:8081
       - ORDER_SERVICE_HTTP_URL=http://zapmarket-order-management-service:8084
+      - GATEWAY_AUTO_BIND=true
       - APP_ENV=development
     ports:
       - "8000:8000"

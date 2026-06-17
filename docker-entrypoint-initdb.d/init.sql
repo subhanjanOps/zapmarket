@@ -1,4 +1,5 @@
 CREATE DATABASE userauth;
+CREATE DATABASE apigateway;
 CREATE DATABASE ordermgmt;
 CREATE DATABASE inventory;
 CREATE DATABASE payment;
@@ -34,3 +35,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Notification service is stateless; no primary tables are created here.
+
+-- apigateway schema is owned by golang-migrate:
+-- see services/api-gateway/migrations.
+\connect apigateway
+CREATE EXTENSION IF NOT EXISTS pgcrypto;

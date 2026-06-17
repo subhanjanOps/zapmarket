@@ -147,7 +147,17 @@
       "Bash(cp /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/.env.example /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/.env)",
       "Bash(GOWORK=off go run .)",
       "Bash(pkill -f \"api-gateway\")",
-      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/order-management-service/migrations//**)"
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/order-management-service/migrations//**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/pkg/database/**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/pkg/migrate/**)",
+      "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/migrations)",
+      "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/internal/routes)",
+      "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/internal/registry)",
+      "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/internal/audit)",
+      "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway/internal/admin)",
+      "Bash(pkill -9 -f \"go-build.*api-gateway\")",
+      "Bash(pkill -9 -f \"api-gateway.exe\")",
+      "PowerShell(Stop-Process *)"
     ]
   }
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/sony/gobreaker/v2"
@@ -13,37 +14,19 @@ import (
 )
 
 // Upstream holds a reverse proxy + circuit breaker for one downstream service.
+// The target URL is resolved at request time by the caller.
 type Upstream struct {
 	name    string
-	proxy   *httputil.ReverseProxy
-	breaker *gobreaker.CircuitBreaker[*http.Response]
+	logger  *slog.Logger
+	breaker *gobreaker.CircuitBreaker[struct{}]
+
+	mu      sync.Mutex
+	proxies map[string]*httputil.ReverseProxy // keyed by target addr
 }
 
-// New creates an Upstream that proxies to targetURL.
-func New(name, targetURL string, logger *slog.Logger) (*Upstream, error) {
-	target, err := url.Parse(targetURL)
-	if err != nil {
-		return nil, err
-	}
-
-	rp := httputil.NewSingleHostReverseProxy(target)
-	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		logger.Error("proxy error", "upstream", name, "error", err)
-		http.Error(w, `{"success":false,"error":{"code":"UPSTREAM_ERROR","message":"upstream service unavailable"}}`, http.StatusBadGateway)
-	}
-
-	// Strip the /api/v1 gateway prefix before forwarding.
-	origDirector := rp.Director
-	rp.Director = func(req *http.Request) {
-		origDirector(req)
-		req.Host = target.Host
-		// Forward the request ID so downstream logs correlate.
-		if id := middleware.GetRequestID(req.Context()); id != "" {
-			req.Header.Set("X-Request-ID", id)
-		}
-	}
-
-	cb := gobreaker.NewCircuitBreaker[*http.Response](gobreaker.Settings{
+// New creates an Upstream for the named service.
+func New(name string, logger *slog.Logger) *Upstream {
+	cb := gobreaker.NewCircuitBreaker[struct{}](gobreaker.Settings{
 		Name:        name,
 		MaxRequests: 5,
 		Interval:    30 * time.Second,
@@ -55,40 +38,76 @@ func New(name, targetURL string, logger *slog.Logger) (*Upstream, error) {
 			logger.Warn("circuit breaker state change", "upstream", name, "from", from, "to", to)
 		},
 	})
-
-	return &Upstream{name: name, proxy: rp, breaker: cb}, nil
-}
-
-// ServeHTTP implements http.Handler — routes the request through the circuit breaker.
-func (u *Upstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_, err := u.breaker.Execute(func() (*http.Response, error) {
-		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
-		u.proxy.ServeHTTP(rec, r)
-		if rec.status >= 500 {
-			return nil, fmt.Errorf("upstream %s returned %d", u.name, rec.status)
-		}
-		return nil, nil
-	})
-
-	if err != nil {
-		if err == gobreaker.ErrOpenState || err == gobreaker.ErrTooManyRequests {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"success":false,"error":{"code":"CIRCUIT_OPEN","message":"service temporarily unavailable"}}`))
-			return
-		}
+	return &Upstream{
+		name:    name,
+		logger:  logger,
+		breaker: cb,
+		proxies: make(map[string]*httputil.ReverseProxy),
 	}
 }
 
-// responseRecorder captures the status code so the circuit breaker can count failures.
+// ServeHTTP proxies the request to targetAddr.
+func (u *Upstream) ServeHTTP(w http.ResponseWriter, r *http.Request, targetAddr string) {
+	_, err := u.breaker.Execute(func() (struct{}, error) {
+		rp := u.getProxy(targetAddr)
+		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+		rp.ServeHTTP(rec, r)
+		if rec.status >= 500 {
+			return struct{}{}, fmt.Errorf("upstream %s returned %d", u.name, rec.status)
+		}
+		return struct{}{}, nil
+	})
+
+	if err == gobreaker.ErrOpenState || err == gobreaker.ErrTooManyRequests {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"CIRCUIT_OPEN","message":"service temporarily unavailable"}}`))
+	}
+}
+
+func (u *Upstream) getProxy(addr string) *httputil.ReverseProxy {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	if rp, ok := u.proxies[addr]; ok {
+		return rp
+	}
+
+	target, err := url.Parse(addr)
+	if err != nil {
+		u.logger.Error("invalid upstream addr", "addr", addr, "error", err)
+		// Return a proxy to localhost that will fail gracefully.
+		target, _ = url.Parse("http://localhost:1")
+	}
+
+	rp := httputil.NewSingleHostReverseProxy(target)
+	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		u.logger.Error("proxy error", "upstream", u.name, "addr", addr, "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"UPSTREAM_ERROR","message":"upstream service unavailable"}}`))
+	}
+
+	origDirector := rp.Director
+	rp.Director = func(req *http.Request) {
+		origDirector(req)
+		req.Host = target.Host
+		if id := middleware.GetRequestID(req.Context()); id != "" {
+			req.Header.Set("X-Request-ID", id)
+		}
+	}
+
+	u.proxies[addr] = rp
+	return rp
+}
+
+// responseRecorder captures the status code for the circuit breaker.
 type responseRecorder struct {
 	http.ResponseWriter
-	status  int
-	written bool
+	status int
 }
 
 func (r *responseRecorder) WriteHeader(status int) {
 	r.status = status
-	r.written = true
 	r.ResponseWriter.WriteHeader(status)
 }

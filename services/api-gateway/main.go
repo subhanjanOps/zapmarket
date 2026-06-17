@@ -2,24 +2,31 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
-
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/logger"
+	"github.com/zapmarket/zapmarket/pkg/migrate"
+	"github.com/zapmarket/zapmarket/services/api-gateway/internal/admin"
+	"github.com/zapmarket/zapmarket/services/api-gateway/internal/audit"
 	gw "github.com/zapmarket/zapmarket/services/api-gateway/internal/middleware"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/proxy"
+	"github.com/zapmarket/zapmarket/services/api-gateway/internal/registry"
+	"github.com/zapmarket/zapmarket/services/api-gateway/internal/routes"
 )
 
 func main() {
@@ -30,13 +37,36 @@ func main() {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
-
 	log := logger.New(cfg.AppEnv)
+
+	// ── Gateway DB (dedicated apigateway database) ─────────────────────────
+	db, err := sql.Open("postgres", routes.BuildDSN())
+	if err != nil {
+		log.Error("failed to open gateway DB", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(3)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	if err := db.PingContext(context.Background()); err != nil {
+		log.Error("gateway DB unreachable", "error", err)
+		os.Exit(1)
+	}
+	log.Info("connected to gateway DB")
+
+	if cfg.MigrateOnBoot {
+		if err := migrate.Up(cfg, "migrations"); err != nil {
+			log.Error("migration failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	// ── Redis ──────────────────────────────────────────────────────────────
 	rdb := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		log.Error("failed to connect to Redis", "addr", cfg.RedisURL, "error", err)
+		log.Error("Redis unreachable", "addr", cfg.RedisURL, "error", err)
 		os.Exit(1)
 	}
 	defer rdb.Close()
@@ -50,94 +80,180 @@ func main() {
 	}
 	log.Info("connected to auth-service", "addr", cfg.AuthServiceAddr)
 
+	// ── Audit writer ───────────────────────────────────────────────────────
+	auditWriter := audit.NewWriter(db, log)
+
+	// ── Service registry ───────────────────────────────────────────────────
+	// RedisRegistry for dynamic discovery; StaticRegistry as fallback.
+	redisReg := registry.NewRedisRegistry(rdb, log)
+	staticReg := registry.NewStaticRegistry(map[string]string{
+		"auth-service":               envOrDefault("AUTH_SERVICE_HTTP_URL", "http://localhost:8080"),
+		"product-catalog-service":    envOrDefault("CATALOG_SERVICE_HTTP_URL", "http://localhost:8081"),
+		"order-management-service":   envOrDefault("ORDER_SERVICE_HTTP_URL", "http://localhost:8084"),
+	})
+
+	// resolve picks an upstream address: Redis first, static fallback.
+	resolve := func(ctx context.Context, name string) (string, bool) {
+		if addr, ok := redisReg.Pick(ctx, name); ok {
+			return addr, true
+		}
+		insts, _ := staticReg.Instances(ctx, name)
+		if len(insts) > 0 {
+			return insts[0].Addr, true
+		}
+		return "", false
+	}
+
+	// ── Route loader ───────────────────────────────────────────────────────
+	dsn := routes.BuildDSN()
+	loader := routes.NewLoader(db, dsn, log)
+	if err := loader.Load(context.Background()); err != nil {
+		log.Error("initial route load failed", "error", err)
+		os.Exit(1)
+	}
+
+	// ── Rate limiter ───────────────────────────────────────────────────────
 	rl := gw.NewRateLimiter(rdb)
 
-	// ── Upstream proxies ───────────────────────────────────────────────────
-	authURL := envOrDefault("AUTH_SERVICE_HTTP_URL", "http://localhost:8080")
-	catalogURL := envOrDefault("CATALOG_SERVICE_HTTP_URL", "http://localhost:8081")
-	orderURL := envOrDefault("ORDER_SERVICE_HTTP_URL", "http://localhost:8084")
+	// ── Upstream pool ──────────────────────────────────────────────────────
+	upstreams := make(map[string]*proxy.Upstream) // service name → proxy pool
 
-	authProxy, err := proxy.New("auth-service", authURL, log)
-	if err != nil {
-		log.Error("failed to create auth proxy", "error", err)
-		os.Exit(1)
-	}
-	catalogProxy, err := proxy.New("product-catalog-service", catalogURL, log)
-	if err != nil {
-		log.Error("failed to create catalog proxy", "error", err)
-		os.Exit(1)
-	}
-	orderProxy, err := proxy.New("order-management-service", orderURL, log)
-	if err != nil {
-		log.Error("failed to create order proxy", "error", err)
-		os.Exit(1)
+	getUpstream := func(name string) *proxy.Upstream {
+		if u, ok := upstreams[name]; ok {
+			return u
+		}
+		u := proxy.New(name, log)
+		upstreams[name] = u
+		return u
 	}
 
-	// ── Router ────────────────────────────────────────────────────────────
-	r := chi.NewRouter()
-	r.Use(chimw.Recoverer)
-	r.Use(chimw.RealIP)
-	r.Use(gw.RequestID)
-	r.Use(rl.Limit) // rate limit applies to all routes
+	// ── Router builder (called on every route reload) ──────────────────────
+	buildRouter := func() http.Handler {
+		r := chi.NewRouter()
+		r.Use(chimw.Recoverer)
+		r.Use(gw.RequestID)
+		r.Use(rl.Limit)
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","service":"api-gateway"}`))
-	})
-
-	// ── Auth routes ────────────────────────────────────────────────────────
-	// Public (no JWT required): register, login, refresh, OAuth.
-	r.Route("/v1/auth", func(r chi.Router) {
-		r.Handle("/register", authProxy)
-		r.Handle("/login", authProxy)
-		r.Handle("/refresh", authProxy)
-		r.Handle("/oauth/*", authProxy)
-
-		// Protected auth routes (need valid JWT).
-		r.Group(func(r chi.Router) {
-			r.Use(authMW.Authenticate)
-			r.Handle("/me", authProxy)
-			r.Handle("/logout", authProxy)
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"ok","service":"api-gateway"}`))
 		})
-	})
 
-	// ── Catalog routes — public reads, protected writes ────────────────────
-	r.Route("/api/v1", func(r chi.Router) {
-		// Public reads: product list, single product, categories, SKUs.
-		r.Handle("/categories", catalogProxy)
-		r.Handle("/categories/*", catalogProxy)
-		r.Handle("/products", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodGet {
-				catalogProxy.ServeHTTP(w, r)
-				return
+		// Admin API — requires admin JWT.
+		adminHandler := admin.NewHandler(db)
+		r.Route("/gateway/v1", func(r chi.Router) {
+			r.Use(authMW.Authenticate)
+			r.Use(admin.RequireAdmin)
+			adminHandler.Mount(r)
+		})
+
+		for _, route := range loader.Routes() {
+			route := route // capture for closure
+			upstream := getUpstream(route.Upstream)
+
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				addr, ok := resolve(r.Context(), route.Upstream)
+				if !ok {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadGateway)
+					_, _ = w.Write([]byte(`{"success":false,"error":{"code":"NO_UPSTREAM","message":"no healthy instances available"}}`))
+					auditWriter.Log(audit.Entry{
+						RequestID: gw.GetRequestID(r.Context()),
+						IP:        r.RemoteAddr,
+						Method:    r.Method,
+						Path:      r.URL.Path,
+						Upstream:  route.Upstream,
+						Event:     audit.EventUpstream5xx,
+						Detail:    "no healthy instances",
+					})
+					return
+				}
+				// Strip the path prefix before forwarding if configured.
+				if route.StripPrefix {
+					r2 := r.Clone(r.Context())
+					r2.URL.Path = strings.TrimPrefix(r.URL.Path, route.PathPrefix)
+					if r2.URL.Path == "" {
+						r2.URL.Path = "/"
+					}
+					r = r2
+				}
+				upstream.ServeHTTP(w, r, addr)
+			})
+
+			switch route.AuthMode {
+			case "none":
+				r.Handle(route.PathPrefix+"/*", handler)
+				r.Handle(route.PathPrefix, handler)
+			case "required":
+				r.With(authMW.Authenticate).Handle(route.PathPrefix+"/*", handler)
+				r.With(authMW.Authenticate).Handle(route.PathPrefix, handler)
+			case "method_split":
+				// GET/HEAD are public; all other methods require auth.
+				split := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					if req.Method == http.MethodGet || req.Method == http.MethodHead {
+						handler.ServeHTTP(w, req)
+						return
+					}
+					authMW.Authenticate(handler).ServeHTTP(w, req)
+				})
+				r.Handle(route.PathPrefix+"/*", split)
+				r.Handle(route.PathPrefix, split)
 			}
-			// POST/PUT/DELETE require auth.
-			authMW.Authenticate(catalogProxy).ServeHTTP(w, r)
-		}))
-		r.Handle("/products/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodGet {
-				catalogProxy.ServeHTTP(w, r)
+		}
+
+		return r
+	}
+
+	// ── Atomic router swap ─────────────────────────────────────────────────
+	var routerPtr atomic.Pointer[http.Handler]
+	initial := buildRouter()
+	routerPtr.Store(&initial)
+
+	// Watch for route changes and swap the router atomically.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		var lastVer int64
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
 				return
+			case <-ticker.C:
+				if v := loader.Version(); v != lastVer {
+					lastVer = v
+					r := buildRouter()
+					routerPtr.Store(&r)
+					log.Info("router hot-reloaded", "version", v)
+				}
 			}
-			authMW.Authenticate(catalogProxy).ServeHTTP(w, r)
-		}))
-	})
+		}
+	}()
 
-	// ── Order routes — all protected ───────────────────────────────────────
-	r.Route("/v1/orders", func(r chi.Router) {
-		r.Use(authMW.Authenticate)
-		r.Handle("/*", stripPrefix("/v1/orders", orderProxy))
-		r.Handle("/", orderProxy)
-	})
+	// Start route watcher and audit writer.
+	loader.Watch(ctx)
+	go auditWriter.Run(ctx)
 
+	// Auto-bind watcher (opt-in).
+	if os.Getenv("GATEWAY_AUTO_BIND") == "true" || cfg.AppEnv == "development" {
+		binder := registry.NewAutoBinder(rdb, db, auditWriter, log)
+		go binder.Run(ctx)
+		log.Info("auto-bind watcher started")
+	}
+
+	// ── HTTP server with dynamic dispatch ─────────────────────────────────
 	port := cfg.HTTPPort
 	if port == 0 {
 		port = 8000
 	}
 
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
-		Handler:      r,
+		Addr: fmt.Sprintf(":%d", port),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			(*routerPtr.Load()).ServeHTTP(w, r)
+		}),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -149,17 +265,18 @@ func main() {
 	go func() {
 		log.Info("starting API gateway", "port", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("gateway error", "error", err)
+			log.Error("gateway server error", "error", err)
 		}
 	}()
 
 	<-quit
 	log.Info("shutting down gateway")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutCancel()
+	if err := srv.Shutdown(shutCtx); err != nil {
 		log.Error("gateway shutdown error", "error", err)
 	}
+	cancel() // stop background goroutines
 	log.Info("gateway stopped")
 }
 
@@ -168,15 +285,4 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-func stripPrefix(prefix string, h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r2 := r.Clone(r.Context())
-		r2.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
-		if r2.URL.Path == "" {
-			r2.URL.Path = "/"
-		}
-		h.ServeHTTP(w, r2)
-	})
 }
