@@ -90,7 +90,8 @@
       "Bash(PGPASSWORD=zappass123 psql -h localhost -U zapuser -lqt)",
       "Bash(PGPASSWORD=zappass123 psql *)",
       "PowerShell(docker exec zapmarket-postgres *)",
-      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8080/health\" -ErrorAction SilentlyContinue | ConvertTo-Json)"
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8080/health\" -ErrorAction SilentlyContinue | ConvertTo-Json)",
+      "PowerShell(swag *)"
     ]
   }
 }

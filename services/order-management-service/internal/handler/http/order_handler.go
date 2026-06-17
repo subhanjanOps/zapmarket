@@ -30,6 +30,19 @@ type checkoutRequest struct {
 }
 
 // Checkout handles POST /v1/orders.
+//
+//	@Summary		Place an order
+//	@Tags			orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		checkoutRequest	true	"Checkout payload"
+//	@Success		201		{object}	Response{data=domain.Order}
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		409		{object}	Response
+//	@Failure		500		{object}	Response
+//	@Router			/v1/orders [post]
 func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	user := authctx.UserFromContext(r.Context())
 	if user == nil {
@@ -79,6 +92,17 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetOrder handles GET /v1/orders/{id}.
+//
+//	@Summary		Get an order
+//	@Tags			orders
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Order UUID"
+//	@Success		200	{object}	Response{data=object}
+//	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Router			/v1/orders/{id} [get]
 func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	user := authctx.UserFromContext(r.Context())
 	if user == nil {
@@ -111,6 +135,14 @@ func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListOrders handles GET /v1/orders.
+//
+//	@Summary		List orders for the authenticated user
+//	@Tags			orders
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	Response{data=[]domain.Order}
+//	@Failure		401	{object}	Response
+//	@Router			/v1/orders [get]
 func (h *OrderHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
 	user := authctx.UserFromContext(r.Context())
 	if user == nil {
@@ -131,4 +163,45 @@ func (h *OrderHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SuccessResponse(w, http.StatusOK, orders)
+}
+
+// CancelOrder handles POST /v1/orders/{id}/cancel.
+//
+//	@Summary		Cancel an order
+//	@Tags			orders
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Order UUID"
+//	@Success		200	{object}	Response{data=domain.Order}
+//	@Failure		400	{object}	Response
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Failure		409	{object}	Response
+//	@Router			/v1/orders/{id}/cancel [post]
+func (h *OrderHandler) CancelOrder(w http.ResponseWriter, r *http.Request) {
+	user := authctx.UserFromContext(r.Context())
+	if user == nil {
+		ErrorResponse(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+
+	orderID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ORDER_ID", "order id must be a valid UUID")
+		return
+	}
+
+	userID, err := uuid.Parse(user.Id)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", "invalid user id in token")
+		return
+	}
+
+	order, err := h.svc.CancelOrder(r.Context(), orderID, userID)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	SuccessResponse(w, http.StatusOK, order)
 }

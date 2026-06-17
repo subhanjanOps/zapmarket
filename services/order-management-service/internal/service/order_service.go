@@ -18,6 +18,7 @@ type OrderService interface {
 	Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency string) (*domain.Order, error)
 	GetOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
 	ListOrders(ctx context.Context, userID uuid.UUID) ([]*domain.Order, error)
+	CancelOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, error)
 }
 
 // CheckoutItem is the per-SKU input to Checkout.
@@ -188,6 +189,39 @@ func (s *orderService) GetOrder(ctx context.Context, orderID, userID uuid.UUID) 
 
 func (s *orderService) ListOrders(ctx context.Context, userID uuid.UUID) ([]*domain.Order, error) {
 	return s.repo.GetByUserID(ctx, userID)
+}
+
+func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, error) {
+	order, err := s.repo.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if order.UserID != userID {
+		return nil, pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
+	}
+	if err := order.Transition(domain.OrderCancelled); err != nil {
+		return nil, err
+	}
+
+	// Release any inventory reservations still held.
+	items, err := s.repo.GetOrderItems(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	s.compensate(ctx, orderID, items)
+
+	cancelPayload, _ := json.Marshal(map[string]string{
+		"order_id": orderID.String(),
+		"user_id":  userID.String(),
+		"reason":   "user_requested",
+	})
+	if err := s.repo.MarkCancelled(ctx, orderID, cancelPayload); err != nil {
+		return nil, err
+	}
+
+	order.Status = domain.OrderCancelled
+	s.logger.Info("order cancelled by user", "order_id", orderID)
+	return order, nil
 }
 
 // compensate releases all reservations that were already made before a

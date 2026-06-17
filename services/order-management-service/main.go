@@ -1,3 +1,12 @@
+// @title			Order Management Service API
+// @version		1.0
+// @description	Handles order checkout, retrieval, and cancellation for ZapMarket.
+// @host			localhost:8082
+// @BasePath		/
+// @securityDefinitions.apikey	BearerAuth
+// @in							header
+// @name						Authorization
+// @description				Enter: Bearer <token>
 package main
 
 import (
@@ -14,11 +23,14 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
+	"github.com/zapmarket/zapmarket/pkg/swaggerx"
+	_ "github.com/zapmarket/zapmarket/services/order-management-service/docs"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
 	httphandler "github.com/zapmarket/zapmarket/services/order-management-service/internal/handler/http"
 	authmw "github.com/zapmarket/zapmarket/services/order-management-service/internal/middleware"
@@ -96,7 +108,13 @@ func main() {
 		r.Post("/", handler.Checkout)
 		r.Get("/", handler.ListOrders)
 		r.Get("/{id}", handler.GetOrder)
+		r.Post("/{id}/cancel", handler.CancelOrder)
 	})
+
+	r.Get("/v1/docs/swagger.json", swaggerx.JSONHandler(""))
+	r.Get("/v1/docs/*", httpSwagger.Handler(
+		httpSwagger.URL("/v1/docs/swagger.json"),
+	))
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),

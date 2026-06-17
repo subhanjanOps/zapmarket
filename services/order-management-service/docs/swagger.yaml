@@ -1,0 +1,230 @@
+basePath: /
+definitions:
+  domain.Order:
+    properties:
+      createdAt:
+        type: string
+      currency:
+        type: string
+      deletedAt:
+        type: string
+      id:
+        type: string
+      idempotencyKey:
+        type: string
+      paymentID:
+        type: string
+      status:
+        $ref: '#/definitions/domain.OrderStatus'
+      totalAmount:
+        format: int64
+        type: integer
+      updatedAt:
+        type: string
+      userID:
+        type: string
+    type: object
+  domain.OrderStatus:
+    enum:
+    - PENDING
+    - RESERVED
+    - PAID
+    - CONFIRMED
+    - CANCELLED
+    type: string
+    x-enum-varnames:
+    - OrderPending
+    - OrderReserved
+    - OrderPaid
+    - OrderConfirmed
+    - OrderCancelled
+  http.Response:
+    properties:
+      code:
+        type: string
+      data: {}
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  http.checkoutItemRequest:
+    properties:
+      quantity:
+        type: integer
+      sku_id:
+        type: string
+      unit_price:
+        type: integer
+    type: object
+  http.checkoutRequest:
+    properties:
+      currency:
+        type: string
+      idempotency_key:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/http.checkoutItemRequest'
+        type: array
+    type: object
+host: localhost:8082
+info:
+  contact: {}
+  description: Handles order checkout, retrieval, and cancellation for ZapMarket.
+  title: Order Management Service API
+  version: "1.0"
+paths:
+  /v1/orders:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/http.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.Order'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.Response'
+      security:
+      - BearerAuth: []
+      summary: List orders for the authenticated user
+      tags:
+      - orders
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Checkout payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.checkoutRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Order'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/http.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/http.Response'
+      security:
+      - BearerAuth: []
+      summary: Place an order
+      tags:
+      - orders
+  /v1/orders/{id}:
+    get:
+      parameters:
+      - description: Order UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/http.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/http.Response'
+      security:
+      - BearerAuth: []
+      summary: Get an order
+      tags:
+      - orders
+  /v1/orders/{id}/cancel:
+    post:
+      parameters:
+      - description: Order UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/http.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Order'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/http.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/http.Response'
+      security:
+      - BearerAuth: []
+      summary: Cancel an order
+      tags:
+      - orders
+securityDefinitions:
+  BearerAuth:
+    description: 'Enter: Bearer <token>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
