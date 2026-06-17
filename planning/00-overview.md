@@ -33,7 +33,7 @@ and Payment expose gRPC servers).
 5. **[Stage 5 — Order Management & Saga](05-order-management-saga.md)** ✅ **Complete** — Phase 9 + 12: order FSM, saga orchestration calling Inventory/Payment, transactional outbox.
 6. **[Stage 6 — Notification Service](06-notification-service.md)** ✅ **Complete** — Phase 11: real Kafka consumer, Redis dedup, retry loop.
 7. **[Stage 7 — Event Bus & Outbox Activation](07-event-bus-outbox.md)** ✅ **Complete** — Kafka live (apache/kafka KRaft), outbox relay on all 3 event-producing services, topic constants, Kafka UI. Note: Go polling relay used instead of Debezium (same guarantees, less ops overhead).
-8. **[Stage 8 — API Gateway](08-api-gateway.md)** — Phase 13: single ingress, JWT validation, rate limiting, routing.
+8. **[Stage 8 — API Gateway](08-api-gateway.md)** ✅ **Complete** — chi + ReverseProxy ingress on port 8000, JWT validation at edge, Redis-backed rate limiting (per-IP + per-user), circuit breakers (gobreaker), request ID propagation.
 9. **[Stage 9 — Redis Caching Layer](09-redis-caching.md)** ✅ **Complete** — `pkg/redis`, Lua atomic inventory reservation, idempotency cache for order + payment, catalog decorator cache, auth token blacklist + `/v1/auth/logout` endpoint. (9.6 rate limiting deferred to Stage 8; 9.7 cart not in scope.)
 10. **[Stage 10 — Observability](10-observability.md)** — Phase 15: Prometheus, OpenTelemetry, Grafana.
 11. **[Stage 11 — Kubernetes & CI/CD](11-k8s-cicd.md)** — Phases 16 + 17.

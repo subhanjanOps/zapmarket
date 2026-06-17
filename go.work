@@ -37,3 +37,5 @@ use ./pkg/swaggerx
 use ./pkg/kafka
 
 use ./pkg/redis
+
+use ./services/api-gateway

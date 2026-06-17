@@ -187,6 +187,32 @@ services:
       - zapnet
     restart: unless-stopped
 
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: zapmarket-api-gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    environment:
+      - HTTP_PORT=8000
+      - REDIS_URL=zapmarket-redis:6379
+      - AUTH_SERVICE_ADDR=zapmarket-auth-service:50051
+      - AUTH_SERVICE_HTTP_URL=http://zapmarket-auth-service:8080
+      - CATALOG_SERVICE_HTTP_URL=http://zapmarket-product-catalog-service:8081
+      - ORDER_SERVICE_HTTP_URL=http://zapmarket-order-management-service:8084
+      - APP_ENV=development
+    ports:
+      - "8000:8000"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: zapmarket-kafka-ui
