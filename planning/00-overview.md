@@ -1,6 +1,6 @@
 # ZapMarket — Upcoming Stages Overview
 
-_Last reviewed: 2026-06-17_
+_Last reviewed: 2026-06-17 (Stages 7 and 9 completed)_
 
 This folder sequences the remaining work from `ZapMarket-Claude-Code-Checklist.md` into
 buildable stages, ordered by dependency. Each stage file lists concrete tasks, file-level
@@ -31,10 +31,10 @@ and Payment expose gRPC servers).
 3. **[Stage 3 — Inventory Service](03-inventory-service.md)** ✅ **Complete** — Phase 8: build from scratch, gRPC `ReserveStock`/`ReleaseStock`, Postgres ledger.
 4. **[Stage 4 — Payment Service](04-payment-service.md)** ✅ **Complete** — Phase 10: build from scratch, gRPC `ChargeCard`, idempotent ledger.
 5. **[Stage 5 — Order Management & Saga](05-order-management-saga.md)** ✅ **Complete** — Phase 9 + 12: order FSM, saga orchestration calling Inventory/Payment, transactional outbox.
-6. **[Stage 6 — Notification Service](06-notification-service.md)** — Phase 11: Kafka consumer-only service, the natural integration test of the event bus.
-7. **[Stage 7 — Event Bus & Outbox Activation](07-event-bus-outbox.md)** — Phase 12 (cont.) + turn on Kafka/Debezium in docker-compose, wire `pkg/kafka`.
+6. **[Stage 6 — Notification Service](06-notification-service.md)** ✅ **Complete** — Phase 11: real Kafka consumer, Redis dedup, retry loop.
+7. **[Stage 7 — Event Bus & Outbox Activation](07-event-bus-outbox.md)** ✅ **Complete** — Kafka live (apache/kafka KRaft), outbox relay on all 3 event-producing services, topic constants, Kafka UI. Note: Go polling relay used instead of Debezium (same guarantees, less ops overhead).
 8. **[Stage 8 — API Gateway](08-api-gateway.md)** — Phase 13: single ingress, JWT validation, rate limiting, routing.
-9. **[Stage 9 — Redis Caching Layer](09-redis-caching.md)** — Phase 14: turn on Redis, product cache, idempotency keys, inventory Lua scripts.
+9. **[Stage 9 — Redis Caching Layer](09-redis-caching.md)** ✅ **Complete** — `pkg/redis`, Lua atomic inventory reservation, idempotency cache for order + payment, catalog decorator cache, auth token blacklist + `/v1/auth/logout` endpoint. (9.6 rate limiting deferred to Stage 8; 9.7 cart not in scope.)
 10. **[Stage 10 — Observability](10-observability.md)** — Phase 15: Prometheus, OpenTelemetry, Grafana.
 11. **[Stage 11 — Kubernetes & CI/CD](11-k8s-cicd.md)** — Phases 16 + 17.
 12. **[Stage 12 — Production Readiness](12-production-readiness.md)** — Phase 18: security hardening, reliability patterns, final completion criteria sign-off.
