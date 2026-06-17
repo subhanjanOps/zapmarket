@@ -185,6 +185,21 @@ services:
       - zapnet
     restart: unless-stopped
 
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: zapmarket-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=zapmarket
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    ports:
+      - "8090:8080"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   notification-service:
     build:
       context: .
