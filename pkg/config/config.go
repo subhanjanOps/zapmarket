@@ -55,7 +55,9 @@ type Config struct {
 	PaymentWebhookSecret string
 
 	// Downstream services
-	AuthServiceAddr string
+	AuthServiceAddr      string
+	InventoryServiceAddr string
+	PaymentServiceAddr   string
 
 	// Service
 	HTTPPort int
@@ -111,7 +113,9 @@ func Load() (*Config, error) {
 		PaymentWebhookSecret: getEnv("PAYMENT_WEBHOOK_SECRET", "your-webhook-secret-change-in-production"),
 
 		// Downstream services
-		AuthServiceAddr: getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),
+		AuthServiceAddr:      getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),
+		InventoryServiceAddr: getEnv("INVENTORY_SERVICE_ADDR", "localhost:50053"),
+		PaymentServiceAddr:   getEnv("PAYMENT_SERVICE_ADDR", "localhost:50054"),
 
 		// Service
 		HTTPPort: getEnvInt("HTTP_PORT", 8080),

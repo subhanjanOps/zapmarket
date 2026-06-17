@@ -14,7 +14,7 @@ and Payment expose gRPC servers).
 |---|---|
 | `auth-service` | Implemented — HTTP (net/http ServeMux) + gRPC `ValidateToken`, JWT issuing |
 | `product-catalog-service` | Implemented — chi router, categories/products/SKUs/images, gRPC handler |
-| `order-management-service` | **Scaffold only** — `go.mod` + `main.go` placeholder |
+| `order-management-service` | Implemented — HTTP checkout API, saga orchestration (Inventory + Payment gRPC), order FSM, transactional outbox |
 | `inventory-service` | Implemented — gRPC `ReserveStock`/`ReleaseStock`/`DeductStock`/`AddStock`/`GetStock`, Postgres ledger, reservation FSM |
 | `payment-service` | Implemented — gRPC `ChargeCard`/`RefundPayment`/`GetTransaction`, double-entry ledger, idempotency via unique constraint, webhook endpoint |
 | `notification-service` | **Scaffold only** — `go.mod` + `main.go` placeholder |
@@ -30,7 +30,7 @@ and Payment expose gRPC servers).
 2b. **[Stage 2b — Product Image Upload via MinIO](02b-image-upload-minio.md)** ✅ **Complete** — not in the original checklist; bumped ahead of Stage 3 at explicit request. Real multipart upload for product images, backed by the MinIO bucket already provisioned in `docker-compose.yml`.
 3. **[Stage 3 — Inventory Service](03-inventory-service.md)** ✅ **Complete** — Phase 8: build from scratch, gRPC `ReserveStock`/`ReleaseStock`, Postgres ledger.
 4. **[Stage 4 — Payment Service](04-payment-service.md)** ✅ **Complete** — Phase 10: build from scratch, gRPC `ChargeCard`, idempotent ledger.
-5. **[Stage 5 — Order Management & Saga](05-order-management-saga.md)** — Phase 9 + 12: order FSM, saga orchestration calling Inventory/Payment, transactional outbox.
+5. **[Stage 5 — Order Management & Saga](05-order-management-saga.md)** ✅ **Complete** — Phase 9 + 12: order FSM, saga orchestration calling Inventory/Payment, transactional outbox.
 6. **[Stage 6 — Notification Service](06-notification-service.md)** — Phase 11: Kafka consumer-only service, the natural integration test of the event bus.
 7. **[Stage 7 — Event Bus & Outbox Activation](07-event-bus-outbox.md)** — Phase 12 (cont.) + turn on Kafka/Debezium in docker-compose, wire `pkg/kafka`.
 8. **[Stage 8 — API Gateway](08-api-gateway.md)** — Phase 13: single ingress, JWT validation, rate limiting, routing.
