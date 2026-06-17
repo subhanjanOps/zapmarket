@@ -25,6 +25,7 @@ import (
 	_ "github.com/lib/pq"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
@@ -67,6 +68,15 @@ func main() {
 		log.Info("migrations applied")
 	}
 
+	// ── Redis ─────────────────────────────────────────────────────────────────
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisURL})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Error("failed to connect to Redis", "addr", cfg.RedisURL, "error", err)
+		os.Exit(1)
+	}
+	defer rdb.Close()
+	log.Info("connected to Redis", "addr", cfg.RedisURL)
+
 	// ── Downstream clients ────────────────────────────────────────────────────
 	inventoryClient, err := clients.NewInventoryClient(cfg.InventoryServiceAddr)
 	if err != nil {
@@ -92,7 +102,7 @@ func main() {
 
 	// ── Repository / Service / Handler ───────────────────────────────────────
 	repo := repository.NewOrderRepository(db)
-	svc := service.NewOrderService(repo, inventoryClient, paymentClient, log)
+	svc := service.NewOrderService(repo, inventoryClient, paymentClient, rdb, log)
 	handler := httphandler.NewOrderHandler(svc)
 
 	// ── Router ───────────────────────────────────────────────────────────────

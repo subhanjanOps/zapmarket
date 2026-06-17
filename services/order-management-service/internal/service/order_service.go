@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
@@ -28,10 +31,13 @@ type CheckoutItem struct {
 	UnitPrice int64
 }
 
+const idempotencyTTL = 24 * time.Hour
+
 type orderService struct {
 	repo      contracts.OrderRepository
 	inventory *clients.InventoryClient
 	payment   *clients.PaymentClient
+	rdb       *redis.Client
 	logger    *slog.Logger
 }
 
@@ -39,9 +45,14 @@ func NewOrderService(
 	repo contracts.OrderRepository,
 	inventory *clients.InventoryClient,
 	payment *clients.PaymentClient,
+	rdb *redis.Client,
 	logger *slog.Logger,
 ) OrderService {
-	return &orderService{repo: repo, inventory: inventory, payment: payment, logger: logger}
+	return &orderService{repo: repo, inventory: inventory, payment: payment, rdb: rdb, logger: logger}
+}
+
+func idempCacheKey(key uuid.UUID) string {
+	return fmt.Sprintf("idempotency:order:%s", key)
 }
 
 func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency string) (*domain.Order, error) {
@@ -58,10 +69,21 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		currency = "INR"
 	}
 
-	// Idempotency: replay an existing order without re-running the saga.
+	// Idempotency: Redis-first cache check (24h TTL), DB fallback.
+	cacheKey := idempCacheKey(idempotencyKey)
+	if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var order domain.Order
+		if json.Unmarshal(cached, &order) == nil {
+			s.logger.Info("idempotent replay from cache", "order_id", order.ID)
+			return &order, nil
+		}
+	}
 	existing, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)
 	if err == nil {
-		s.logger.Info("idempotent replay, returning existing order", "order_id", existing.ID, "status", existing.Status)
+		s.logger.Info("idempotent replay from db", "order_id", existing.ID, "status", existing.Status)
+		if b, err := json.Marshal(existing); err == nil {
+			_ = s.rdb.Set(ctx, cacheKey, b, idempotencyTTL).Err()
+		}
 		return existing, nil
 	}
 	var appErr *pkgerrors.AppError
@@ -169,6 +191,10 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 	order.Status = domain.OrderConfirmed
 	order.PaymentID = &paymentID
 	s.logger.Info("order confirmed", "order_id", order.ID, "payment_id", paymentID)
+
+	if b, err := json.Marshal(order); err == nil {
+		_ = s.rdb.Set(ctx, idempCacheKey(idempotencyKey), b, idempotencyTTL).Err()
+	}
 	return order, nil
 }
 
