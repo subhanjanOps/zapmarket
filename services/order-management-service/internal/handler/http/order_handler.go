@@ -6,8 +6,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/authctx"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/service"
 )
+
+type orderResponse struct {
+	*domain.Order
+	Items []*domain.OrderItem `json:"items,omitempty"`
+}
 
 type OrderHandler struct {
 	svc service.OrderService
@@ -128,10 +134,7 @@ func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, map[string]interface{}{
-		"order": order,
-		"items": items,
-	})
+	SuccessResponse(w, http.StatusOK, orderResponse{Order: order, Items: items})
 }
 
 // ListOrders handles GET /v1/orders.
