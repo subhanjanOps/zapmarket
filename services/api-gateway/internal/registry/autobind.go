@@ -4,7 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -12,23 +16,56 @@ import (
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/audit"
 )
 
-// AutoBinder watches for service manifests in Redis and reconciles them
-// against gateway_routes in Postgres. Enabled by GATEWAY_AUTO_BIND=true.
+// swaggerDoc holds the subset of a Swagger 2.0 / OpenAPI 3.0 document we care about.
+type swaggerDoc struct {
+	// Swagger 2.0
+	BasePath string `json:"basePath"`
+	Host     string `json:"host"`
+	// OpenAPI 3.0 fallback
+	Servers []struct {
+		URL string `json:"url"`
+	} `json:"servers"`
+	Paths map[string]map[string]struct {
+		Security []map[string][]string `json:"security"`
+	} `json:"paths"`
+}
+
+// routeSpec is the derived route we want to register for a service.
+type routeSpec struct {
+	PathPrefix  string
+	AuthMode    string
+	StripPrefix bool
+}
+
+// AutoBinder watches the Redis service registry for live instances and
+// auto-registers their routes by fetching and parsing each service's Swagger spec.
+// Enabled by GATEWAY_AUTO_BIND=true (default in development).
 type AutoBinder struct {
-	rdb    *goredis.Client
-	db     *sql.DB
-	audit  *audit.Writer
-	logger *slog.Logger
+	rdb        *goredis.Client
+	db         *sql.DB
+	audit      *audit.Writer
+	logger     *slog.Logger
+	httpClient *http.Client
+	// seen tracks which (service, addr) pairs we've already fetched.
+	// Prevents re-fetching the same spec on every tick.
+	seen map[string]string // service name → last addr we successfully parsed
 }
 
 func NewAutoBinder(rdb *goredis.Client, db *sql.DB, aw *audit.Writer, logger *slog.Logger) *AutoBinder {
-	return &AutoBinder{rdb: rdb, db: db, audit: aw, logger: logger}
+	return &AutoBinder{
+		rdb:        rdb,
+		db:         db,
+		audit:      aw,
+		logger:     logger,
+		httpClient: &http.Client{Timeout: 5 * time.Second},
+		seen:       make(map[string]string),
+	}
 }
 
-// Run scans for service manifests every 15 s and auto-inserts missing routes.
+// Run scans for new service instances every 15 s and auto-binds their routes.
 // Returns when ctx is cancelled.
 func (ab *AutoBinder) Run(ctx context.Context) {
-	ab.logger.Info("auto-bind watcher started")
+	ab.logger.Info("swagger auto-bind watcher started")
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -42,64 +79,221 @@ func (ab *AutoBinder) Run(ctx context.Context) {
 }
 
 func (ab *AutoBinder) reconcile(ctx context.Context) {
-	keys, err := ab.rdb.Keys(ctx, manifestKeyPrefix+"*").Result()
+	// Find all live registry keys: svc:registry:{service}:{instance}
+	keys, err := ab.rdb.Keys(ctx, registryKeyPrefix+"*").Result()
 	if err != nil {
 		ab.logger.Warn("auto-bind: redis scan failed", "error", err)
 		return
 	}
 
+	// Group instances by service name. Use first healthy instance per service.
+	seen := make(map[string]string) // service → addr
 	for _, key := range keys {
+		// key format: svc:registry:{service-name}:{instance-id}
+		parts := strings.SplitN(strings.TrimPrefix(key, registryKeyPrefix), ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		serviceName := parts[0]
+		if _, already := seen[serviceName]; already {
+			continue
+		}
 		raw, err := ab.rdb.Get(ctx, key).Bytes()
 		if err != nil {
 			continue
 		}
-		var m Manifest
-		if err := json.Unmarshal(raw, &m); err != nil {
-			ab.logger.Warn("auto-bind: bad manifest", "key", key, "error", err)
+		var inst Instance
+		if err := json.Unmarshal(raw, &inst); err != nil {
 			continue
 		}
-		ab.applyManifest(ctx, m)
+		seen[serviceName] = inst.Addr
+	}
+
+	for serviceName, addr := range seen {
+		// Skip if we already processed this exact (service, addr) pair.
+		if ab.seen[serviceName] == addr {
+			continue
+		}
+		ab.processService(ctx, serviceName, addr)
 	}
 }
 
-func (ab *AutoBinder) applyManifest(ctx context.Context, m Manifest) {
-	for _, mr := range m.Routes {
-		// Check for conflicts: does another service own this prefix?
-		var existingUpstream string
-		err := ab.db.QueryRowContext(ctx,
-			`SELECT upstream FROM gateway_routes WHERE path_prefix = $1 AND enabled = true`,
-			mr.PathPrefix,
-		).Scan(&existingUpstream)
+func (ab *AutoBinder) processService(ctx context.Context, serviceName, addr string) {
+	specURL := addr + "/v1/docs/swagger.json"
+	doc, err := ab.fetchSwagger(ctx, specURL)
+	if err != nil {
+		ab.logger.Warn("auto-bind: swagger fetch failed",
+			"service", serviceName, "url", specURL, "error", err)
+		return
+	}
 
-		switch {
-		case err == sql.ErrNoRows:
-			// No existing route — auto-insert.
-			_, insertErr := ab.db.ExecContext(ctx,
-				`INSERT INTO gateway_routes (path_prefix, upstream, auth_mode, strip_prefix)
-				 VALUES ($1, $2, $3, $4)
-				 ON CONFLICT (path_prefix) DO NOTHING`,
-				mr.PathPrefix, m.Service, mr.AuthMode, mr.StripPrefix,
-			)
-			if insertErr != nil {
-				ab.logger.Warn("auto-bind: insert failed", "prefix", mr.PathPrefix, "error", insertErr)
-			} else {
-				ab.logger.Info("auto-bind: route registered", "prefix", mr.PathPrefix, "service", m.Service)
+	routes := deriveRoutes(doc)
+	if len(routes) == 0 {
+		ab.logger.Warn("auto-bind: no routes derived from swagger",
+			"service", serviceName, "url", specURL)
+		return
+	}
+
+	for _, route := range routes {
+		ab.applyRoute(ctx, serviceName, route)
+	}
+
+	// Mark as seen so we don't re-fetch until the address changes.
+	ab.seen[serviceName] = addr
+}
+
+func (ab *AutoBinder) fetchSwagger(ctx context.Context, url string) (*swaggerDoc, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := ab.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("swagger endpoint returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MB cap
+	if err != nil {
+		return nil, err
+	}
+
+	var doc swaggerDoc
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, fmt.Errorf("parse swagger: %w", err)
+	}
+	return &doc, nil
+}
+
+// deriveRoutes extracts one RouteSpec per logical path group from the swagger doc.
+// For Swagger 2.0: basePath is the route prefix (e.g. /v1/auth).
+// Auth mode is determined by scanning security fields across all operations.
+func deriveRoutes(doc *swaggerDoc) []routeSpec {
+	prefix := swaggerBasePath(doc)
+	if prefix == "" || prefix == "/" {
+		return nil
+	}
+
+	authMode := deriveAuthMode(doc)
+	return []routeSpec{{
+		PathPrefix:  prefix,
+		AuthMode:    authMode,
+		StripPrefix: false,
+	}}
+}
+
+// swaggerBasePath extracts the canonical base path from the doc.
+// Swagger 2.0: basePath field.
+// OpenAPI 3.0: first server URL path component.
+func swaggerBasePath(doc *swaggerDoc) string {
+	if doc.BasePath != "" && doc.BasePath != "/" {
+		// Normalise: strip trailing slash.
+		return strings.TrimRight(doc.BasePath, "/")
+	}
+	if len(doc.Servers) > 0 {
+		u := doc.Servers[0].URL
+		// Extract just the path part if it's a full URL.
+		if idx := strings.Index(u, "://"); idx != -1 {
+			rest := u[idx+3:]
+			if slash := strings.Index(rest, "/"); slash != -1 {
+				path := strings.TrimRight(rest[slash:], "/")
+				if path != "" && path != "/" {
+					return path
+				}
 			}
-		case err != nil:
-			ab.logger.Warn("auto-bind: db query failed", "error", err)
-		case existingUpstream != m.Service:
-			// Conflict — different service already owns this prefix.
-			ab.logger.Error("auto-bind: route conflict",
-				"prefix", mr.PathPrefix,
-				"existing", existingUpstream,
-				"challenger", m.Service,
-			)
-			ab.audit.Log(audit.Entry{
-				Event:  audit.EventRouteConflict,
-				Path:   mr.PathPrefix,
-				Detail: "conflict: " + existingUpstream + " vs " + m.Service,
-			})
+		} else if strings.HasPrefix(u, "/") {
+			return strings.TrimRight(u, "/")
 		}
-		// existingUpstream == m.Service → already bound, no action needed.
+	}
+	return ""
+}
+
+// deriveAuthMode analyses operations in the swagger doc and returns the most
+// appropriate gateway auth_mode:
+//
+//   - "none"         — no operation has a security requirement
+//   - "required"     — all operations (including GET) have a security requirement
+//   - "method_split" — GET/HEAD operations are public; write methods require auth
+func deriveAuthMode(doc *swaggerDoc) string {
+	totalOps := 0
+	securedOps := 0
+	securedReadOps := 0
+	totalReadOps := 0
+
+	readMethods := map[string]bool{"get": true, "head": true}
+
+	for _, methods := range doc.Paths {
+		for method, op := range methods {
+			totalOps++
+			isRead := readMethods[strings.ToLower(method)]
+			if isRead {
+				totalReadOps++
+			}
+			if len(op.Security) > 0 {
+				securedOps++
+				if isRead {
+					securedReadOps++
+				}
+			}
+		}
+	}
+
+	if totalOps == 0 || securedOps == 0 {
+		return "none"
+	}
+	if securedOps == totalOps {
+		return "required"
+	}
+	// Some ops are public. If reads are unsecured and writes are secured → method_split.
+	if totalReadOps > 0 && securedReadOps == 0 && securedOps > 0 {
+		return "method_split"
+	}
+	// Mixed but not cleanly split — default to required (safer).
+	return "required"
+}
+
+func (ab *AutoBinder) applyRoute(ctx context.Context, serviceName string, route routeSpec) {
+	var existingUpstream string
+	err := ab.db.QueryRowContext(ctx,
+		`SELECT upstream FROM gateway_routes WHERE path_prefix = $1 AND enabled = true`,
+		route.PathPrefix,
+	).Scan(&existingUpstream)
+
+	switch {
+	case err == sql.ErrNoRows:
+		_, insertErr := ab.db.ExecContext(ctx,
+			`INSERT INTO gateway_routes (path_prefix, upstream, auth_mode, strip_prefix)
+			 VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (path_prefix) DO NOTHING`,
+			route.PathPrefix, serviceName, route.AuthMode, route.StripPrefix,
+		)
+		if insertErr != nil {
+			ab.logger.Warn("auto-bind: insert failed",
+				"prefix", route.PathPrefix, "error", insertErr)
+		} else {
+			ab.logger.Info("auto-bind: route registered",
+				"prefix", route.PathPrefix,
+				"service", serviceName,
+				"auth_mode", route.AuthMode)
+		}
+	case err != nil:
+		ab.logger.Warn("auto-bind: db query failed", "error", err)
+	case existingUpstream != serviceName:
+		ab.logger.Error("auto-bind: route conflict",
+			"prefix", route.PathPrefix,
+			"existing", existingUpstream,
+			"challenger", serviceName,
+		)
+		ab.audit.Log(audit.Entry{
+			Event:    audit.EventRouteConflict,
+			Path:     route.PathPrefix,
+			Upstream: serviceName,
+			Detail:   fmt.Sprintf("conflict: existing=%s challenger=%s", existingUpstream, serviceName),
+		})
+	// existingUpstream == serviceName → already bound, nothing to do.
 	}
 }

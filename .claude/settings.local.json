@@ -159,7 +159,8 @@
       "Bash(pkill -9 -f \"api-gateway.exe\")",
       "PowerShell(Stop-Process *)",
       "Read(//c/Users/subha/Downloads/Projects/zapMarket/**)",
-      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway//**)"
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway//**)",
+      "Bash(python -c ' *)"
     ]
   }
 }

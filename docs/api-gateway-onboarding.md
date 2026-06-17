@@ -7,11 +7,33 @@ There are two paths:
 
 | Path | When to use |
 |---|---|
-| **Auto-bind** | Development, local `docker compose up`, rapid iteration. The gateway discovers routes automatically from a manifest the service publishes to Redis. |
-| **Manual bind** | Staging, production, or any environment where `GATEWAY_AUTO_BIND=false`. Routes are registered explicitly via the Admin API or a migration. |
+| **Auto-bind** | Development, local `docker compose up`, rapid iteration. The gateway fetches the service's Swagger spec and registers routes automatically. |
+| **Manual bind** | Staging, production, or any environment where `GATEWAY_AUTO_BIND=false`. Routes are registered explicitly via the Admin API or a DB migration. |
 
-Both paths use the same underlying data store (`gateway_routes` in the `apigateway` Postgres
-database), so a route registered either way behaves identically at runtime.
+Both paths write to the same `gateway_routes` table in the `apigateway` Postgres database.
+A route registered either way behaves identically at runtime.
+
+---
+
+## How auto-bind works
+
+When `GATEWAY_AUTO_BIND=true` (the default in `development` env), the gateway runs a
+background watcher that:
+
+1. Scans Redis every 15 seconds for live service heartbeat keys
+   (`svc:registry:{service-name}:{instance-id}`).
+2. For each newly discovered service, fetches its Swagger spec from
+   `{service-addr}/v1/docs/swagger.json`.
+3. Reads `basePath` from the spec — this becomes the route's `path_prefix`.
+4. Analyses the security fields across all operations to derive an `auth_mode`
+   (see [Auth mode derivation](#auth-mode-derivation)).
+5. Inserts the route into `gateway_routes` via `ON CONFLICT DO NOTHING`.
+6. The Postgres `LISTEN/NOTIFY` trigger fires, and the gateway's router rebuilds
+   in milliseconds — no restart required.
+
+The spec is only fetched **once per (service, address) pair**. If the same service
+restarts at the same address the spec is not re-fetched; to force a re-fetch, change
+the instance ID or the address.
 
 ---
 
@@ -19,8 +41,9 @@ database), so a route registered either way behaves identically at runtime.
 
 ### Service name
 
-Every service has a **logical name** — the stable string the gateway uses to identify it.
-By convention this matches the directory name under `services/`:
+Every service has a **logical name** — the stable string used in heartbeat keys and in the
+`upstream` column of `gateway_routes`. By convention it matches the directory name under
+`services/`:
 
 ```
 auth-service
@@ -31,82 +54,59 @@ payment-service
 notification-service
 ```
 
-Use the same name everywhere: in the manifest, in the heartbeat, and in the `upstream`
-column of `gateway_routes`.
+### Auth mode derivation
 
-### Route
+The gateway reads all operations from the Swagger spec and applies this logic:
 
-A route maps a **path prefix** to a service and declares an auth policy:
+| Condition | `auth_mode` |
+|---|---|
+| No operations have a `security` field | `none` |
+| All operations have a `security` field | `required` |
+| Read methods (GET/HEAD) are all unsecured; write methods are secured | `method_split` |
+| Mixed (some reads secured, some writes not) | `required` *(safe fallback)* |
+
+`method_split` means GET/HEAD requests are forwarded without a JWT check; all other
+methods require a valid token. This is ideal for catalog-style endpoints where public
+browsing is allowed but mutations require login.
+
+After auto-bind, you can change `auth_mode` for any route via the Admin API without
+re-deploying anything.
+
+### Route fields
 
 | Field | Type | Description |
 |---|---|---|
-| `path_prefix` | string | URL prefix the gateway matches (longest-prefix wins). e.g. `/v1/orders` |
-| `upstream` | string | Logical service name |
-| `auth_mode` | `none` \| `required` \| `method_split` | `none` = no JWT check; `required` = all methods need a valid JWT; `method_split` = GET/HEAD are public, everything else needs a JWT |
-| `strip_prefix` | bool | If `true`, the prefix is stripped before forwarding to the upstream |
-
-### Auth modes in detail
-
-```
-auth_mode = "none"
-  GET /api/v1/products          → forwarded as-is, no auth check
-
-auth_mode = "required"
-  GET /v1/orders                → gateway validates JWT, injects X-User-* headers, forwards
-  POST /v1/orders               → same
-
-auth_mode = "method_split"
-  GET /api/v1/products          → no auth check
-  POST /api/v1/products         → JWT required
-```
-
-### Service registry (Redis)
-
-The gateway resolves the `upstream` name to an actual HTTP address at request time using
-Redis heartbeat keys:
-
-```
-svc:registry:{service-name}:{instance-id}  →  {"addr":"http://10.x.x.x:8081","instance_id":"...","started_at":"..."}  (TTL 30s)
-```
-
-Each running instance refreshes its key every 10 seconds. When an instance stops (crash,
-scale-down), its key expires within 30 seconds and the gateway stops sending traffic to
-it. The gateway falls back to the static env-var address
-(`{SERVICE_NAME}_HTTP_URL`) if no Redis entries are found.
+| `path_prefix` | string | Longest-prefix match. e.g. `/v1/auth` matches `/v1/auth/me` and `/v1/auth/login` |
+| `upstream` | string | Logical service name resolved via Redis registry (falls back to env-var static address) |
+| `auth_mode` | `none` \| `required` \| `method_split` | JWT enforcement policy |
+| `strip_prefix` | bool | Strip `path_prefix` from the URL before forwarding to upstream |
 
 ---
 
 ## Path 1 — Auto-bind (development default)
 
-Auto-bind is active when `GATEWAY_AUTO_BIND=true` (the default in `development` env).
-The gateway watches for **service manifests** in Redis every 15 seconds and
-auto-inserts any missing routes into `gateway_routes`.
+### Step 1 — Expose a Swagger endpoint
 
-### Step 1 — Add Redis to your service
+Your service must serve its Swagger JSON at the standard path:
 
-Your service already connects to Redis for other purposes (caching, idempotency, etc.).
-If it does not, add the connection following the pattern in any other service's `main.go`:
-
-```go
-import goredis "github.com/redis/go-redis/v9"
-
-rdb := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
-if err := rdb.Ping(ctx).Err(); err != nil {
-    log.Error("redis unreachable", "error", err)
-    os.Exit(1)
-}
 ```
+GET /v1/docs/swagger.json
+```
+
+All ZapMarket services already do this via `pkg/swaggerx`. If you are building a new
+service, add the swagger init and route following the pattern in `product-catalog-service`
+or `auth-service`.
 
 ### Step 2 — Publish a heartbeat
 
-In your service's `main.go`, after the Redis client is ready and **before** starting the
-HTTP server, launch the heartbeat goroutine:
+In your service's `main.go`, after Redis is connected and **before** starting the HTTP
+server, launch the heartbeat goroutine:
 
 ```go
 import "github.com/zapmarket/zapmarket/services/api-gateway/internal/registry"
 
 // instanceID must be unique per running process.
-// Use the hostname in Docker/k8s; a UUID or PID works locally.
+// Use the pod hostname in k8s; a UUID or PID works locally.
 instanceID := os.Getenv("HOSTNAME")
 if instanceID == "" {
     instanceID = fmt.Sprintf("local-%d", os.Getpid())
@@ -118,80 +118,48 @@ addr := fmt.Sprintf("http://%s:%d", os.Getenv("SERVICE_HOST"), cfg.HTTPPort)
 go registry.Heartbeat(appCtx, rdb, "my-new-service", instanceID, addr, log)
 ```
 
-> `appCtx` is the context you cancel on SIGTERM. When it is cancelled, the heartbeat
-> removes the Redis key immediately (best-effort deregister), so the gateway stops routing
-> to this instance before the process exits.
+> `appCtx` is the context you cancel on SIGTERM. When cancelled, the heartbeat removes
+> the Redis key immediately so the gateway stops routing to this instance before the
+> process exits.
 
-### Step 3 — Publish a manifest
+That is all the service needs to do. The gateway handles the rest.
 
-Still in `main.go`, publish the route manifest immediately after starting the heartbeat:
+### Step 3 — Start services and observe
 
-```go
-err := registry.PublishManifest(appCtx, rdb, registry.Manifest{
-    Service: "my-new-service",
-    Version: "1.0.0",
-    Routes: []registry.ManifestRoute{
-        {
-            PathPrefix:  "/v1/my-resource",
-            AuthMode:    "required",  // or "none" / "method_split"
-            StripPrefix: false,
-        },
-        {
-            PathPrefix:  "/v1/my-resource/public",
-            AuthMode:    "none",
-            StripPrefix: false,
-        },
-    },
-})
-if err != nil {
-    log.Warn("failed to publish gateway manifest", "error", err)
-    // Non-fatal: service still works; auto-bind just won't fire.
-}
-```
-
-The manifest key has a **60-second TTL** and is not refreshed automatically. You can
-re-publish it on a slow ticker (e.g., every 50s) if you want it to survive long-running
-processes. For Docker Compose restarts a single publish on startup is sufficient.
-
-### Step 4 — Wait for auto-bind
-
-The gateway's auto-bind watcher runs every 15 seconds. Within 15 seconds of publishing
-the manifest, you will see in the gateway logs:
+Within **15 seconds** of the heartbeat key appearing in Redis you will see in the
+gateway logs:
 
 ```
-level=INFO msg="auto-bind: route registered" prefix=/v1/my-resource service=my-new-service
+level=INFO msg="auto-bind: route registered"
+    prefix=/v1/my-resource service=my-new-service auth_mode=required
 level=INFO msg="route change notified" op=INSERT
 level=INFO msg="routes refreshed" count=N
 ```
 
-The route is now live. No gateway restart needed.
+The route is now live. Traffic to `http://gateway:8000/v1/my-resource/*` is forwarded
+to your service.
 
 ### Conflict handling
 
-If another service already owns the path prefix you declared, auto-bind will **not**
-overwrite it. You will see:
+If another service already owns the path prefix the gateway will **not** overwrite it:
 
 ```
 level=ERROR msg="auto-bind: route conflict"
-    prefix=/v1/my-resource
-    existing=other-service
-    challenger=my-new-service
+    prefix=/v1/my-resource existing=other-service challenger=my-new-service
 ```
 
-Resolve the conflict by either choosing a different prefix or manually updating the
-existing route via the Admin API (see below).
+Resolve by either choosing a different prefix or updating the existing route via the
+Admin API (see below).
 
 ---
 
 ## Path 2 — Manual bind (staging / production)
 
-When `GATEWAY_AUTO_BIND=false`, routes must be registered explicitly before traffic
-can be forwarded. You have two options.
+When `GATEWAY_AUTO_BIND=false`, routes must be registered before traffic is forwarded.
 
 ### Option A — Admin API
 
-The gateway exposes a route management API at `/gateway/v1/routes`. All endpoints require
-a JWT with `role=admin`.
+All endpoints under `/gateway/v1` require a JWT with `role=admin`.
 
 **Register a route:**
 
@@ -205,21 +173,17 @@ curl -X POST http://gateway:8000/gateway/v1/routes \
     "auth_mode":    "required",
     "strip_prefix": false
   }'
+# → { "success": true, "data": { "id": "<uuid>" } }
 ```
 
-Response:
-```json
-{ "success": true, "data": { "id": "uuid-of-new-route" } }
-```
-
-**List all routes:**
+**List routes:**
 
 ```bash
 curl http://gateway:8000/gateway/v1/routes \
   -H "Authorization: Bearer <admin-token>"
 ```
 
-**Update a route** (e.g., change auth_mode):
+**Update a route:**
 
 ```bash
 curl -X PUT http://gateway:8000/gateway/v1/routes/<id> \
@@ -228,19 +192,18 @@ curl -X PUT http://gateway:8000/gateway/v1/routes/<id> \
   -d '{ "auth_mode": "method_split" }'
 ```
 
-**Disable a route** (soft delete — sets `enabled=false`):
+**Disable a route** (soft-delete, sets `enabled=false`):
 
 ```bash
 curl -X DELETE http://gateway:8000/gateway/v1/routes/<id> \
   -H "Authorization: Bearer <admin-token>"
 ```
 
-Route changes take effect **instantly** — the gateway receives a Postgres LISTEN/NOTIFY
-event and rebuilds its router within milliseconds. No restart required.
+Route changes take effect instantly — no gateway restart needed.
 
 ### Option B — SQL migration (CI/CD pipeline)
 
-For reproducible deployments, add the route registration to the gateway's migration files:
+Add the route to the gateway's migration files for reproducible deployments:
 
 ```sql
 -- services/api-gateway/migrations/0002_add_my_service.up.sql
@@ -262,18 +225,15 @@ route is registered before the first request is served.
 ## Step-by-step checklist: onboarding a new service
 
 ```
-□ 1. Choose a logical service name (matches services/ directory)
-□ 2. Decide path prefix(es) and auth mode for each one
-□ 3. Add redis heartbeat call to your service's main.go
-□ 4. Add registry.PublishManifest call to your service's main.go
-□ 5. Add your service's static fallback URL to the gateway's env:
+□ 1. Confirm your service exposes GET /v1/docs/swagger.json
+□ 2. Add registry.Heartbeat(...) call to your service's main.go (see Step 2 above)
+□ 3. Add your service's static fallback URL to the gateway's env and StaticRegistry:
        MY_NEW_SERVICE_HTTP_URL=http://zapmarket-my-new-service:PORT
-     and add it to the StaticRegistry map in services/api-gateway/main.go
-□ 6. Add the docker-compose service block with REDIS_URL env var
-□ 7. (Dev) Start services → auto-bind registers routes within 15 s
+□ 4. Add the service to docker-compose with REDIS_URL env var set
+□ 5. (Dev)  Start services → auto-bind fires within 15 s, routes appear in gateway logs
    (Prod) Register routes via Admin API or SQL migration before deploy
-□ 8. Verify: curl http://gateway:8000/v1/my-resource → correct upstream response
-□ 9. Check gateway logs for "routes refreshed count=N" with the new total
+□ 6. Verify: curl http://gateway:8000/v1/my-resource → response from your service
+□ 7. If auth_mode was wrong: update via Admin API, no restart needed
 ```
 
 ---
@@ -284,26 +244,26 @@ The gateway injects these headers on every proxied request:
 
 | Header | Value | Set when |
 |---|---|---|
-| `X-Request-ID` | UUID generated at gateway edge | Always |
-| `X-User-ID` | Authenticated user's UUID | `auth_mode` is `required` or `method_split` (write methods) |
-| `X-User-Email` | Authenticated user's email | Same as above |
-| `X-User-Role` | Authenticated user's role (`buyer`, `seller`, `admin`) | Same as above |
+| `X-Request-ID` | UUID generated at the gateway edge | Always |
+| `X-User-ID` | Authenticated user's UUID | `auth_mode` is `required` or `method_split` write methods |
+| `X-User-Email` | Authenticated user's email | Same |
+| `X-User-Role` | Authenticated user's role (`buyer`, `seller`, `admin`) | Same |
 
-Your service can trust these headers without re-validating the JWT. Do not expose your
-service's port directly to clients in production — traffic must come through the gateway.
+Your service can trust these headers without re-validating the JWT. **Do not expose your
+service's port directly to clients in production** — all traffic must come through the
+gateway.
 
 ---
 
 ## Circuit breaker behaviour
 
-The gateway wraps each upstream with a circuit breaker (Sony gobreaker):
+Each upstream has a circuit breaker (Sony gobreaker v2):
 
-- Opens after **5 consecutive 5xx responses** from a single upstream name.
-- Stays open for **10 seconds**, then enters half-open (lets 5 probe requests through).
-- When open: requests to that upstream return `503 CIRCUIT_OPEN` immediately, without
-  hitting your service.
+- Opens after **5 consecutive 5xx responses**.
+- Stays open for **10 seconds**, then enters half-open (allows 5 probe requests).
+- While open: requests return `503 CIRCUIT_OPEN` immediately without hitting your service.
 
-Monitor circuit breaker state changes in the gateway logs:
+State changes appear in gateway logs:
 
 ```
 level=WARN msg="circuit breaker state change"
@@ -314,29 +274,28 @@ level=WARN msg="circuit breaker state change"
 
 ## Redis key reference
 
-| Key | TTL | Purpose |
+| Key pattern | TTL | Written by |
 |---|---|---|
-| `svc:registry:{name}:{instance-id}` | 30s | Live instance heartbeat |
-| `svc:manifest:{name}` | 60s | Route manifest for auto-bind |
-| `ratelimit:ip:{ip}` | 60s | Per-IP rate limit counter |
-| `ratelimit:user:{user-id}` | 60s | Per-user rate limit counter |
+| `svc:registry:{name}:{instance-id}` | 30 s | Each service's `registry.Heartbeat()` |
+| `ratelimit:ip:{ip}` | 60 s | Gateway rate limiter |
+| `ratelimit:user:{user-id}` | 60 s | Gateway rate limiter |
 
 ---
 
 ## Audit log
 
 Every auth rejection, rate-limit hit, circuit-open event, and route conflict is written
-to `gateway_audit_log` in the `apigateway` database. Query via the Admin API:
+to `gateway_audit_log`. Query via the Admin API:
 
 ```bash
-# Last 50 auth rejections for a specific user
-curl "http://gateway:8000/gateway/v1/audit?event=AUTH_REJECTED&user_id=<uuid>&limit=50" \
+# Last 50 auth rejections
+curl "http://gateway:8000/gateway/v1/audit?event=AUTH_REJECTED&limit=50" \
   -H "Authorization: Bearer <admin-token>"
 
-# All rate-limit hits in the last hour
-curl "http://gateway:8000/gateway/v1/audit?event=RATE_LIMITED&from=2026-06-17T12:00:00Z" \
+# Rate-limit hits for a specific user
+curl "http://gateway:8000/gateway/v1/audit?event=RATE_LIMITED&user_id=<uuid>" \
   -H "Authorization: Bearer <admin-token>"
 ```
 
-Available event types: `AUTH_REJECTED`, `RATE_LIMITED`, `UPSTREAM_5XX`, `CIRCUIT_OPEN`,
+Event types: `AUTH_REJECTED`, `RATE_LIMITED`, `UPSTREAM_5XX`, `CIRCUIT_OPEN`,
 `ROUTE_CONFLICT`.

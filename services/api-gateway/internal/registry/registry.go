@@ -13,7 +13,6 @@ import (
 
 const (
 	registryKeyPrefix = "svc:registry:"
-	manifestKeyPrefix = "svc:manifest:"
 	heartbeatTTL      = 30 * time.Second
 	heartbeatInterval = 10 * time.Second
 )
@@ -23,19 +22,6 @@ type Instance struct {
 	Addr       string    `json:"addr"`
 	InstanceID string    `json:"instance_id"`
 	StartedAt  time.Time `json:"started_at"`
-}
-
-// Manifest is what a service declares about itself on startup.
-type Manifest struct {
-	Service string          `json:"service"`
-	Version string          `json:"version"`
-	Routes  []ManifestRoute `json:"routes"`
-}
-
-type ManifestRoute struct {
-	PathPrefix  string `json:"path_prefix"`
-	AuthMode    string `json:"auth_mode"`
-	StripPrefix bool   `json:"strip_prefix"`
 }
 
 // ServiceRegistry is the interface the gateway uses to resolve upstream addresses.
@@ -146,13 +132,3 @@ func Heartbeat(ctx context.Context, rdb *goredis.Client, serviceName, instanceID
 	}
 }
 
-// PublishManifest writes the service manifest to Redis.
-// The gateway's auto-bind watcher reads these keys to auto-register routes.
-func PublishManifest(ctx context.Context, rdb *goredis.Client, m Manifest) error {
-	data, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	key := manifestKeyPrefix + m.Service
-	return rdb.Set(ctx, key, data, 60*time.Second).Err()
-}
