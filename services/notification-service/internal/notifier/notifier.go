@@ -1,0 +1,16 @@
+package notifier
+
+import "context"
+
+// Notification holds the data needed to dispatch a user-facing message.
+type Notification struct {
+	UserID    string
+	EventType string
+	Subject   string
+	Body      string
+}
+
+// Notifier sends notifications to users via some channel (email, SMS, push).
+type Notifier interface {
+	Send(ctx context.Context, n Notification) error
+}

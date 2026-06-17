@@ -27,6 +27,7 @@ import (
 
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/database"
+	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
@@ -34,6 +35,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
 	httphandler "github.com/zapmarket/zapmarket/services/order-management-service/internal/handler/http"
 	authmw "github.com/zapmarket/zapmarket/services/order-management-service/internal/middleware"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/relay"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/service"
 )
@@ -124,9 +126,17 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// ── Outbox relay ─────────────────────────────────────────────────────────
+	orderProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, "orders")
+	outboxRelay := relay.New(db, orderProducer, "orders", log)
+
 	// ── Start / shutdown ──────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	relayCtx, relayCancel := context.WithCancel(context.Background())
+	go outboxRelay.Run(relayCtx)
+	log.Info("outbox relay started", "brokers", cfg.KafkaBrokers)
 
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)
@@ -136,6 +146,7 @@ func main() {
 	}()
 
 	<-quit
+	relayCancel()
 	log.Info("shutting down server")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -144,6 +155,7 @@ func main() {
 	if err := httpServer.Shutdown(ctx); err != nil {
 		log.Error("HTTP server shutdown error", "error", err)
 	}
+	_ = orderProducer.Close()
 
 	log.Info("server stopped")
 }

@@ -33,3 +33,5 @@ use ./pkg/proto
 use ./pkg/storage
 
 use ./pkg/swaggerx
+
+use ./pkg/kafka

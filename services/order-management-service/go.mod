@@ -13,6 +13,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/database v0.0.0
 	github.com/zapmarket/zapmarket/pkg/errors v0.0.0
 	github.com/zapmarket/zapmarket/pkg/httpx v0.0.0
+	github.com/zapmarket/zapmarket/pkg/kafka v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
@@ -35,6 +36,9 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.18.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/klauspost/compress v1.15.11 // indirect
+	github.com/pierrec/lz4/v4 v4.1.21 // indirect
+	github.com/segmentio/kafka-go v0.4.47 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
@@ -53,6 +57,7 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/database => ../../pkg/database
 	github.com/zapmarket/zapmarket/pkg/errors => ../../pkg/errors
 	github.com/zapmarket/zapmarket/pkg/httpx => ../../pkg/httpx
+	github.com/zapmarket/zapmarket/pkg/kafka => ../../pkg/kafka
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
 	github.com/zapmarket/zapmarket/pkg/migrate => ../../pkg/migrate
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto

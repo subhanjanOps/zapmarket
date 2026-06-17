@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all service configuration
@@ -53,6 +54,9 @@ type Config struct {
 	// webhook callbacks (HMAC-SHA256 over the raw request body). Only
 	// payment-service uses this.
 	PaymentWebhookSecret string
+
+	// Kafka
+	KafkaBrokers []string
 
 	// Downstream services
 	AuthServiceAddr      string
@@ -112,6 +116,9 @@ func Load() (*Config, error) {
 
 		PaymentWebhookSecret: getEnv("PAYMENT_WEBHOOK_SECRET", "your-webhook-secret-change-in-production"),
 
+		// Kafka
+		KafkaBrokers: getEnvStringSlice("KAFKA_BROKERS", []string{"localhost:29092"}),
+
 		// Downstream services
 		AuthServiceAddr:      getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),
 		InventoryServiceAddr: getEnv("INVENTORY_SERVICE_ADDR", "localhost:50053"),
@@ -163,6 +170,14 @@ func getEnvBool(key string, defaultValue bool) bool {
 		if boolVal, err := strconv.ParseBool(value); err == nil {
 			return boolVal
 		}
+	}
+	return defaultValue
+}
+
+// getEnvStringSlice splits a comma-separated env var into a slice.
+func getEnvStringSlice(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		return strings.Split(value, ",")
 	}
 	return defaultValue
 }

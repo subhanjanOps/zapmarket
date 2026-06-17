@@ -1,49 +1,49 @@
 services:
-  # zookeeper:
-  #   image: bitnami/zookeeper:latest
-  #   container_name: zapmarket-zookeeper
-  #   environment:
-  #     - ALLOW_ANONYMOUS_LOGIN=yes
-  #   ports:
-  #     - 2181:2181
-  #   networks:
-  #     - zapnet
-  #   volumes:
-  #     - zookeeper-data:/bitnami/zookeeper
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: zapmarket-kafka
+    environment:
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports:
+      - 9092:9092
+      - 29092:29092
+    networks:
+      - zapnet
+    volumes:
+      - kafka-data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
-  # kafka:
-  #   image: bitnami/kafka:latest
-  #   container_name: zapmarket-kafka
-  #   depends_on:
-  #     - zookeeper
-  #   environment:
-  #     - KAFKA_BROKER_ID=1
-  #     - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
-  #     - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-  #     - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-  #     - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-  #     - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
-  #     - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-  #     - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-  #     - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
-  #   ports:
-  #     - 9092:9092
-  #     - 29092:29092
-  #   networks:
-  #     - zapnet
-  #     - frontend
-  #   volumes:
-  #     - kafka-data:/bitnami/kafka
-
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: zapmarket-redis
-  #   ports:
-  #     - 6379:6379
-  #   networks:
-  #     - zapnet
-  #   volumes:
-  #     - redis-data:/data
+  redis:
+    image: redis:7-alpine
+    container_name: zapmarket-redis
+    ports:
+      - 6379:6379
+    networks:
+      - zapnet
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio:latest
@@ -148,6 +148,59 @@ services:
     ports:
       - "8081:8081"
       - "50052:50052"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  order-management-service:
+    build:
+      context: .
+      dockerfile: services/order-management-service/Dockerfile
+    container_name: zapmarket-order-management-service
+    depends_on:
+      postgres:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=orders
+      - AUTH_SERVICE_ADDR=zapmarket-auth-service:50051
+      - INVENTORY_SERVICE_ADDR=zapmarket-inventory-service:50053
+      - PAYMENT_SERVICE_ADDR=zapmarket-payment-service:50054
+      - KAFKA_BROKERS=kafka:9092
+      - REDIS_URL=zapmarket-redis:6379
+      - HTTP_PORT=8084
+      - APP_ENV=development
+    ports:
+      - "8084:8084"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    container_name: zapmarket-notification-service
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - REDIS_URL=zapmarket-redis:6379
+      - APP_ENV=development
+    ports:
+      - "8085:8085"
     networks:
       - zapnet
     restart: unless-stopped
@@ -269,7 +322,6 @@ networks:
   frontend:
 
 volumes:
-  zookeeper-data:
   kafka-data:
   redis-data:
   minio-data:
