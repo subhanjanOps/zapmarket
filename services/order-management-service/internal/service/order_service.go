@@ -130,7 +130,7 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 	if err != nil {
 		s.logger.Error("payment ChargeCard error", "order_id", order.ID, "error", err)
 		s.compensate(ctx, order.ID, domainItems)
-		cancelPayload, _ := json.Marshal(map[string]string{"order_id": order.ID.String(), "reason": "payment_error"})
+		cancelPayload, _ := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_error"})
 		_ = s.repo.MarkCancelled(ctx, order.ID, cancelPayload)
 		return nil, pkgerrors.NewInternal("PAYMENT_ERROR", "payment service error", err)
 	}
@@ -139,7 +139,7 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 	if paymentStatus != "CAPTURED" {
 		s.logger.Info("payment not captured", "order_id", order.ID, "payment_status", paymentStatus)
 		s.compensate(ctx, order.ID, domainItems)
-		cancelPayload, _ := json.Marshal(map[string]string{"order_id": order.ID.String(), "reason": "payment_failed", "payment_status": paymentStatus})
+		cancelPayload, _ := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_failed", "payment_status": paymentStatus})
 		_ = s.repo.MarkCancelled(ctx, order.ID, cancelPayload)
 		return nil, pkgerrors.NewConflict("PAYMENT_FAILED", "payment was not captured (status: "+paymentStatus+")")
 	}

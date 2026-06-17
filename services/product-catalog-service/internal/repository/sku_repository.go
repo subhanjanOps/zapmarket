@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -44,13 +45,18 @@ func (sr *SkuRepository) CreateSku(
 		)
 	`
 
-	_, err := sr.db.ExecContext(
+	variantAttrs, err := json.Marshal(sku.VariantAttrs)
+	if err != nil {
+		return pkgerrors.NewValidation("INVALID_DATA", "variant_attrs must be valid JSON")
+	}
+
+	_, err = sr.db.ExecContext(
 		ctx,
 		query,
 		sku.ID,
 		sku.ProductID,
 		sku.SKUCode,
-		sku.VariantAttrs,
+		variantAttrs,
 		sku.PriceAmount,
 		sku.ComparePrice,
 		sku.Currency,

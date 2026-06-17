@@ -91,7 +91,32 @@
       "Bash(PGPASSWORD=zappass123 psql *)",
       "PowerShell(docker exec zapmarket-postgres *)",
       "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8080/health\" -ErrorAction SilentlyContinue | ConvertTo-Json)",
-      "PowerShell(swag *)"
+      "PowerShell(swag *)",
+      "Bash(docker pull *)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/order-management-service/**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/inventory-service/**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/payment-service/**)",
+      "Bash(echo \"auth-service PID: $!\")",
+      "Bash(echo \"inventory PID: $!\")",
+      "Bash(taskkill //F //PID 15016)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/inventory-service/migrations//**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/payment-service/migrations//**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/product-catalog-service/migrations//**)",
+      "Bash(MIGRATE_ON_BOOT=false go run .)",
+      "Bash(DB_NAME=inventory HTTP_PORT=8082 GRPC_PORT=50053 MIGRATE_ON_BOOT=false go run .)",
+      "Bash(KAFKA_BROKERS=localhost:29092 go run .)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\([p for p in d.get\\('paths',{}\\).keys\\(\\)][:10]\\)\")",
+      "Bash(xargs grep -l \"RegisterRequest\\\\|register\")",
+      "Read(//proc/sys/kernel/random/**)",
+      "Bash(python -c \"import uuid; print\\(uuid.uuid4\\(\\)\\)\")",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/notification-service/**)",
+      "Bash(KAFKA_BROKERS=localhost:29092 REDIS_URL=localhost:6379 go run .)",
+      "Bash(docker run *)",
+      "Bash(docker exec *)",
+      "Bash(taskkill //F //PID 32332)",
+      "Bash(taskkill //F //PID 29024)",
+      "Bash(taskkill //F //PID 30740)",
+      "Bash(docker stop *)"
     ]
   }
 }

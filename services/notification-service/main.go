@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
@@ -40,9 +41,6 @@ func main() {
 	// ── Notifier ──────────────────────────────────────────────────────────────
 	n := notifier.NewLogNotifier(log)
 
-	// ── Kafka consumer ────────────────────────────────────────────────────────
-	orderConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, "orders", "notification-service")
-	defer orderConsumer.Close()
 	log.Info("kafka consumer ready", "brokers", cfg.KafkaBrokers, "topic", "orders")
 
 	handler := consumer.New(n, rdb, log)
@@ -71,9 +69,22 @@ func main() {
 	}()
 
 	log.Info("notification service started, consuming events")
-	if err := orderConsumer.Run(ctx, handler.Handle); err != nil {
-		log.Error("consumer exited with error", "error", err)
-		os.Exit(1)
+	for {
+		if ctx.Err() != nil {
+			break
+		}
+		c := pkgkafka.NewConsumer(cfg.KafkaBrokers, "orders", "notification-service")
+		if err := c.Run(ctx, handler.Handle); err != nil {
+			_ = c.Close()
+			log.Error("consumer error, retrying in 5s", "error", err)
+			select {
+			case <-ctx.Done():
+			case <-time.After(5 * time.Second):
+			}
+			continue
+		}
+		_ = c.Close()
+		break
 	}
 
 	log.Info("notification service stopped")
