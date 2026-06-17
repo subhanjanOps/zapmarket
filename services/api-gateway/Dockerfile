@@ -22,6 +22,7 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /app/api-gateway /app/api-gateway
+COPY --from=builder /workspace/services/api-gateway/migrations /app/migrations
 
 EXPOSE 8000
 

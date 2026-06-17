@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -69,6 +70,33 @@ func (r *RedisRegistry) Instances(ctx context.Context, name string) ([]Instance,
 		instances = append(instances, inst)
 	}
 	return instances, nil
+}
+
+// AllInstances returns every live instance grouped by service name.
+func (r *RedisRegistry) AllInstances(ctx context.Context) (map[string][]Instance, error) {
+	keys, err := r.rdb.Keys(ctx, registryKeyPrefix+"*").Result()
+	if err != nil {
+		return nil, fmt.Errorf("registry scan: %w", err)
+	}
+	result := make(map[string][]Instance)
+	for _, k := range keys {
+		// key: svc:registry:{service}:{instance}
+		parts := strings.SplitN(strings.TrimPrefix(k, registryKeyPrefix), ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		svc := parts[0]
+		raw, err := r.rdb.Get(ctx, k).Bytes()
+		if err != nil {
+			continue
+		}
+		var inst Instance
+		if err := json.Unmarshal(raw, &inst); err != nil {
+			continue
+		}
+		result[svc] = append(result[svc], inst)
+	}
+	return result, nil
 }
 
 // Pick returns the next instance for the named service using round-robin.

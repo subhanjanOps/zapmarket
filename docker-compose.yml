@@ -212,9 +212,28 @@ services:
       - CATALOG_SERVICE_HTTP_URL=http://zapmarket-product-catalog-service:8081
       - ORDER_SERVICE_HTTP_URL=http://zapmarket-order-management-service:8084
       - GATEWAY_AUTO_BIND=true
+      - ADMIN_UI_ORIGIN=http://localhost:3001
       - APP_ENV=development
     ports:
       - "8000:8000"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  admin-ui:
+    build:
+      context: ./services/admin-ui
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_GATEWAY_URL=http://localhost:8000
+    container_name: zapmarket-admin-ui
+    depends_on:
+      - api-gateway
+    environment:
+      - PORT=3001
+      - HOSTNAME=0.0.0.0
+    ports:
+      - "3001:3001"
     networks:
       - zapnet
     restart: unless-stopped
@@ -326,6 +345,12 @@ services:
       - 5432:5432
     networks:
       - zapnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zapuser -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro

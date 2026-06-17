@@ -160,7 +160,13 @@
       "PowerShell(Stop-Process *)",
       "Read(//c/Users/subha/Downloads/Projects/zapMarket/**)",
       "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/api-gateway//**)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/**)",
+      "Bash(npx create-next-app@latest admin-ui --typescript --tailwind --eslint --app --no-src-dir --import-alias @/* --no-turbopack)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/admin-ui/**)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "PowerShell(docker exec *)"
     ]
   }
 }

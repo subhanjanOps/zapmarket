@@ -128,10 +128,13 @@ func main() {
 	}
 
 	// ── Router builder (called on every route reload) ──────────────────────
+	adminUIOrigin := envOrDefault("ADMIN_UI_ORIGIN", "http://localhost:3001")
+
 	buildRouter := func() http.Handler {
 		r := chi.NewRouter()
 		r.Use(chimw.Recoverer)
 		r.Use(gw.RequestID)
+		r.Use(corsMiddleware(adminUIOrigin))
 		r.Use(rl.Limit)
 
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +143,7 @@ func main() {
 		})
 
 		// Admin API — requires admin JWT.
-		adminHandler := admin.NewHandler(db)
+		adminHandler := admin.NewHandler(db, redisReg)
 		r.Route("/gateway/v1", func(r chi.Router) {
 			r.Use(authMW.Authenticate)
 			r.Use(admin.RequireAdmin)
@@ -285,4 +288,37 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if originAllowed(origin, allowedOrigin) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, Idempotency-Key")
+				w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
+				w.Header().Set("Access-Control-Max-Age", "3600")
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// originAllowed returns true when the request origin matches the configured
+// allowed origin, or when the origin is any localhost/127.0.0.1 port (useful
+// during local development where the port may vary).
+func originAllowed(origin, allowed string) bool {
+	if origin == allowed {
+		return true
+	}
+	// Allow any localhost origin so http://localhost:3001 and
+	// http://127.0.0.1:3001 both work without exact-match fragility.
+	return strings.HasPrefix(origin, "http://localhost:") ||
+		strings.HasPrefix(origin, "http://127.0.0.1:")
 }

@@ -9,16 +9,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	gw "github.com/zapmarket/zapmarket/services/api-gateway/internal/middleware"
+	"github.com/zapmarket/zapmarket/services/api-gateway/internal/registry"
 )
 
 // Handler exposes the gateway admin API.
 // All endpoints require role=admin in the JWT (enforced by the caller via authMW.RequireRole).
 type Handler struct {
-	db *sql.DB
+	db  *sql.DB
+	reg *registry.RedisRegistry
 }
 
-func NewHandler(db *sql.DB) *Handler {
-	return &Handler{db: db}
+func NewHandler(db *sql.DB, reg *registry.RedisRegistry) *Handler {
+	return &Handler{db: db, reg: reg}
 }
 
 // Mount registers admin routes onto r. authMW.Authenticate + RequireRole("admin")
@@ -29,6 +31,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Put("/routes/{id}", h.updateRoute)
 	r.Delete("/routes/{id}", h.deleteRoute)
 	r.Get("/audit", h.queryAudit)
+	r.Get("/registry", h.listRegistry)
 }
 
 type routeRow struct {
@@ -250,6 +253,33 @@ func (h *Handler) queryAudit(w http.ResponseWriter, r *http.Request) {
 		result = append(result, row)
 	}
 	jsonOK(w, map[string]any{"entries": result, "count": len(result)})
+}
+
+type instanceEntry struct {
+	Service    string    `json:"service"`
+	InstanceID string    `json:"instance_id"`
+	Addr       string    `json:"addr"`
+	StartedAt  time.Time `json:"started_at"`
+}
+
+func (h *Handler) listRegistry(w http.ResponseWriter, r *http.Request) {
+	services, err := h.reg.AllInstances(r.Context())
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "REGISTRY_ERROR", err.Error())
+		return
+	}
+	var entries []instanceEntry
+	for svc, insts := range services {
+		for _, inst := range insts {
+			entries = append(entries, instanceEntry{
+				Service:    svc,
+				InstanceID: inst.InstanceID,
+				Addr:       inst.Addr,
+				StartedAt:  inst.StartedAt,
+			})
+		}
+	}
+	jsonOK(w, map[string]any{"instances": entries, "count": len(entries)})
 }
 
 func jsonOK(w http.ResponseWriter, v any) {
