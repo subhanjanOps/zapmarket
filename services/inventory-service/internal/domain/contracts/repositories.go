@@ -46,4 +46,8 @@ type InventoryRepository interface {
 	// warehouse. Returns pkgerrors.NotFound if no stock has ever been
 	// added for this SKU.
 	GetStock(ctx context.Context, skuID uuid.UUID) (*domain.Inventory, error)
+
+	// GetReservationDetails returns the sku_id and qty for a reservation.
+	// Used by ReleaseStock to know how much to add back to the Redis counter.
+	GetReservationDetails(ctx context.Context, reservationID uuid.UUID) (skuID uuid.UUID, qty int, err error)
 }

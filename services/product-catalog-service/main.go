@@ -24,6 +24,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	goredis "github.com/redis/go-redis/v9"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"google.golang.org/grpc/reflection"
 
@@ -86,6 +87,16 @@ func main() {
 	}
 	log.Info("connected to object storage", "endpoint", cfg.MinIOEndpoint, "bucket", cfg.MinIOBucket)
 
+	// ── Redis ─────────────────────────────────────────────────────────────────
+	rdb := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Warn("Redis unavailable — product cache disabled", "addr", cfg.RedisURL, "error", err)
+		rdb = nil
+	} else {
+		defer rdb.Close()
+		log.Info("connected to Redis", "addr", cfg.RedisURL)
+	}
+
 	// ── Repositories ───────────────────────────────────────────────────────────
 	categoryRepo := repository.NewCategoryRepository(db)
 	productRepo := repository.NewProductRepository(db)
@@ -95,6 +106,9 @@ func main() {
 	// ── Services ───────────────────────────────────────────────────────────────
 	categorySvc := service.NewCategoryService(categoryRepo, log)
 	productSvc := service.NewProductService(productRepo, log)
+	if rdb != nil {
+		productSvc = service.NewCachedProductService(productSvc, rdb, log)
+	}
 	skuSvc := service.NewSKUService(skuRepo, log)
 	imageSvc := service.NewProductImageService(imageRepo, objectStorage, log)
 

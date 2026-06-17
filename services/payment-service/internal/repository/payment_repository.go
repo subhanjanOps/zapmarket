@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	"github.com/google/uuid"
@@ -66,26 +67,48 @@ func (r *PaymentRepository) MarkCaptured(ctx context.Context, paymentID uuid.UUI
 				return err
 			}
 		}
-		return nil
+
+		// Fetch order_id for the outbox payload.
+		var orderID, userID uuid.UUID
+		if err := tx.QueryRowContext(ctx, `SELECT order_id, user_id FROM payments WHERE id = $1`, paymentID).Scan(&orderID, &userID); err != nil {
+			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch payment for outbox", err)
+		}
+		payload, _ := json.Marshal(map[string]string{
+			"payment_id": paymentID.String(), "order_id": orderID.String(),
+			"user_id": userID.String(), "gateway_txn_id": gatewayTxnID,
+			"status": "CAPTURED",
+		})
+		return insertOutboxRow(ctx, tx, paymentID, "payment", "payment.processed", payload)
 	})
 }
 
 func (r *PaymentRepository) MarkFailed(ctx context.Context, paymentID uuid.UUID, reason string) error {
-	result, err := r.db.ExecContext(ctx, `
-		UPDATE payments
-		SET status = 'FAILED',
-			failure_reason = $2,
-			updated_at = NOW()
-		WHERE id = $1
-			AND deleted_at IS NULL
-	`, paymentID, reason)
-	if err != nil {
-		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to mark payment failed", err)
-	}
-	if n, _ := result.RowsAffected(); n == 0 {
-		return pkgerrors.NewNotFound("PAYMENT_NOT_FOUND", "payment not found")
-	}
-	return nil
+	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `
+			UPDATE payments
+			SET status = 'FAILED',
+				failure_reason = $2,
+				updated_at = NOW()
+			WHERE id = $1
+				AND deleted_at IS NULL
+		`, paymentID, reason)
+		if err != nil {
+			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to mark payment failed", err)
+		}
+		if n, _ := result.RowsAffected(); n == 0 {
+			return pkgerrors.NewNotFound("PAYMENT_NOT_FOUND", "payment not found")
+		}
+
+		var orderID, userID uuid.UUID
+		if err := tx.QueryRowContext(ctx, `SELECT order_id, user_id FROM payments WHERE id = $1`, paymentID).Scan(&orderID, &userID); err != nil {
+			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch payment for outbox", err)
+		}
+		payload, _ := json.Marshal(map[string]string{
+			"payment_id": paymentID.String(), "order_id": orderID.String(),
+			"user_id": userID.String(), "reason": reason, "status": "FAILED",
+		})
+		return insertOutboxRow(ctx, tx, paymentID, "payment", "payment.failed", payload)
+	})
 }
 
 func (r *PaymentRepository) CreateRefund(ctx context.Context, refund *domain.Refund, newPaymentStatus domain.PaymentStatus, entries []*domain.LedgerEntry) error {
@@ -143,6 +166,17 @@ func scanPayment(row *sql.Row) (*domain.Payment, error) {
 	}
 
 	return p, nil
+}
+
+func insertOutboxRow(ctx context.Context, tx *sql.Tx, aggregateID uuid.UUID, aggregateType, eventType string, payload []byte) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO outbox (aggregate_id, aggregate_type, event_type, payload)
+		VALUES ($1, $2, $3, $4)
+	`, aggregateID, aggregateType, eventType, payload)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to write outbox row", err)
+	}
+	return nil
 }
 
 func insertLedgerEntry(ctx context.Context, tx *sql.Tx, paymentID uuid.UUID, e *domain.LedgerEntry) error {

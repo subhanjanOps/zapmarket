@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/crypto"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
@@ -19,6 +21,7 @@ type AuthService struct {
 	oauthRepo contracts.OAuthRepository
 	tokenRepo contracts.RefreshTokenRepository
 	cfg       *config.Config
+	rdb       *goredis.Client // nil if Redis unavailable
 }
 
 // NewAuthService creates a new auth service
@@ -128,6 +131,14 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshTokenString
 
 // ValidateAccessToken verifies an access token and returns the user
 func (s *AuthService) ValidateAccessToken(ctx context.Context, tokenString string) (*domain.User, error) {
+	// Check Redis blacklist first (logout / token revocation).
+	if s.rdb != nil {
+		key := fmt.Sprintf("auth:blacklist:%x", sha256.Sum256([]byte(tokenString)))
+		if exists, _ := s.rdb.Exists(ctx, key).Result(); exists > 0 {
+			return nil, pkgerrors.NewUnauthorized("INVALID_TOKEN", "token has been revoked")
+		}
+	}
+
 	claims, err := crypto.ValidateAccessToken(tokenString, s.cfg.JWTSecretKey)
 	if err != nil {
 		return nil, pkgerrors.NewUnauthorized("INVALID_TOKEN", "invalid or expired token")
@@ -145,10 +156,36 @@ func (s *AuthService) ValidateAccessToken(ctx context.Context, tokenString strin
 	return user, nil
 }
 
-// Logout revokes all refresh tokens for a user
-func (s *AuthService) Logout(ctx context.Context, userID uuid.UUID) error {
-	return s.tokenRepo.InvalidateUserTokens(ctx, userID)
+// Logout revokes all refresh tokens for a user and blacklists the current
+// access token so it cannot be used before it naturally expires.
+func (s *AuthService) Logout(ctx context.Context, userID uuid.UUID, accessToken string) error {
+	if err := s.tokenRepo.InvalidateUserTokens(ctx, userID); err != nil {
+		return err
+	}
+	if accessToken != "" {
+		claims, err := crypto.ValidateAccessToken(accessToken, s.cfg.JWTSecretKey)
+		if err == nil {
+			ttl := time.Until(time.Unix(claims.ExpiresAt, 0))
+			if ttl > 0 {
+				s.BlacklistToken(ctx, accessToken, ttl)
+			}
+		}
+	}
+	return nil
 }
+
+// BlacklistToken adds a token to the Redis blacklist with the given TTL.
+// If Redis is unavailable, the call is a no-op (short-lived tokens expire naturally).
+func (s *AuthService) BlacklistToken(ctx context.Context, tokenString string, ttl time.Duration) {
+	if s.rdb == nil {
+		return
+	}
+	key := fmt.Sprintf("auth:blacklist:%x", sha256.Sum256([]byte(tokenString)))
+	_ = s.rdb.Set(ctx, key, 1, ttl).Err()
+}
+
+// SetRedis injects a Redis client into the service after construction.
+func (s *AuthService) SetRedis(rdb *goredis.Client) { s.rdb = rdb }
 
 // generateRefreshToken creates and stores a refresh token
 func (s *AuthService) generateRefreshToken(ctx context.Context, userID uuid.UUID) (*domain.RefreshToken, error) {

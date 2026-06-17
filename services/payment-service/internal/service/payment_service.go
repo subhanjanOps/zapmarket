@@ -2,14 +2,20 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
+	goredis "github.com/redis/go-redis/v9"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain/contracts"
 )
+
+const paymentIdempotencyTTL = 24 * time.Hour
 
 // PaymentService defines the interface for payment operations.
 type PaymentService interface {
@@ -31,11 +37,16 @@ type PaymentService interface {
 type paymentService struct {
 	repo    contracts.PaymentRepository
 	gateway contracts.PaymentGateway
+	rdb     *goredis.Client
 	logger  *slog.Logger
 }
 
-func NewPaymentService(repo contracts.PaymentRepository, gateway contracts.PaymentGateway, logger *slog.Logger) PaymentService {
-	return &paymentService{repo: repo, gateway: gateway, logger: logger}
+func NewPaymentService(repo contracts.PaymentRepository, gateway contracts.PaymentGateway, rdb *goredis.Client, logger *slog.Logger) PaymentService {
+	return &paymentService{repo: repo, gateway: gateway, rdb: rdb, logger: logger}
+}
+
+func paymentIdempKey(key uuid.UUID) string {
+	return fmt.Sprintf("payment:idem:%s", key)
 }
 
 func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (*domain.Payment, error) {
@@ -55,9 +66,23 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "idempotency_key is required")
 	}
 
+	// Redis-first idempotency check (24h TTL).
+	cacheKey := paymentIdempKey(idempotencyKey)
+	if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var p domain.Payment
+		if json.Unmarshal(cached, &p) == nil {
+			s.logger.Info("idempotent replay from cache", "payment_id", p.ID)
+			return &p, nil
+		}
+	}
+
+	// DB fallback.
 	existing, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)
 	if err == nil {
-		s.logger.Info("idempotent replay, returning existing payment", "payment_id", existing.ID, "status", existing.Status)
+		s.logger.Info("idempotent replay from db", "payment_id", existing.ID, "status", existing.Status)
+		if b, err := json.Marshal(existing); err == nil {
+			_ = s.rdb.Set(ctx, cacheKey, b, paymentIdempotencyTTL).Err()
+		}
 		return existing, nil
 	}
 	var appErr *pkgerrors.AppError
@@ -89,6 +114,7 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		payment.Status = domain.PaymentFailed
 		reason := chargeErr.Error()
 		payment.FailureReason = &reason
+		// Don't cache failed payments — caller may retry with a real card.
 		return payment, nil
 	}
 
@@ -102,6 +128,11 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 
 	payment.Status = domain.PaymentCaptured
 	payment.GatewayTxnID = &result.GatewayTxnID
+
+	// Cache captured payment for 24h.
+	if b, err := json.Marshal(payment); err == nil {
+		_ = s.rdb.Set(ctx, cacheKey, b, paymentIdempotencyTTL).Err()
+	}
 	return payment, nil
 }
 

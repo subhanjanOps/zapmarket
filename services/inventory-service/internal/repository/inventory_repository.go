@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -101,7 +102,12 @@ func (r *InventoryRepository) ReserveStock(ctx context.Context, skuID, orderID u
 			Status:      domain.ReservationReserved,
 			ExpiresAt:   expiresAt,
 		}
-		return nil
+
+		payload, _ := json.Marshal(map[string]interface{}{
+			"reservation_id": id.String(), "sku_id": skuID.String(),
+			"order_id": orderID.String(), "qty": qty, "status": "RESERVED",
+		})
+		return insertOutboxRow(ctx, tx, id, "inventory", "inventory.reserved", payload)
 	})
 
 	return reservation, err
@@ -141,7 +147,14 @@ func (r *InventoryRepository) ReleaseStock(ctx context.Context, reservationID uu
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to release stock", err)
 		}
 
-		return insertLedgerEntry(ctx, tx, inventoryID, nil, domain.MovementReservationRelease, -qty, before, after, "")
+		if err := insertLedgerEntry(ctx, tx, inventoryID, nil, domain.MovementReservationRelease, -qty, before, after, ""); err != nil {
+			return err
+		}
+
+		payload, _ := json.Marshal(map[string]interface{}{
+			"reservation_id": reservationID.String(), "qty": qty, "status": "RELEASED",
+		})
+		return insertOutboxRow(ctx, tx, reservationID, "inventory", "inventory.released", payload)
 	})
 }
 
@@ -206,6 +219,32 @@ func (r *InventoryRepository) GetStock(ctx context.Context, skuID uuid.UUID) (*d
 	}
 
 	return inv, nil
+}
+
+func insertOutboxRow(ctx context.Context, tx *sql.Tx, aggregateID uuid.UUID, aggregateType, eventType string, payload []byte) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO outbox (aggregate_id, aggregate_type, event_type, payload)
+		VALUES ($1, $2, $3, $4)
+	`, aggregateID, aggregateType, eventType, payload)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to write outbox row", err)
+	}
+	return nil
+}
+
+func (r *InventoryRepository) GetReservationDetails(ctx context.Context, reservationID uuid.UUID) (uuid.UUID, int, error) {
+	var skuID uuid.UUID
+	var qty int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT sku_id, qty FROM inventory_reservations WHERE id = $1 AND deleted_at IS NULL
+	`, reservationID).Scan(&skuID, &qty)
+	if errors.Is(err, sql.ErrNoRows) {
+		return uuid.Nil, 0, pkgerrors.NewNotFound("RESERVATION_NOT_FOUND", "reservation not found")
+	}
+	if err != nil {
+		return uuid.Nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to get reservation details", err)
+	}
+	return skuID, qty, nil
 }
 
 // reservationNotFoundOrConflict distinguishes "this reservation id never

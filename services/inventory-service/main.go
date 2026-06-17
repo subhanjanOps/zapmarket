@@ -15,14 +15,17 @@ import (
 	_ "github.com/lib/pq"
 	"google.golang.org/grpc/reflection"
 
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
+	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	pb "github.com/zapmarket/zapmarket/pkg/proto/inventory"
 	grpchandler "github.com/zapmarket/zapmarket/services/inventory-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/inventory-service/internal/handler/http"
+	"github.com/zapmarket/zapmarket/services/inventory-service/internal/relay"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/service"
 )
@@ -54,9 +57,18 @@ func main() {
 		log.Info("migrations applied")
 	}
 
+	// ── Redis ─────────────────────────────────────────────────────────────────
+	rdb := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Error("failed to connect to Redis", "addr", cfg.RedisURL, "error", err)
+		os.Exit(1)
+	}
+	defer rdb.Close()
+	log.Info("connected to Redis", "addr", cfg.RedisURL)
+
 	// ── Repository / Service / gRPC handler ─────────────────────────────────────
 	repo := repository.NewInventoryRepository(db)
-	svc := service.NewInventoryService(repo, log)
+	svc := service.NewInventoryService(repo, rdb, log)
 	grpcHandler := grpchandler.NewInventoryGRPCHandler(svc)
 
 	// ── HTTP (health check only — no public REST API, see design.md) ───────────
@@ -82,9 +94,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Outbox relay ─────────────────────────────────────────────────────────
+	inventoryProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicInventory)
+	outboxRelay := relay.New(db, inventoryProducer, pkgkafka.TopicInventory, log)
+
 	// ── Start servers ────────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	relayCtx, relayCancel := context.WithCancel(context.Background())
+	go outboxRelay.Run(relayCtx)
+	log.Info("outbox relay started", "brokers", cfg.KafkaBrokers)
 
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)
@@ -101,6 +121,7 @@ func main() {
 	}()
 
 	<-quit
+	relayCancel()
 	log.Info("shutting down servers")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -110,6 +131,7 @@ func main() {
 		log.Error("HTTP server shutdown error", "error", err)
 	}
 	grpcServer.GracefulStop()
+	_ = inventoryProducer.Close()
 
 	log.Info("servers stopped")
 }

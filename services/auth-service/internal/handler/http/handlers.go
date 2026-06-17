@@ -428,6 +428,42 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Logout handles POST /auth/logout
+// @Summary Logout
+// @Description Revoke refresh tokens and blacklist the current access token
+// @Tags auth
+// @Security BearerAuth
+// @Success 200 {object} map[string]string "Logged out"
+// @Failure 401 {object} AuthResponse "Missing or invalid token"
+// @Router /v1/auth/logout [post]
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		h.writeError(w, http.StatusUnauthorized, "missing or invalid authorization header")
+		return
+	}
+	accessToken := parts[1]
+
+	user, err := h.authSvc.ValidateAccessToken(r.Context(), accessToken)
+	if err != nil {
+		h.writeError(w, http.StatusUnauthorized, "invalid or expired token")
+		return
+	}
+
+	if err := h.authSvc.Logout(r.Context(), user.ID, accessToken); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to logout")
+		return
+	}
+
+	h.writeResponse(w, http.StatusOK, map[string]string{"message": "logged out"})
+}
+
 // GoogleOAuthURL handles GET /auth/oauth/google/url
 // @Summary Get Google OAuth URL
 // @Description Get the URL for initiating Google OAuth flow

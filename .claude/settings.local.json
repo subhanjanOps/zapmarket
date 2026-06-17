@@ -129,7 +129,15 @@
       "Bash(python -c \"import sys,json; envs=json.load\\(sys.stdin\\)[0]['Config']['Env']; [print\\(e\\) for e in envs if 'JWT' in e]\")",
       "Bash(python -c \"import sys,json; envs=json.load\\(sys.stdin\\)[0]['Config']['Env']; [print\\(e\\) for e in envs if 'JWT' in e or 'AUTH' in e or 'DB' in e]\")",
       "Bash(python -c \"import sys,json; print\\(json.dumps\\(json.load\\(sys.stdin\\), indent=2\\)\\)\")",
-      "Read(//c/Users/subha/Downloads/Projects/zapMarket/pkg/config/**)"
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/pkg/config/**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/pkg/kafka/**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/pkg/kafka//**)",
+      "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/payment-service/internal/relay)",
+      "Bash(cp /c/Users/subha/Downloads/Projects/zapMarket/services/order-management-service/internal/relay/outbox_relay.go /c/Users/subha/Downloads/Projects/zapMarket/services/payment-service/internal/relay/outbox_relay.go)",
+      "Bash(mkdir -p /c/Users/subha/Downloads/Projects/zapMarket/services/inventory-service/internal/relay)",
+      "Bash(cp /c/Users/subha/Downloads/Projects/zapMarket/services/order-management-service/internal/relay/outbox_relay.go /c/Users/subha/Downloads/Projects/zapMarket/services/inventory-service/internal/relay/outbox_relay.go)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/product-catalog-service/internal/service//**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/product-catalog-service/internal/service/**)"
     ]
   }
 }

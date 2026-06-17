@@ -33,6 +33,7 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	goredis "github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/reflection"
 
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -86,6 +87,17 @@ func main() {
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, cfg)
+
+	// ── Redis (optional — auth still works without it) ───────────────────────
+	rdb := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		slog.Warn("Redis unavailable — token blacklist disabled", "addr", cfg.RedisURL, "error", err)
+	} else {
+		authService.SetRedis(rdb)
+		defer rdb.Close()
+		slog.Info("connected to Redis", "addr", cfg.RedisURL)
+	}
+
 	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, cfg)
 
 	// Initialize HTTP handlers
@@ -98,6 +110,7 @@ func main() {
 	mux.HandleFunc("/v1/auth/login", httpHandler.LoggingMiddleware(httpHandler.Login))
 	mux.HandleFunc("/v1/auth/refresh", httpHandler.LoggingMiddleware(httpHandler.Refresh))
 	mux.HandleFunc("/v1/auth/me", httpHandler.LoggingMiddleware(httpHandler.Me))
+	mux.HandleFunc("/v1/auth/logout", httpHandler.LoggingMiddleware(httpHandler.Logout))
 	mux.HandleFunc("/v1/auth/oauth/google/url", httpHandler.LoggingMiddleware(httpHandler.GoogleOAuthURL))
 	mux.HandleFunc("/v1/auth/oauth/google/callback", httpHandler.LoggingMiddleware(httpHandler.GoogleOAuthCallback))
 	mux.HandleFunc("/v1/auth/oauth/facebook/url", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthURL))
