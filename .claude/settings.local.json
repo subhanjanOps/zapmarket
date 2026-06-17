@@ -122,7 +122,13 @@
       "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/order-management-service/pkg/config/**)",
       "Bash(xargs cat)",
       "Read(//c/Users/subha/Downloads/Projects/zapMarket/docker-entrypoint-initdb.d//**)",
-      "Read(//c/Users/subha/Downloads/Projects/zapMarket/docker-entrypoint-initdb.d/**)"
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/docker-entrypoint-initdb.d/**)",
+      "Bash(python -c \"import sys,json; orders=json.load\\(sys.stdin\\)['data']; print\\(json.dumps\\(orders[0], indent=2\\)\\)\")",
+      "Bash(docker start *)",
+      "PowerShell(Start-Process \"C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe\"; Start-Sleep -Seconds 25; docker ps 2>&1 | Select-Object -Last 3)",
+      "Bash(python -c \"import sys,json; envs=json.load\\(sys.stdin\\)[0]['Config']['Env']; [print\\(e\\) for e in envs if 'JWT' in e]\")",
+      "Bash(python -c \"import sys,json; envs=json.load\\(sys.stdin\\)[0]['Config']['Env']; [print\\(e\\) for e in envs if 'JWT' in e or 'AUTH' in e or 'DB' in e]\")",
+      "Bash(python -c \"import sys,json; print\\(json.dumps\\(json.load\\(sys.stdin\\), indent=2\\)\\)\")"
     ]
   }
 }
