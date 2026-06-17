@@ -116,7 +116,13 @@
       "Bash(taskkill //F //PID 32332)",
       "Bash(taskkill //F //PID 29024)",
       "Bash(taskkill //F //PID 30740)",
-      "Bash(docker stop *)"
+      "Bash(docker stop *)",
+      "PowerShell(docker pull *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/services/order-management-service/pkg/config/**)",
+      "Bash(xargs cat)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/docker-entrypoint-initdb.d//**)",
+      "Read(//c/Users/subha/Downloads/Projects/zapMarket/docker-entrypoint-initdb.d/**)"
     ]
   }
 }
