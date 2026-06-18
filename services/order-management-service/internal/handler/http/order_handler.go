@@ -25,6 +25,7 @@ func NewOrderHandler(svc service.OrderService) *OrderHandler {
 
 type checkoutItemRequest struct {
 	SKUID     string `json:"sku_id"`
+	SellerID  string `json:"seller_id,omitempty"`
 	Quantity  int    `json:"quantity"`
 	UnitPrice int64  `json:"unit_price"`
 }
@@ -81,11 +82,20 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 			ErrorResponse(w, http.StatusBadRequest, "INVALID_SKU_ID", "items["+string(rune('0'+i))+"]: sku_id must be a valid UUID")
 			return
 		}
-		items[i] = service.CheckoutItem{
+		item := service.CheckoutItem{
 			SKUID:     skuID,
 			Quantity:  it.Quantity,
 			UnitPrice: it.UnitPrice,
 		}
+		if it.SellerID != "" {
+			sid, err := uuid.Parse(it.SellerID)
+			if err != nil {
+				ErrorResponse(w, http.StatusBadRequest, "INVALID_SELLER_ID", "items["+string(rune('0'+i))+"]: seller_id must be a valid UUID")
+				return
+			}
+			item.SellerID = &sid
+		}
+		items[i] = item
 	}
 
 	order, err := h.svc.Checkout(r.Context(), userID, idempotencyKey, items, req.Currency)
@@ -166,6 +176,76 @@ func (h *OrderHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SuccessResponse(w, http.StatusOK, orders)
+}
+
+// ListSellerOrders handles GET /v1/orders/seller.
+//
+//	@Summary		List orders for the authenticated seller
+//	@Tags			orders
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	Response{data=[]domain.Order}
+//	@Failure		401	{object}	Response
+//	@Router			/v1/orders/seller [get]
+func (h *OrderHandler) ListSellerOrders(w http.ResponseWriter, r *http.Request) {
+	user := authctx.UserFromContext(r.Context())
+	if user == nil {
+		ErrorResponse(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+
+	sellerID, err := uuid.Parse(user.Id)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", "invalid user id in token")
+		return
+	}
+
+	orders, err := h.svc.ListSellerOrders(r.Context(), sellerID)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	SuccessResponse(w, http.StatusOK, orders)
+}
+
+// GetSellerOrder handles GET /v1/orders/seller/{id}.
+//
+//	@Summary		Get a single order for the authenticated seller
+//	@Tags			orders
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Order UUID"
+//	@Success		200	{object}	Response{data=object}
+//	@Failure		401	{object}	Response
+//	@Failure		404	{object}	Response
+//	@Router			/v1/orders/seller/{id} [get]
+func (h *OrderHandler) GetSellerOrder(w http.ResponseWriter, r *http.Request) {
+	user := authctx.UserFromContext(r.Context())
+	if user == nil {
+		ErrorResponse(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+
+	orderID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ORDER_ID", "order id must be a valid UUID")
+		return
+	}
+
+	sellerID, err := uuid.Parse(user.Id)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", "invalid user id in token")
+		return
+	}
+
+	order, items, err := h.svc.GetSellerOrder(r.Context(), orderID, sellerID)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	SuccessResponse(w, http.StatusOK, orderResponse{Order: order, Items: items})
 }
 
 // CancelOrder handles POST /v1/orders/{id}/cancel.

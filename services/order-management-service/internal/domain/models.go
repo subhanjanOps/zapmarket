@@ -56,6 +56,7 @@ type OrderItem struct {
 	ID            uuid.UUID  `json:"id"`
 	OrderID       uuid.UUID  `json:"order_id"`
 	SKUID         uuid.UUID  `json:"sku_id"`
+	SellerID      *uuid.UUID `json:"seller_id,omitempty"`
 	Quantity      int        `json:"quantity"`
 	UnitPrice     int64      `json:"unit_price"`
 	ReservationID *uuid.UUID `json:"reservation_id,omitempty"`

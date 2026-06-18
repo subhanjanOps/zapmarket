@@ -224,6 +224,24 @@ services:
       - zapnet
     restart: unless-stopped
 
+  seller-ui:
+    build:
+      context: ./services/seller-ui
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_GATEWAY_URL=http://localhost:8000
+    container_name: zapmarket-seller-ui
+    depends_on:
+      - api-gateway
+    environment:
+      - PORT=3002
+      - HOSTNAME=0.0.0.0
+    ports:
+      - "3002:3002"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   admin-ui:
     build:
       context: ./services/admin-ui

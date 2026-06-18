@@ -27,6 +27,10 @@ type OrderRepository interface {
 	// GetByUserID returns all non-deleted orders for a user, newest first.
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.Order, error)
 
+	// GetBySellerID returns all non-deleted orders that contain at least one
+	// item with the given seller_id, newest first.
+	GetBySellerID(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error)
+
 	// MarkReserved sets order status → RESERVED and persists reservation IDs
 	// on each item, all in one DB transaction.
 	MarkReserved(ctx context.Context, orderID uuid.UUID, items []*domain.OrderItem) error

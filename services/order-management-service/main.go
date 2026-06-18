@@ -121,6 +121,9 @@ func main() {
 		r.Use(authMW.RequireRole("buyer", "seller", "admin"))
 		r.Post("/", handler.Checkout)
 		r.Get("/", handler.ListOrders)
+		// Seller-scoped routes — must be registered before /{id} to avoid ambiguity.
+		r.Get("/seller", handler.ListSellerOrders)
+		r.Get("/seller/{id}", handler.GetSellerOrder)
 		r.Get("/{id}", handler.GetOrder)
 		r.Post("/{id}/cancel", handler.CancelOrder)
 	})

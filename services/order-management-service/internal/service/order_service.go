@@ -22,11 +22,17 @@ type OrderService interface {
 	GetOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
 	ListOrders(ctx context.Context, userID uuid.UUID) ([]*domain.Order, error)
 	CancelOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, error)
+
+	// ListSellerOrders returns all orders containing at least one item from the seller.
+	ListSellerOrders(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error)
+	// GetSellerOrder returns a single order + its items if it contains the seller's SKUs.
+	GetSellerOrder(ctx context.Context, orderID, sellerID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
 }
 
 // CheckoutItem is the per-SKU input to Checkout.
 type CheckoutItem struct {
 	SKUID     uuid.UUID
+	SellerID  *uuid.UUID
 	Quantity  int
 	UnitPrice int64
 }
@@ -104,6 +110,7 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		totalAmount += int64(it.Quantity) * it.UnitPrice
 		domainItems[i] = &domain.OrderItem{
 			SKUID:     it.SKUID,
+			SellerID:  it.SellerID,
 			Quantity:  it.Quantity,
 			UnitPrice: it.UnitPrice,
 		}
@@ -248,6 +255,33 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUI
 	order.Status = domain.OrderCancelled
 	s.logger.Info("order cancelled by user", "order_id", orderID)
 	return order, nil
+}
+
+func (s *orderService) ListSellerOrders(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error) {
+	return s.repo.GetBySellerID(ctx, sellerID)
+}
+
+func (s *orderService) GetSellerOrder(ctx context.Context, orderID, sellerID uuid.UUID) (*domain.Order, []*domain.OrderItem, error) {
+	order, err := s.repo.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, nil, err
+	}
+	items, err := s.repo.GetOrderItems(ctx, orderID)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Verify at least one item belongs to this seller.
+	hasSeller := false
+	for _, item := range items {
+		if item.SellerID != nil && *item.SellerID == sellerID {
+			hasSeller = true
+			break
+		}
+	}
+	if !hasSeller {
+		return nil, nil, pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
+	}
+	return order, items, nil
 }
 
 // compensate releases all reservations that were already made before a

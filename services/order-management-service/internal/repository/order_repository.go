@@ -50,7 +50,7 @@ func (r *OrderRepository) GetByUserID(ctx context.Context, userID uuid.UUID) ([]
 
 func (r *OrderRepository) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]*domain.OrderItem, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, order_id, sku_id, quantity, unit_price, reservation_id, created_at
+		SELECT id, order_id, sku_id, seller_id, quantity, unit_price, reservation_id, created_at
 		FROM order_items
 		WHERE order_id = $1
 	`, orderID)
@@ -62,13 +62,34 @@ func (r *OrderRepository) GetOrderItems(ctx context.Context, orderID uuid.UUID) 
 	var items []*domain.OrderItem
 	for rows.Next() {
 		item := &domain.OrderItem{}
-		err := rows.Scan(&item.ID, &item.OrderID, &item.SKUID, &item.Quantity, &item.UnitPrice, &item.ReservationID, &item.CreatedAt)
+		err := rows.Scan(&item.ID, &item.OrderID, &item.SKUID, &item.SellerID, &item.Quantity, &item.UnitPrice, &item.ReservationID, &item.CreatedAt)
 		if err != nil {
 			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan order item", err)
 		}
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (r *OrderRepository) GetBySellerID(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error) {
+	rows, err := r.db.QueryContext(ctx,
+		orderSelectQuery+` WHERE id IN (
+			SELECT DISTINCT order_id FROM order_items WHERE seller_id = $1
+		) AND deleted_at IS NULL ORDER BY created_at DESC`, sellerID)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to list seller orders", err)
+	}
+	defer rows.Close()
+
+	var orders []*domain.Order
+	for rows.Next() {
+		o, err := scanOrderRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, o)
+	}
+	return orders, rows.Err()
 }
 
 func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error {
@@ -88,10 +109,10 @@ func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order, 
 		for _, item := range items {
 			itemID := uuid.New()
 			err := tx.QueryRowContext(ctx, `
-				INSERT INTO order_items (id, order_id, sku_id, quantity, unit_price)
-				VALUES ($1, $2, $3, $4, $5)
+				INSERT INTO order_items (id, order_id, sku_id, seller_id, quantity, unit_price)
+				VALUES ($1, $2, $3, $4, $5, $6)
 				RETURNING created_at
-			`, itemID, id, item.SKUID, item.Quantity, item.UnitPrice).Scan(&item.CreatedAt)
+			`, itemID, id, item.SKUID, item.SellerID, item.Quantity, item.UnitPrice).Scan(&item.CreatedAt)
 			if err != nil {
 				return pkgerrors.NewInternal("DATABASE_ERROR", "failed to create order item", err)
 			}
