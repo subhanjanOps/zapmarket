@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getToken } from "@/lib/auth";
 import { getRoutes, createRoute, updateRoute, deleteRoute, probeRoute, Route, ProbeResult } from "@/lib/api";
 import { Plus, Pencil, Trash2, FlaskConical } from "lucide-react";
+import { SkeletonTableCard } from "@/app/components/Skeleton";
 
 const EMPTY: Omit<Route, "id" | "created_at" | "updated_at" | "enabled"> = {
   path_prefix: "",
@@ -186,6 +187,7 @@ function EditModal({ initial, onSave, onClose }: EditModalProps) {
 
 export default function RoutesPage() {
   const [routes, setRoutes] = useState<Route[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [editRoute, setEditRoute] = useState<Route | null>(null);
@@ -196,9 +198,11 @@ export default function RoutesPage() {
     let cancelled = false;
     const token = getToken();
     if (!token) return;
+    setLoading(true);
     getRoutes(token)
       .then((r) => { if (!cancelled) { setRoutes(r); setError(""); } })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [refreshKey]);
 
@@ -262,7 +266,11 @@ export default function RoutesPage() {
 
       {error && <p style={{ color: "var(--danger)", fontSize: "0.8125rem", marginBottom: "1rem" }}>{error}</p>}
 
-      <div className="card" style={{ padding: 0 }}>
+      {loading && routes.length === 0 ? (
+        <SkeletonTableCard cols={6} rows={5} />
+      ) : null}
+
+      <div className="card" style={{ padding: 0, display: loading && routes.length === 0 ? "none" : undefined }}>
         <table>
           <thead>
             <tr>

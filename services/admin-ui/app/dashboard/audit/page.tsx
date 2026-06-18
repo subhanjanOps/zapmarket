@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getToken } from "@/lib/auth";
 import { getAudit, blockIP, AuditEntry } from "@/lib/api";
 import { RefreshCw, Search, Play, Square, ShieldOff } from "lucide-react";
+import { SkeletonTableRows } from "@/app/components/Skeleton";
 
 const EVENTS = ["", "AUTH_REJECTED", "RATE_LIMITED", "UPSTREAM_5XX", "CIRCUIT_OPEN", "ROUTE_CONFLICT"];
 
@@ -175,9 +176,21 @@ export default function AuditPage() {
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
-          <p style={{ padding: "1.5rem", fontSize: "0.8125rem", color: "var(--muted)" }}>Loading…</p>
+          <table>
+            <thead>
+              <tr>
+                {["Time","Event","Method","Path","Upstream","Status","IP","Detail",""].map((h, i) => (
+                  <th key={i}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody><SkeletonTableRows cols={9} rows={8} /></tbody>
+          </table>
         ) : entries.length === 0 ? (
-          <p style={{ padding: "1.5rem", fontSize: "0.8125rem", color: "var(--muted)" }}>No events found.</p>
+          <div className="empty-state">
+            <p className="empty-state-title">No events found</p>
+            <p className="empty-state-body">Adjust filters or wait for traffic to flow through the gateway</p>
+          </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table>

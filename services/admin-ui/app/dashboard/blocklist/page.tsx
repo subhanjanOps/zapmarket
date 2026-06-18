@@ -3,9 +3,11 @@ import { useEffect, useState } from "react";
 import { getToken } from "@/lib/auth";
 import { getBlocklist, blockIP, unblockIP, BlocklistEntry } from "@/lib/api";
 import { ShieldOff, Plus, Trash2 } from "lucide-react";
+import { SkeletonTableCard } from "@/app/components/Skeleton";
 
 export default function BlocklistPage() {
   const [entries, setEntries] = useState<BlocklistEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [newIP, setNewIP] = useState("");
@@ -16,9 +18,11 @@ export default function BlocklistPage() {
     let cancelled = false;
     const token = getToken();
     if (!token) return;
+    setLoading(true);
     getBlocklist(token)
       .then((b) => { if (!cancelled) { setEntries(b); setError(""); } })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [refreshKey]);
 
@@ -96,47 +100,54 @@ export default function BlocklistPage() {
         </div>
       )}
 
-      <div className="card" style={{ padding: 0 }}>
-        <table>
-          <thead>
-            <tr>
-              <th>IP Address</th>
-              <th>Reason</th>
-              <th>Blocked At</th>
-              <th style={{ width: "5rem" }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length === 0 ? (
+      {loading && entries.length === 0 ? (
+        <SkeletonTableCard cols={4} rows={5} />
+      ) : (
+        <div className="card" style={{ padding: 0 }}>
+          <table>
+            <thead>
               <tr>
-                <td colSpan={4} style={{ textAlign: "center", color: "var(--muted)", padding: "2rem" }}>
-                  No blocked IPs
-                </td>
+                <th>IP Address</th>
+                <th>Reason</th>
+                <th>Blocked At</th>
+                <th style={{ width: "5rem" }}></th>
               </tr>
-            ) : (
-              entries.map((e) => (
-                <tr key={e.ip}>
-                  <td className="mono">{e.ip}</td>
-                  <td style={{ color: "var(--muted)" }}>{e.reason || "—"}</td>
-                  <td className="mono" style={{ color: "var(--muted)", fontSize: "0.75rem" }}>
-                    {new Date(e.blocked_at).toLocaleString()}
-                  </td>
-                  <td>
-                    <button
-                      className="btn btn-danger"
-                      style={{ padding: "0.3rem 0.5rem" }}
-                      onClick={() => handleUnblock(e.ip)}
-                      title="Unblock"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+            </thead>
+            <tbody>
+              {entries.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="empty-state">
+                      <p className="empty-state-title">No blocked IPs</p>
+                      <p className="empty-state-body">Block an IP to prevent it from reaching the gateway</p>
+                    </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                entries.map((e) => (
+                  <tr key={e.ip}>
+                    <td className="mono">{e.ip}</td>
+                    <td style={{ color: "var(--muted)" }}>{e.reason || "—"}</td>
+                    <td className="mono" style={{ color: "var(--muted)", fontSize: "0.75rem" }}>
+                      {new Date(e.blocked_at).toLocaleString()}
+                    </td>
+                    <td>
+                      <button
+                        className="btn btn-danger"
+                        style={{ padding: "0.3rem 0.5rem" }}
+                        onClick={() => handleUnblock(e.ip)}
+                        title="Unblock"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

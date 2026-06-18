@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { Splash } from "@/app/components/Skeleton";
 import { getToken, clearToken } from "@/lib/auth";
 import {
   LayoutDashboard, Route, Network, ScrollText,
@@ -43,6 +44,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [theme, setTheme] = useState<ThemeId>("walnut");
+  const [navigating, setNavigating] = useState(false);
+  const prevPath = useRef(pathname);
   const clock = useClock();
 
   useEffect(() => {
@@ -59,10 +62,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     document.documentElement.setAttribute("data-theme", id);
   }
 
-  if (!ready) return null;
+  // Navigation progress bar
+  useEffect(() => {
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      setNavigating(true);
+      const t = setTimeout(() => setNavigating(false), 500);
+      return () => clearTimeout(t);
+    }
+  }, [pathname]);
+
+  if (!ready) return <Splash />;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
+      {navigating && <div className="nav-progress" key={pathname} />}
 
       {/* ── Sidebar ──────────────────────────────────────────────────────── */}
       <aside style={{

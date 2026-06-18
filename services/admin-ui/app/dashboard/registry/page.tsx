@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getToken } from "@/lib/auth";
 import { getRegistry, RegistryInstance } from "@/lib/api";
 import { RefreshCw, Wifi } from "lucide-react";
+import { SkeletonTableCard } from "@/app/components/Skeleton";
 
 export default function RegistryPage() {
   const [instances, setInstances] = useState<RegistryInstance[]>([]);
@@ -66,7 +67,10 @@ export default function RegistryPage() {
       {error && <p style={{ color: "var(--danger)", fontSize: "0.8125rem", marginBottom: "1rem" }}>{error}</p>}
 
       {loading && instances.length === 0 ? (
-        <p style={{ color: "var(--muted)", fontSize: "0.8125rem" }}>Loading…</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <SkeletonTableCard cols={4} rows={3} />
+          <SkeletonTableCard cols={4} rows={2} />
+        </div>
       ) : services.length === 0 ? (
         <div className="card" style={{ textAlign: "center", padding: "3rem" }}>
           <p style={{ color: "var(--muted)" }}>No live instances found.</p>
