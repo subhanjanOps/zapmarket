@@ -91,8 +91,14 @@ async function listReq<T>(path: string, token?: string): Promise<PageEnvelope<T>
 
 // ── Categories ────────────────────────────────────────────────────────────────
 
-export const getCategories = () =>
-  listReq<Category>("/api/v1/categories");
+export const getCategories = (params: { search?: string; limit?: number; offset?: number } = {}) => {
+  const q = new URLSearchParams();
+  if (params.search) q.set("search", params.search);
+  if (params.limit  != null) q.set("limit",  String(params.limit));
+  if (params.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString() ? `?${q}` : "";
+  return listReq<Category>(`/api/v1/categories${qs}`);
+};
 
 export const getCategory = (id: string) =>
   req<{ data: Category }>(`/api/v1/categories/${id}`).then((r) => r.data);
@@ -103,6 +109,13 @@ export const createCategory = (
 ) => req<{ data: Category }>("/api/v1/categories", {
   method: "POST", body: JSON.stringify(body), headers: auth(token),
 }).then((r) => r.data);
+
+export const bulkCreateCategories = (
+  token: string,
+  categories: { name: string; slug: string; parent_id?: string }[],
+) => req<{ data: Category[] }>("/api/v1/categories/bulk", {
+  method: "POST", body: JSON.stringify({ categories }), headers: auth(token),
+}).then((r) => r.data ?? []);
 
 export const updateCategory = (
   token: string,

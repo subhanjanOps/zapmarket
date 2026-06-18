@@ -16,6 +16,10 @@ import (
 // CategoryRepository defines the interface for category repository
 type CategoryRepository interface {
 	CreateCategory(ctx context.Context, category *domain.Category) error
+	// BulkCreateCategories inserts all categories in a single transaction.
+	// Each category must have its ID pre-assigned. Rows are inserted in the
+	// slice order so callers can guarantee parents precede children.
+	BulkCreateCategories(ctx context.Context, categories []*domain.Category) error
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (*domain.Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (*domain.Category, error)
 	// GetCategoryList returns the matching page of categories plus the total

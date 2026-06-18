@@ -177,7 +177,8 @@
       "Bash(xargs grep -l \"Paginated\")",
       "Bash(docker restart *)",
       "Bash(grep -v \"showAlert\\\\|showConfirm\\\\|//.*alert\\\\|//.*confirm\")",
-      "Bash(xargs grep -l \"authctx\")"
+      "Bash(xargs grep -l \"authctx\")",
+      "Bash(psql -U zapuser -d apigateway -c \"SELECT path, auth_mode FROM gateway_routes WHERE path LIKE '%categor%' ORDER BY path;\")"
     ]
   }
 }

@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { getToken } from "@/lib/auth";
 import {
-  getCategories, createCategory, updateCategory, deleteCategory,
+  getCategories, createCategory, updateCategory, deleteCategory, bulkCreateCategories,
   type Category,
 } from "@/lib/api";
 import { TableSkeleton } from "@/app/components/Skeleton";
 import { ExportButton, ImportButton } from "@/app/components/BulkIO";
 import { showAlert, showConfirm } from "@/app/components/Dialog";
 
+const PAGE_SIZE = 20;
 const CAT_EXPORT_HEADERS = ["id", "name", "slug", "parent_id", "created_at"];
 const CAT_IMPORT_HEADERS = ["name", "slug", "parent_name"];
 const CAT_TEMPLATE = { name: "Electronics", slug: "electronics", parent_name: "" };
@@ -21,9 +22,73 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 }
 
+// ── Pagination bar ────────────────────────────────────────────────────────────
+
+function Pagination({ page, pages, onChange }: { page: number; pages: number; onChange: (p: number) => void }) {
+  if (pages <= 1) return null;
+
+  // Build the page number window: always show first, last, current ±1, with ellipsis gaps
+  const range: (number | "…")[] = [];
+  const add = (n: number) => { if (!range.includes(n)) range.push(n); };
+  add(1);
+  if (page > 3) range.push("…");
+  for (let i = Math.max(2, page - 1); i <= Math.min(pages - 1, page + 1); i++) add(i);
+  if (page < pages - 2) range.push("…");
+  add(pages);
+
+  const btn: React.CSSProperties = {
+    minWidth: 34, height: 34, padding: "0 0.5rem",
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    borderRadius: 6, fontSize: "0.8125rem", cursor: "pointer",
+    border: "1px solid var(--border)", background: "var(--surface2)",
+    color: "var(--text)", lineHeight: 1,
+  };
+  const active: React.CSSProperties = {
+    ...btn, background: "var(--accent)", color: "#fff", borderColor: "var(--accent)", fontWeight: 600,
+  };
+  const disabled: React.CSSProperties = {
+    ...btn, opacity: 0.4, cursor: "default",
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", justifyContent: "flex-end", marginTop: "1rem" }}>
+      <button
+        style={page === 1 ? disabled : btn}
+        disabled={page === 1}
+        onClick={() => onChange(page - 1)}
+      >
+        ←
+      </button>
+      {range.map((r, i) =>
+        r === "…" ? (
+          <span key={`ellipsis-${i}`} style={{ padding: "0 0.25rem", color: "var(--muted)", fontSize: "0.8125rem" }}>…</span>
+        ) : (
+          <button
+            key={r}
+            style={r === page ? active : btn}
+            onClick={() => onChange(r as number)}
+          >
+            {r}
+          </button>
+        )
+      )}
+      <button
+        style={page === pages ? disabled : btn}
+        disabled={page === pages}
+        onClick={() => onChange(page + 1)}
+      >
+        →
+      </button>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function CategoriesPage() {
   const [rows, setRows]           = useState<Category[]>([]);
   const [total, setTotal]         = useState(0);
+  const [page, setPage]           = useState(1);
   const [loading, setLoading]     = useState(true);
   const [modal, setModal]         = useState<"create" | "edit" | null>(null);
   const [editing, setEditing]     = useState<Category | null>(null);
@@ -34,17 +99,24 @@ export default function CategoriesPage() {
   const [selected, setSelected]   = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  const load = useCallback(() => {
+  const pages = Math.ceil(total / PAGE_SIZE) || 1;
+
+  const load = useCallback((p = page) => {
     setLoading(true);
-    getCategories()
+    getCategories({ limit: PAGE_SIZE, offset: (p - 1) * PAGE_SIZE })
       .then((r) => { setRows(r.data); setTotal(r.total ?? r.data.length); })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   useEffect(() => { load(); }, [load]);
-  // Clear selection when rows reload
   useEffect(() => { setSelected(new Set()); }, [rows]);
+
+  function goTo(p: number) {
+    setPage(p);
+    setSelected(new Set());
+  }
 
   function openCreate() {
     setEditing(null); setForm(EMPTY); setError(""); setModal("create");
@@ -88,7 +160,6 @@ export default function CategoriesPage() {
     const ids = [...selected];
     if (!ids.length) return;
 
-    // Warn: deleting a parent also orphans its children
     const hasParents = ids.some((id) => rows.some((r) => r.parent_id === id));
     const msg = hasParents
       ? `Delete ${ids.length} selected categor${ids.length === 1 ? "y" : "ies"}?\n\nWarning: some selected categories have subcategories — those subcategories will become root-level.`
@@ -146,7 +217,7 @@ export default function CategoriesPage() {
             filename="categories.csv"
             headers={CAT_EXPORT_HEADERS}
             fetchAll={async () => {
-              const r = await getCategories();
+              const r = await getCategories({ limit: 10000, offset: 0 });
               return r.data as unknown as Record<string, unknown>[];
             }}
           />
@@ -154,25 +225,62 @@ export default function CategoriesPage() {
             title="Categories"
             expectedHeaders={CAT_IMPORT_HEADERS}
             templateRow={CAT_TEMPLATE}
-            importRow={(() => {
+            importAll={async (csvRows) => {
+              const token = getToken();
+              if (!token) throw new Error("Not authenticated");
+
+              // Seed name→id from categories already in the DB
               const nameToId = new Map<string, string>(rows.map((c) => [c.name, c.id]));
-              return async (row: Record<string, string>) => {
-                const token = getToken();
-                if (!token) throw new Error("Not authenticated");
-                const parentName = row.parent_name?.trim();
-                const parent_id = parentName ? nameToId.get(parentName) : undefined;
-                if (parentName && !parent_id) throw new Error(`Parent "${parentName}" not found`);
-                const created = await createCategory(token, { name: row.name, slug: row.slug, parent_id });
-                nameToId.set(created.name, created.id);
-              };
-            })()}
+
+              // Pass 1: roots (no parent_name)
+              const roots = csvRows.filter((r) => !r.parent_name?.trim());
+              const children = csvRows.filter((r) => !!r.parent_name?.trim());
+
+              const errors: { row: number; message: string }[] = [];
+              let ok = 0;
+
+              if (roots.length > 0) {
+                try {
+                  const created = await bulkCreateCategories(token, roots.map((r) => ({ name: r.name, slug: r.slug })));
+                  created.forEach((c) => nameToId.set(c.name, c.id));
+                  ok += created.length;
+                } catch (e) {
+                  errors.push({ row: 0, message: `Root categories: ${e instanceof Error ? e.message : "failed"}` });
+                }
+              }
+
+              // Pass 2: children — resolve parent_id from the map built in pass 1
+              if (children.length > 0) {
+                const resolved: { name: string; slug: string; parent_id?: string }[] = [];
+                children.forEach((r, i) => {
+                  const parentName = r.parent_name.trim();
+                  const parent_id = nameToId.get(parentName);
+                  if (!parent_id) {
+                    errors.push({ row: roots.length + i + 2, message: `Parent "${parentName}" not found` });
+                  } else {
+                    resolved.push({ name: r.name, slug: r.slug, parent_id });
+                  }
+                });
+
+                if (resolved.length > 0) {
+                  try {
+                    const created = await bulkCreateCategories(token, resolved);
+                    ok += created.length;
+                  } catch (e) {
+                    errors.push({ row: 0, message: `Subcategories: ${e instanceof Error ? e.message : "failed"}` });
+                  }
+                }
+              }
+
+              return { ok, errors };
+            }}
             onDone={load}
           />
           <button className="btn btn-primary" onClick={openCreate}>+ New category</button>
         </div>
       </div>
 
-      {/* Bulk action bar — appears when rows are checked */}
+      {/* Bulk action bar */}
       {selected.size > 0 && (
         <div style={{
           display: "flex", alignItems: "center", gap: "0.75rem",
@@ -180,9 +288,7 @@ export default function CategoriesPage() {
           background: "var(--accent-bg)", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
           borderRadius: 8, fontSize: "0.8125rem",
         }}>
-          <span style={{ fontWeight: 600, color: "var(--accent)" }}>
-            {selected.size} selected
-          </span>
+          <span style={{ fontWeight: 600, color: "var(--accent)" }}>{selected.size} selected</span>
           <button
             className="btn btn-danger"
             style={{ padding: "0.3rem 0.875rem", fontSize: "0.8125rem" }}
@@ -223,7 +329,7 @@ export default function CategoriesPage() {
           </thead>
           <tbody>
             {loading ? (
-              <TableSkeleton rows={6} cols={6} />
+              <TableSkeleton rows={PAGE_SIZE} cols={6} />
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={6}>
@@ -273,6 +379,15 @@ export default function CategoriesPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem" }}>
+        <span style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>
+          {total > 0
+            ? `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total}`
+            : ""}
+        </span>
+        <Pagination page={page} pages={pages} onChange={goTo} />
       </div>
 
       {/* Modal */}

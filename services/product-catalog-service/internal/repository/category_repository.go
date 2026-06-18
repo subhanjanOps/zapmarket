@@ -55,6 +55,42 @@ func (cr *CategoryRepository) CreateCategory(
 	return nil
 }
 
+func (cr *CategoryRepository) BulkCreateCategories(ctx context.Context, categories []*domain.Category) error {
+	if len(categories) == 0 {
+		return nil
+	}
+
+	tx, err := cr.db.BeginTx(ctx, nil)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to begin transaction", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO categories (id, name, slug, parent_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())
+		ON CONFLICT (slug) DO NOTHING
+	`)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to prepare statement", err)
+	}
+	defer stmt.Close()
+
+	for _, cat := range categories {
+		if _, err := stmt.ExecContext(ctx, cat.ID, cat.Name, cat.Slug, cat.ParentID); err != nil {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+				return pkgerrors.NewConflict("CATEGORY_ALREADY_EXISTS", fmt.Sprintf("category with slug '%s' already exists", cat.Slug))
+			}
+			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to insert category", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to commit transaction", err)
+	}
+	return nil
+}
+
 func (cr *CategoryRepository) GetCategoryByID(
 	ctx context.Context,
 	id uuid.UUID,

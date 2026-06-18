@@ -106,7 +106,13 @@ interface ImportProps {
   /** Template values for the blank template row (shown as hints). */
   templateRow: Record<string, string>;
   /** Called once per CSV row; should POST and return on success or throw on error. */
-  importRow: (row: Record<string, string>) => Promise<void>;
+  importRow?: (row: Record<string, string>) => Promise<void>;
+  /**
+   * Alternative to importRow: called once with ALL parsed rows.
+   * Return ok count + any row-level errors. Use this for endpoints that
+   * support bulk insert to avoid per-row API calls (and rate limiting).
+   */
+  importAll?: (rows: Record<string, string>[]) => Promise<{ ok: number; errors: { row: number; message: string }[] }>;
   onDone: () => void;
 }
 
@@ -122,7 +128,7 @@ export function ImportButton(props: ImportProps) {
   );
 }
 
-function ImportModal({ title, expectedHeaders, templateRow, importRow, onDone, onClose }: ImportProps & { onClose: () => void }) {
+function ImportModal({ title, expectedHeaders, templateRow, importRow, importAll, onDone, onClose }: ImportProps & { onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [parsed, setParsed] = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
   const [parseErr, setParseErr] = useState("");
@@ -165,17 +171,33 @@ function ImportModal({ title, expectedHeaders, templateRow, importRow, onDone, o
     if (!parsed) return;
     setImporting(true);
     setProgress(0);
-    const errors: ImportResult["errors"] = [];
-    for (let i = 0; i < parsed.rows.length; i++) {
+
+    let result: ImportResult;
+
+    if (importAll) {
+      // Single bulk API call — progress jumps to 100% when done
       try {
-        await importRow(parsed.rows[i]);
+        result = await importAll(parsed.rows);
       } catch (e: unknown) {
-        errors.push({ row: i + 2, message: e instanceof Error ? e.message : "Unknown error" });
+        result = { ok: 0, errors: [{ row: 0, message: e instanceof Error ? e.message : "Import failed" }] };
       }
-      setProgress(i + 1);
+      setProgress(parsed.rows.length);
+    } else {
+      // Row-by-row fallback
+      const errors: ImportResult["errors"] = [];
+      for (let i = 0; i < parsed.rows.length; i++) {
+        try {
+          await importRow!(parsed.rows[i]);
+        } catch (e: unknown) {
+          errors.push({ row: i + 2, message: e instanceof Error ? e.message : "Unknown error" });
+        }
+        setProgress(i + 1);
+      }
+      result = { ok: parsed.rows.length - errors.length, errors };
     }
+
     setImporting(false);
-    setResult({ ok: parsed.rows.length - errors.length, errors });
+    setResult(result);
     onDone();
   }
 

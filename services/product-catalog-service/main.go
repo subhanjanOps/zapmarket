@@ -166,6 +166,7 @@ func main() {
 			r.Use(authMW.RequireRole("admin"))
 
 			r.Post("/categories", categoryH.CreateCategory)
+			r.Post("/categories/bulk", categoryH.BulkCreateCategories)
 			r.Put("/categories/{id}", categoryH.UpdateCategory)
 			r.Delete("/categories/{id}", categoryH.DeleteCategory)
 		})

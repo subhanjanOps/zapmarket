@@ -24,6 +24,7 @@ var validCategorySortFields = map[string]bool{
 
 type CategoryService interface {
 	CreateCategory(ctx context.Context, category *domain.Category) error
+	BulkCreateCategories(ctx context.Context, categories []*domain.Category) ([]*domain.Category, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (*domain.Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (*domain.Category, error)
 	// GetCategoryList returns the matching page of categories plus the total
@@ -43,6 +44,32 @@ func NewCategoryService(repo contracts.CategoryRepository, logger *slog.Logger) 
 		categoryRepo: repo,
 		logger:       logger,
 	}
+}
+
+func (cs *categoryService) BulkCreateCategories(ctx context.Context, categories []*domain.Category) ([]*domain.Category, error) {
+	if len(categories) == 0 {
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "at least one category is required")
+	}
+	if len(categories) > 500 {
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "bulk import is limited to 500 categories per request")
+	}
+
+	for _, cat := range categories {
+		if cat.Name == "" {
+			return nil, pkgerrors.NewValidation("INVALID_DATA", "category name is required")
+		}
+		if cat.Slug == "" {
+			return nil, pkgerrors.NewValidation("INVALID_DATA", "category slug is required")
+		}
+		cat.ID = uuid.New()
+	}
+
+	cs.logger.Info("bulk creating categories", "count", len(categories))
+
+	if err := cs.categoryRepo.BulkCreateCategories(ctx, categories); err != nil {
+		return nil, err
+	}
+	return categories, nil
 }
 
 func (cs *categoryService) CreateCategory(ctx context.Context, category *domain.Category) error {

@@ -69,6 +69,49 @@ func (h *CategoryHandler) CreateCategory(w http.ResponseWriter, r *http.Request)
 	SuccessResponse(w, http.StatusCreated, category)
 }
 
+// BulkCreateCategoriesRequest is the payload for the bulk-import endpoint.
+type BulkCreateCategoriesRequest struct {
+	Categories []CreateCategoryRequest `json:"categories"`
+}
+
+// BulkCreateCategories creates multiple categories in one transaction
+//
+//	@Summary		Bulk create categories
+//	@Tags			categories
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BulkCreateCategoriesRequest	true	"Array of categories (max 500)"
+//	@Success		201		{object}	Response{data=[]domain.Category}
+//	@Failure		400		{object}	Response
+//	@Failure		401		{object}	Response
+//	@Failure		403		{object}	Response
+//	@Router			/api/v1/categories/bulk [post]
+func (h *CategoryHandler) BulkCreateCategories(w http.ResponseWriter, r *http.Request) {
+	var req BulkCreateCategoriesRequest
+	if err := DecodeJSON(r, &req); err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+		return
+	}
+
+	categories := make([]*domain.Category, 0, len(req.Categories))
+	for _, c := range req.Categories {
+		categories = append(categories, &domain.Category{
+			Name:     c.Name,
+			Slug:     c.Slug,
+			ParentID: c.ParentID,
+		})
+	}
+
+	created, err := h.categoryService.BulkCreateCategories(r.Context(), categories)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	SuccessResponse(w, http.StatusCreated, created)
+}
+
 // GetCategoryByID returns a category by ID
 //
 //	@Summary		Get category by ID
