@@ -40,10 +40,24 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 		return nil
 	}
 
-	var payload map[string]string
-	if err := json.Unmarshal(msg.Value, &payload); err != nil {
+	// Parse into any-typed map first to handle numeric/boolean fields in
+	// payloads (e.g. inventory.reserved publishes qty as a JSON number).
+	var raw map[string]any
+	if err := json.Unmarshal(msg.Value, &raw); err != nil {
 		h.logger.Error("failed to parse event payload", "event_type", eventType, "error", err)
 		return nil // Don't retry malformed messages.
+	}
+	// Coerce every field to string so notification templates can use a uniform type.
+	payload := make(map[string]string, len(raw))
+	for k, v := range raw {
+		switch val := v.(type) {
+		case string:
+			payload[k] = val
+		case nil:
+			payload[k] = ""
+		default:
+			payload[k] = fmt.Sprintf("%v", val)
+		}
 	}
 
 	notif, ok := h.buildNotification(eventType, payload)
@@ -82,6 +96,14 @@ func (h *Handler) buildNotification(eventType string, payload map[string]string)
 		}, true
 
 	// ── Payment events ────────────────────────────────────────────────────────
+	case "payment.processed":
+		return notifier.Notification{
+			UserID:    payload["user_id"],
+			EventType: eventType,
+			Subject:   "Payment successful",
+			Body:      fmt.Sprintf("Your payment of %s %s for order %s was successful.", payload["amount"], payload["currency"], payload["order_id"]),
+		}, true
+
 	case "payment.captured":
 		return notifier.Notification{
 			UserID:    payload["user_id"],

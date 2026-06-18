@@ -23,6 +23,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -425,6 +426,62 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 
 	h.writeResponse(w, http.StatusOK, AuthResponse{
 		User: userToResponse(user),
+	})
+}
+
+// AdminBootstrap handles POST /v1/auth/admin/bootstrap
+// Creates the first admin user. Protected by ADMIN_BOOTSTRAP_SECRET env var.
+// Returns 409 if an admin already exists (one-shot endpoint).
+func (h *Handler) AdminBootstrap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	secret := os.Getenv("ADMIN_BOOTSTRAP_SECRET")
+	if secret == "" {
+		h.writeError(w, http.StatusForbidden, "bootstrap not enabled — set ADMIN_BOOTSTRAP_SECRET")
+		return
+	}
+
+	var req struct {
+		Secret   string `json:"secret"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		FullName string `json:"full_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Secret != secret {
+		h.writeError(w, http.StatusForbidden, "invalid bootstrap secret")
+		return
+	}
+	if req.Email == "" || req.Password == "" {
+		h.writeError(w, http.StatusBadRequest, "email and password are required")
+		return
+	}
+	if req.FullName == "" {
+		req.FullName = "System Admin"
+	}
+
+	user, refreshToken, err := h.authSvc.BootstrapAdmin(r.Context(), req.Email, req.Password, req.FullName)
+	if err != nil {
+		pkgerrors.HandleHTTP(w, err)
+		return
+	}
+
+	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to generate token")
+		return
+	}
+
+	h.writeResponse(w, http.StatusCreated, AuthResponse{
+		User:         userToResponse(user),
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken.TokenHash,
 	})
 }
 

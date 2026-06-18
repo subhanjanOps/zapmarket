@@ -23,6 +23,11 @@ function fmt(n: number | "—") {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [today, setToday] = useState("");
+
+  useEffect(() => {
+    setToday(new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }));
+  }, []);
 
   useEffect(() => {
     const token = getToken() ?? undefined;
@@ -76,10 +81,6 @@ export default function DashboardPage() {
     { label: "Orders",       href: "/dashboard/orders",     count: "—", icon: <ClipboardList size={13} strokeWidth={1.75} /> },
     { label: "Moderation",   href: "/dashboard/moderation", count: "—", icon: <ShieldCheck size={13} strokeWidth={1.75} /> },
   ];
-
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "short", month: "short", day: "numeric",
-  });
 
   return (
     <div className="page-content">

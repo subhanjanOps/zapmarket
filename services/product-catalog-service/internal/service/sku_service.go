@@ -70,10 +70,6 @@ func (ss *skuService) CreateSKU(ctx context.Context, sku *domain.SKU) error {
 }
 
 func (ss *skuService) GetSKUByID(ctx context.Context, id uuid.UUID) (*domain.SKU, error) {
-	if id == uuid.Nil {
-		return nil, pkgerrors.NewValidation("INVALID_DATA", "sku id is required")
-	}
-
 	ss.logger.Info("fetching sku by id", "id", id)
 
 	return ss.skuRepo.GetSkuByID(ctx, id)

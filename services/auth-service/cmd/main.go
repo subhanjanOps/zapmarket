@@ -109,6 +109,7 @@ func main() {
 	// Setup HTTP server
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("/v1/auth/admin/bootstrap", httpHandler.LoggingMiddleware(httpHandler.AdminBootstrap))
 	mux.HandleFunc("/v1/auth/register", httpHandler.LoggingMiddleware(httpHandler.Register))
 	mux.HandleFunc("/v1/auth/login", httpHandler.LoggingMiddleware(httpHandler.Login))
 	mux.HandleFunc("/v1/auth/refresh", httpHandler.LoggingMiddleware(httpHandler.Refresh))

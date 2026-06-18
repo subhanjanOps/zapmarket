@@ -183,7 +183,11 @@
       "PowerShell(docker exec -i $\\(docker ps --filter \"name=postgres\" --format \"{{.Names}}\" | head -1\\) psql -U zapuser -d userauth -c \"SELECT email, role FROM users WHERE role='admin' LIMIT 3;\" 2>&1)",
       "PowerShell(docker port zapmarket-postgres *)",
       "PowerShell(netstat *)",
-      "PowerShell(curl *)"
+      "PowerShell(curl *)",
+      "Bash(ls reports/)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k, list\\(d['paths'][k].keys\\(\\)\\)\\) for k in d['paths']]\")",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); Object.keys\\(d.paths\\).forEach\\(k=>console.log\\(k, Object.keys\\(d.paths[k]\\)\\)\\)\")",
+      "Bash(grep -o '\"\\\\/[^\"]*\"')"
     ]
   }
 }

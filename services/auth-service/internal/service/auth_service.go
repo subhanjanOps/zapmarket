@@ -88,6 +88,20 @@ func (s *AuthService) RegisterUserPassword(ctx context.Context, email, password,
 	return user, refreshToken, nil
 }
 
+// BootstrapAdmin creates the first admin user. Returns an error if an admin
+// already exists. Callers must verify the bootstrap secret themselves.
+func (s *AuthService) BootstrapAdmin(ctx context.Context, email, password, fullName string) (*domain.User, *domain.RefreshToken, error) {
+	// Reject if any admin already exists — one-shot only.
+	users, _, err := s.userRepo.ListUsers(ctx, contracts.UserListParams{Role: string(domain.RoleAdmin), Limit: 1})
+	if err != nil {
+		return nil, nil, pkgerrors.NewInternal("INTERNAL_ERROR", "failed to check existing admins", err)
+	}
+	if len(users) > 0 {
+		return nil, nil, pkgerrors.NewConflict("ADMIN_EXISTS", "an admin user already exists")
+	}
+	return s.RegisterUserPassword(ctx, email, password, fullName, string(domain.RoleAdmin))
+}
+
 // LoginPassword authenticates a user with email and password
 func (s *AuthService) LoginPassword(ctx context.Context, email, password string) (*domain.User, *domain.RefreshToken, error) {
 	user, err := s.userRepo.GetUserByEmail(ctx, email)

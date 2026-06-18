@@ -64,6 +64,8 @@ func (pr *ProductRepository) CreateProduct(
 				return pkgerrors.NewConflict("PRODUCT_ALREADY_EXISTS", fmt.Sprintf("product with slug '%s' already exists", product.Slug))
 			case "23503":
 				return pkgerrors.NewValidation("INVALID_DATA", "category does not exist")
+			case "23514":
+				return pkgerrors.NewValidation("INVALID_DATA", "status must be one of DRAFT, ACTIVE, INACTIVE, ARCHIVED")
 			}
 		}
 		return pkgerrors.NewInternal("INTERNAL_SERVER_ERROR", "failed to create product", err)

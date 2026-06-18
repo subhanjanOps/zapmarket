@@ -88,7 +88,13 @@ func (h *SKUHandler) CreateSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SuccessResponse(w, http.StatusCreated, sku)
+	created, err := h.skuService.GetSKUByID(r.Context(), sku.ID)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	SuccessResponse(w, http.StatusCreated, created)
 }
 
 // GetSKUByID returns a SKU by ID
@@ -225,7 +231,13 @@ func (h *SKUHandler) UpdateSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, sku)
+	updated, err := h.skuService.GetSKUByID(r.Context(), id)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	SuccessResponse(w, http.StatusOK, updated)
 }
 
 // DeleteSKU deletes a SKU
