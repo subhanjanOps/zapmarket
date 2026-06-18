@@ -198,11 +198,9 @@ export default function RoutesPage() {
     let cancelled = false;
     const token = getToken();
     if (!token) return;
-    setLoading(true);
     getRoutes(token)
-      .then((r) => { if (!cancelled) { setRoutes(r); setError(""); } })
-      .catch((e) => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((r) => { if (!cancelled) { setRoutes(r); setError(""); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, [refreshKey]);
 

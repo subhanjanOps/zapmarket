@@ -56,11 +56,9 @@ export default function OverviewPage() {
     let cancelled = false;
     const token = getToken();
     if (!token) return;
-    setLoading(true);
     getStats(token)
-      .then((s) => { if (!cancelled) { setStats(s); setError(""); } })
-      .catch((e) => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((s) => { if (!cancelled) { setStats(s); setError(""); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, [refreshKey]);
 

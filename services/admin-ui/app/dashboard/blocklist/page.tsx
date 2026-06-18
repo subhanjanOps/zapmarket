@@ -18,11 +18,9 @@ export default function BlocklistPage() {
     let cancelled = false;
     const token = getToken();
     if (!token) return;
-    setLoading(true);
     getBlocklist(token)
-      .then((b) => { if (!cancelled) { setEntries(b); setError(""); } })
-      .catch((e) => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((b) => { if (!cancelled) { setEntries(b); setError(""); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, [refreshKey]);
 

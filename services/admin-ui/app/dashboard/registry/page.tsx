@@ -18,18 +18,19 @@ export default function RegistryPage() {
     async function fetchData() {
       const token = getToken();
       if (!token) return;
-      setLoading(true);
       try {
         const data = await getRegistry(token);
         if (!cancelled) {
           setInstances(data);
           setLastUpdated(new Date());
           setError("");
+          setLoading(false);
         }
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load registry");
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load registry");
+          setLoading(false);
+        }
       }
     }
 

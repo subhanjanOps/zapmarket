@@ -14,11 +14,9 @@ export default function MetricsPage() {
     let cancelled = false;
     const token = getToken();
     if (!token) return;
-    setLoading(true);
     getMetrics(token)
-      .then((m) => { if (!cancelled) { setMetrics(m); setError(""); } })
-      .catch((e) => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((m) => { if (!cancelled) { setMetrics(m); setError(""); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, [refreshKey]);
 

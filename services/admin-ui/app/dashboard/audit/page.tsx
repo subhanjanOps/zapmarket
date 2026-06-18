@@ -47,7 +47,6 @@ export default function AuditPage() {
     async function fetchData() {
       const token = getToken();
       if (!token) return;
-      setLoading(true);
       try {
         const data = await getAudit(token, {
           event: appliedFilters.event || undefined,
@@ -59,11 +58,13 @@ export default function AuditPage() {
         if (!cancelled) {
           setEntries(data);
           setError("");
+          setLoading(false);
         }
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load audit log");
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load audit log");
+          setLoading(false);
+        }
       }
     }
 
