@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/auth";
 import { createProduct, createSku, uploadImage } from "@/lib/api";
-import CategoryCombobox from "@/app/components/CategoryCombobox";
+import CategoryPicker from "@/app/components/CategoryPicker";
 import { SKUEditor, SKUDraft } from "@/app/components/SKUEditor";
 import { ImageDropzone } from "@/app/components/ImageDropzone";
 
@@ -142,10 +142,9 @@ export default function NewProductPage() {
             </div>
             <div>
               <label className="form-label">Category</label>
-              <CategoryCombobox
+              <CategoryPicker
                 value={categoryId}
                 onChange={setCategoryId}
-                style={inputStyle}
               />
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>

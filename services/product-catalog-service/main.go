@@ -133,7 +133,7 @@ func main() {
 		r.Get("/categories/slug/{slug}", categoryH.GetCategoryBySlug)
 		r.Get("/categories/{id}", categoryH.GetCategoryByID)
 
-		r.Get("/products", productH.GetProductList)
+		r.With(authMW.AuthenticateOptional).Get("/products", productH.GetProductList)
 		r.Get("/products/slug/{slug}", productH.GetProductBySlug)
 		r.Get("/products/{id}", productH.GetProductByID)
 		r.Get("/products/{product_id}/images", imageH.GetImagesByProductID)

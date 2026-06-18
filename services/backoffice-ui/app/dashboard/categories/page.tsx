@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { getToken } from "@/lib/auth";
 import {
   getCategories, createCategory, updateCategory, deleteCategory,
@@ -9,6 +9,7 @@ import {
 import { TableSkeleton } from "@/app/components/Skeleton";
 import { ExportButton } from "@/app/components/BulkIO";
 import { showAlert, showConfirm } from "@/app/components/Dialog";
+import { Search, X } from "lucide-react";
 
 const PAGE_SIZE = 20;
 const CAT_EXPORT_HEADERS = ["id", "name", "slug", "parent_id", "created_at"];
@@ -99,16 +100,48 @@ export default function CategoriesPage() {
   const [selected, setSelected]   = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // Search & filter state
+  const [search, setSearch]           = useState("");
+  const [parentFilter, setParentFilter] = useState<"all" | "root" | string>("all");
+  const [rootCats, setRootCats]       = useState<Category[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const pages = Math.ceil(total / PAGE_SIZE) || 1;
 
-  const load = useCallback((p = page) => {
+  // Load root categories once for the filter dropdown
+  useEffect(() => {
+    getCategories({ limit: 200, offset: 0 })
+      .then((r) => setRootCats(r.data.filter((c) => !c.parent_id)))
+      .catch(() => {});
+  }, []);
+
+  const load = useCallback((p = page, q = search, pf = parentFilter) => {
     setLoading(true);
-    getCategories({ limit: PAGE_SIZE, offset: (p - 1) * PAGE_SIZE })
-      .then((r) => { setRows(r.data); setTotal(r.total ?? r.data.length); })
+    // For "root only": API has no root filter, so fetch a large page and filter client-side.
+    // Data is small (≤233 cats), so this is fine.
+    const isRoot = pf === "root";
+    const apiParams: Parameters<typeof getCategories>[0] = {
+      limit: isRoot ? 500 : PAGE_SIZE,
+      offset: isRoot ? 0 : (p - 1) * PAGE_SIZE,
+    };
+    if (q.trim()) apiParams.search = q.trim();
+    if (!isRoot && pf !== "all") apiParams.parent_id = pf;
+
+    getCategories(apiParams)
+      .then((r) => {
+        let data = r.data;
+        let tot = r.total ?? data.length;
+        if (isRoot) {
+          data = data.filter((c) => !c.parent_id);
+          tot = data.length;
+        }
+        setRows(data);
+        setTotal(tot);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, search, parentFilter]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setSelected(new Set()); }, [rows]);
@@ -116,6 +149,28 @@ export default function CategoriesPage() {
   function goTo(p: number) {
     setPage(p);
     setSelected(new Set());
+  }
+
+  function handleSearchChange(val: string) {
+    setSearch(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      load(1, val, parentFilter);
+    }, 300);
+  }
+
+  function clearSearch() {
+    setSearch("");
+    setPage(1);
+    load(1, "", parentFilter);
+  }
+
+  function handleParentFilterChange(val: string) {
+    setParentFilter(val);
+    setPage(1);
+    setSelected(new Set());
+    load(1, search, val);
   }
 
   function openCreate() {
@@ -225,6 +280,61 @@ export default function CategoriesPage() {
         </div>
       </div>
 
+      {/* Search & filter bar */}
+      <div style={{ display: "flex", gap: "0.625rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+        {/* Search input */}
+        <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180 }}>
+          <Search
+            size={14}
+            style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", pointerEvents: "none" }}
+          />
+          <input
+            className="input"
+            style={{ paddingLeft: 30, paddingRight: search ? 30 : undefined }}
+            placeholder="Search categories…"
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
+          {search && (
+            <button
+              onClick={clearSearch}
+              style={{
+                position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", cursor: "pointer", color: "var(--muted)",
+                display: "flex", alignItems: "center", padding: 2,
+              }}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {/* Parent filter */}
+        <select
+          className="input"
+          style={{ flex: "0 0 auto", minWidth: 180 }}
+          value={parentFilter}
+          onChange={(e) => handleParentFilterChange(e.target.value)}
+        >
+          <option value="all">All categories</option>
+          <option value="root">Root only</option>
+          <optgroup label="Under parent">
+            {rootCats.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </optgroup>
+        </select>
+        {/* Active filter chips */}
+        {(search || parentFilter !== "all") && (
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem" }}
+            onClick={() => { setSearch(""); setParentFilter("all"); setPage(1); setSelected(new Set()); load(1, "", "all"); }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div className="bulk-bar" style={{
@@ -279,8 +389,17 @@ export default function CategoriesPage() {
               <tr>
                 <td colSpan={6}>
                   <div className="empty-state">
-                    <p className="empty-state-title">No categories yet</p>
-                    <p className="empty-state-body">Create your first category to start organizing products.</p>
+                    {search || parentFilter !== "all" ? (
+                      <>
+                        <p className="empty-state-title">No results</p>
+                        <p className="empty-state-body">No categories match your search or filter.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="empty-state-title">No categories yet</p>
+                        <p className="empty-state-body">Create your first category to start organizing products.</p>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

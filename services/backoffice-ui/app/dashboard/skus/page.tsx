@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Search, X } from "lucide-react";
 import { getToken } from "@/lib/auth";
 import { getSkus, updateSku, deleteSku, type SKU } from "@/lib/api";
 import { TableSkeleton } from "@/app/components/Skeleton";
@@ -21,6 +22,7 @@ export default function SkusPage() {
   const [skuCode, setSkuCode]   = useState(searchParams.get("sku_code") ?? "");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -74,21 +76,55 @@ export default function SkusPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: "flex", gap: "0.625rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
-        <input
-          className="input"
-          style={{ maxWidth: 260 }}
-          placeholder="Filter by Product ID…"
-          value={productId}
-          onChange={(e) => { setProductId(e.target.value); setPage(0); }}
-        />
-        <input
-          className="input"
-          style={{ maxWidth: 200 }}
-          placeholder="SKU code…"
-          value={skuCode}
-          onChange={(e) => { setSkuCode(e.target.value); setPage(0); }}
-        />
+      <div style={{ display: "flex", gap: "0.625rem", marginBottom: "1.25rem", flexWrap: "wrap", alignItems: "center" }}>
+        {/* SKU code search */}
+        <div style={{ position: "relative", flex: "1 1 180px", minWidth: 160 }}>
+          <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", pointerEvents: "none" }} />
+          <input
+            className="input"
+            style={{ paddingLeft: 30, paddingRight: skuCode ? 30 : undefined }}
+            placeholder="Search by SKU code…"
+            value={skuCode}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSkuCode(v);
+              if (debounceRef.current) clearTimeout(debounceRef.current);
+              debounceRef.current = setTimeout(() => setPage(0), 300);
+            }}
+          />
+          {skuCode && (
+            <button onClick={() => { setSkuCode(""); setPage(0); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", alignItems: "center", padding: 2 }}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {/* Product ID filter */}
+        <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180 }}>
+          <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", pointerEvents: "none" }} />
+          <input
+            className="input"
+            style={{ paddingLeft: 30, paddingRight: productId ? 30 : undefined, fontFamily: "monospace", fontSize: "0.8rem" }}
+            placeholder="Filter by Product ID (UUID)…"
+            value={productId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setProductId(v);
+              if (debounceRef.current) clearTimeout(debounceRef.current);
+              debounceRef.current = setTimeout(() => setPage(0), 300);
+            }}
+          />
+          {productId && (
+            <button onClick={() => { setProductId(""); setPage(0); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", alignItems: "center", padding: 2 }}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {(skuCode || productId) && (
+          <button className="btn btn-ghost" style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem", whiteSpace: "nowrap" }}
+            onClick={() => { setSkuCode(""); setProductId(""); setPage(0); }}>
+            Clear
+          </button>
+        )}
       </div>
 
       <div style={{ border: "1px solid var(--border)", borderRadius: 7, overflow: "hidden" }}>

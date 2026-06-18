@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Search, X } from "lucide-react";
 import { getToken } from "@/lib/auth";
 import { getProducts, getCategories, createProduct, updateProduct, deleteProduct, type Product, type Category } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
@@ -21,19 +22,43 @@ export default function ProductsPage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
-  const [rows, setRows]           = useState<Product[]>([]);
-  const [total, setTotal]         = useState(0);
-  const [page, setPage]           = useState(0);
-  const [loading, setLoading]     = useState(true);
-  const [cats, setCats]           = useState<Category[]>([]);
-  const [search, setSearch]       = useState(searchParams.get("search") ?? "");
-  const [status, setStatus]       = useState(searchParams.get("status") ?? "");
+  const [rows, setRows]             = useState<Product[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [page, setPage]             = useState(0);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState(searchParams.get("search") ?? "");
+  const [status, setStatus]         = useState(searchParams.get("status") ?? "");
   const [categoryId, setCategoryId] = useState(searchParams.get("category_id") ?? "");
-  const [deleting, setDeleting]   = useState<string | null>(null);
+  const [deleting, setDeleting]     = useState<string | null>(null);
+
+  // Two-tier category filter
+  const [rootCats, setRootCats]       = useState<Category[]>([]);
+  const [subCats, setSubCats]         = useState<Category[]>([]);
+  const [rootFilter, setRootFilter]   = useState("");
+  const [subFilter, setSubFilter]     = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    getCategories().then((r) => setCats(r.data)).catch(console.error);
+    getCategories({ limit: 200 }).then((r) => setRootCats(r.data.filter((c) => !c.parent_id))).catch(console.error);
   }, []);
+
+  async function handleRootChange(rootId: string) {
+    setRootFilter(rootId);
+    setSubFilter("");
+    setCategoryId(rootId);
+    setPage(0);
+    setSubCats([]);
+    if (rootId) {
+      const r = await getCategories({ parent_id: rootId, limit: 200 });
+      setSubCats(r.data);
+    }
+  }
+
+  function handleSubChange(subId: string) {
+    setSubFilter(subId);
+    setCategoryId(subId || rootFilter);
+    setPage(0);
+  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -53,7 +78,8 @@ export default function ProductsPage() {
   useEffect(() => { load(); }, [load]);
 
   function catName(id: string) {
-    return cats.find((c) => c.id === id)?.name ?? <span className="mono" style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{id.slice(0, 8)}</span>;
+    const all = [...rootCats, ...subCats];
+    return all.find((c) => c.id === id)?.name ?? <span className="mono" style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{id.slice(0, 8)}</span>;
   }
 
   async function toggleStatus(p: Product) {
@@ -127,21 +153,51 @@ export default function ProductsPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: "flex", gap: "0.625rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
-        <input
-          className="input"
-          style={{ maxWidth: 260 }}
-          placeholder="Search products…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-        />
-        <select className="input" style={{ maxWidth: 160 }} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
+      <div style={{ display: "flex", gap: "0.625rem", marginBottom: "1.25rem", flexWrap: "wrap", alignItems: "center" }}>
+        {/* Search */}
+        <div style={{ position: "relative", flex: "1 1 200px", minWidth: 160 }}>
+          <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--muted)", pointerEvents: "none" }} />
+          <input
+            className="input"
+            style={{ paddingLeft: 30, paddingRight: search ? 30 : undefined }}
+            placeholder="Search products…"
+            value={search}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSearch(v);
+              if (debounceRef.current) clearTimeout(debounceRef.current);
+              debounceRef.current = setTimeout(() => setPage(0), 300);
+            }}
+          />
+          {search && (
+            <button onClick={() => { setSearch(""); setPage(0); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", alignItems: "center", padding: 2 }}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {/* Status */}
+        <select className="input" style={{ flex: "0 0 auto", minWidth: 140 }} value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
           {STATUSES.map((s) => <option key={s} value={s}>{s || "All statuses"}</option>)}
         </select>
-        <select className="input" style={{ maxWidth: 180 }} value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setPage(0); }}>
+        {/* Root category */}
+        <select className="input" style={{ flex: "0 0 auto", minWidth: 160 }} value={rootFilter} onChange={(e) => handleRootChange(e.target.value)}>
           <option value="">All categories</option>
-          {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {rootCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        {/* Subcategory (appears when root is selected and has children) */}
+        {rootFilter && subCats.length > 0 && (
+          <select className="input" style={{ flex: "0 0 auto", minWidth: 160 }} value={subFilter} onChange={(e) => handleSubChange(e.target.value)}>
+            <option value="">All subcategories</option>
+            {subCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+        {/* Clear */}
+        {(search || rootFilter || status) && (
+          <button className="btn btn-ghost" style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem", whiteSpace: "nowrap" }}
+            onClick={() => { setSearch(""); setStatus(""); setRootFilter(""); setSubFilter(""); setCategoryId(""); setSubCats([]); setPage(0); }}>
+            Clear
+          </button>
+        )}
       </div>
 
       <div style={{ border: "1px solid var(--border)", borderRadius: 7, overflow: "hidden" }}>

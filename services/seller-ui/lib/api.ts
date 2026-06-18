@@ -236,12 +236,13 @@ export async function deleteImage(token: string, productId: string, imageId: str
 export interface Category { id: string; name: string; slug: string; parent_id?: string; }
 
 export async function getCategories(params: {
-  search?: string; limit?: number; offset?: number;
+  search?: string; parent_id?: string; limit?: number; offset?: number;
 } = {}): Promise<{ categories: Category[]; total: number }> {
   const q = new URLSearchParams();
-  if (params.search)             q.set("search", params.search);
-  if (params.limit  != null)     q.set("limit",  String(params.limit));
-  if (params.offset != null)     q.set("offset", String(params.offset));
+  if (params.search)             q.set("search",    params.search);
+  if (params.parent_id)          q.set("parent_id", params.parent_id);
+  if (params.limit  != null)     q.set("limit",     String(params.limit));
+  if (params.offset != null)     q.set("offset",    String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
   const r = await req<{ data: Category[]; total: number }>(`/api/v1/categories${qs}`);
   return { categories: r.data ?? [], total: r.total ?? 0 };

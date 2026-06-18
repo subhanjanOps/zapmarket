@@ -58,6 +58,23 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 	})
 }
 
+// AuthenticateOptional is like Authenticate but does not reject unauthenticated
+// requests. If a valid Bearer token is present, the user is stored in context
+// so downstream handlers can apply role-based filtering (e.g. sellers see only
+// their own products). Requests without a token, or with an invalid token, pass
+// through with no user in context.
+func (m *AuthMiddleware) AuthenticateOptional(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token, ok := extractBearerToken(r); ok {
+			resp, err := m.authClient.ValidateToken(r.Context(), &authpb.ValidateTokenRequest{Token: token})
+			if err == nil && resp.Valid {
+				r = r.WithContext(authctx.WithUser(r.Context(), resp.User))
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // RequireRole returns middleware that allows only users whose role is in the provided list.
 // Must be chained after Authenticate.
 func (m *AuthMiddleware) RequireRole(roles ...string) func(http.Handler) http.Handler {

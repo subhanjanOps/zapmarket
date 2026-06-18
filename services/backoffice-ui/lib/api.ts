@@ -91,9 +91,10 @@ async function listReq<T>(path: string, token?: string): Promise<PageEnvelope<T>
 
 // ── Categories ────────────────────────────────────────────────────────────────
 
-export const getCategories = (params: { search?: string; limit?: number; offset?: number } = {}) => {
+export const getCategories = (params: { search?: string; parent_id?: string | null; limit?: number; offset?: number } = {}) => {
   const q = new URLSearchParams();
-  if (params.search) q.set("search", params.search);
+  if (params.search)     q.set("search",    params.search);
+  if (params.parent_id)  q.set("parent_id", params.parent_id);
   if (params.limit  != null) q.set("limit",  String(params.limit));
   if (params.offset != null) q.set("offset", String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
