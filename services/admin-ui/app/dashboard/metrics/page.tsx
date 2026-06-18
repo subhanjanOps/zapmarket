@@ -26,12 +26,10 @@ export default function MetricsPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--text)", margin: 0 }}>Metrics</h1>
-          <p style={{ fontSize: "0.8125rem", color: "var(--muted)", margin: "0.25rem 0 0" }}>
-            Per-upstream request statistics — refreshes every 10s
-          </p>
+          <h1 className="page-title">Metrics</h1>
+          <p className="page-subtitle">Per-upstream request statistics · refreshes every 10s</p>
         </div>
         <button className="btn btn-ghost" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
       </div>

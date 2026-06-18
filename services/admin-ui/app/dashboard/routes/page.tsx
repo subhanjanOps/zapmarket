@@ -39,68 +39,90 @@ function ProbeModal({ route, onClose }: { route: Route; onClose: () => void }) {
   }
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex",
-      alignItems: "center", justifyContent: "center", zIndex: 100,
-    }} onClick={onClose}>
-      <div style={{
-        background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "4px",
-        padding: "1.5rem", width: "min(600px, 94vw)", maxHeight: "90vh", overflowY: "auto",
-      }} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--text)", margin: "0 0 1rem" }}>
-          Route Tester — <span className="mono" style={{ color: "var(--accent)" }}>{route.path_prefix}</span>
-        </h2>
-
-        <div style={{ display: "grid", gridTemplateColumns: "6rem 1fr", gap: "0.5rem", marginBottom: "0.75rem" }}>
-          <select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
-            {["GET","POST","PUT","DELETE","PATCH"].map((m) => <option key={m}>{m}</option>)}
-          </select>
-          <input className="input mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path" />
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ width: "min(620px, 100%)" }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">
+            Route Tester —{" "}
+            <span className="mono" style={{ color: "var(--accent)" }}>{route.path_prefix}</span>
+          </h2>
+          <p className="modal-subtitle">Send a request through the gateway to this route</p>
         </div>
-        <input
-          className="input mono"
-          style={{ marginBottom: "0.5rem" }}
-          value={probeToken}
-          onChange={(e) => setProbeToken(e.target.value)}
-          placeholder="Bearer token (optional)"
-        />
-        <textarea
-          className="input mono"
-          rows={3}
-          style={{ marginBottom: "0.75rem", resize: "vertical" }}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder='{"key": "value"} (optional body)'
-        />
+        <div className="modal-body">
+          <div className="form-group">
+            <div style={{ display: "grid", gridTemplateColumns: "6.5rem 1fr", gap: "0.5rem" }}>
+              <div>
+                <label className="form-label">Method</label>
+                <select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
+                  {["GET","POST","PUT","DELETE","PATCH"].map((m) => <option key={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Path</label>
+                <input className="input mono" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/resource" />
+              </div>
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Bearer Token (optional)</label>
+            <input
+              className="input mono"
+              value={probeToken}
+              onChange={(e) => setProbeToken(e.target.value)}
+              placeholder="Paste JWT or leave blank to use current session token"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Request Body (optional)</label>
+            <textarea
+              className="input mono"
+              rows={3}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder='{"key": "value"}'
+            />
+          </div>
 
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button className="btn btn-primary" onClick={run} disabled={loading}>
-            {loading ? "Sending…" : "Send"}
-          </button>
-          <button className="btn btn-ghost" onClick={onClose}>Close</button>
-        </div>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button className="btn btn-primary" onClick={run} disabled={loading}>
+              {loading ? "Sending…" : "Send Request"}
+            </button>
+            <button className="btn btn-ghost" onClick={onClose}>Close</button>
+          </div>
 
-        {err && <p style={{ color: "var(--danger)", fontSize: "0.8125rem", marginTop: "0.75rem" }}>{err}</p>}
+          {err && (
+            <div style={{
+              marginTop: "0.875rem", padding: "0.5rem 0.75rem", borderRadius: "4px",
+              background: "color-mix(in srgb, var(--danger) 10%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--danger) 25%, transparent)",
+              fontSize: "0.8rem", color: "var(--danger)",
+            }}>
+              {err}
+            </div>
+          )}
 
-        {result && (
-          <div style={{ marginTop: "1rem" }}>
-            <div style={{ display: "flex", gap: "1rem", marginBottom: "0.5rem", fontSize: "0.8125rem" }}>
-              <span>
-                Status:{" "}
+          {result && (
+            <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.625rem", fontSize: "0.8125rem" }}>
                 <span className={`badge ${result.status < 300 ? "badge-green" : result.status < 500 ? "badge-yellow" : "badge-red"}`}>
                   {result.status}
                 </span>
-              </span>
-              <span style={{ color: "var(--muted)" }}>{result.latency_ms}ms via <span className="mono">{result.upstream}</span></span>
+                <span style={{ color: "var(--text-2)" }}>
+                  <span className="mono">{result.latency_ms}ms</span>
+                  {" · "}
+                  <span className="mono" style={{ color: "var(--muted)" }}>{result.upstream}</span>
+                </span>
+              </div>
+              <pre style={{
+                background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "4px",
+                padding: "0.875rem", fontSize: "0.75rem", overflowX: "auto", maxHeight: "14rem", color: "var(--text)",
+                margin: 0,
+              }}>
+                {(() => { try { return JSON.stringify(JSON.parse(result.body), null, 2); } catch { return result.body; } })()}
+              </pre>
             </div>
-            <pre style={{
-              background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "3px",
-              padding: "0.75rem", fontSize: "0.75rem", overflowX: "auto", maxHeight: "12rem", color: "var(--text)",
-            }}>
-              {(() => { try { return JSON.stringify(JSON.parse(result.body), null, 2); } catch { return result.body; } })()}
-            </pre>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -117,46 +139,43 @@ type EditModalProps = {
 function EditModal({ initial, onSave, onClose }: EditModalProps) {
   const [form, setForm] = useState({ ...EMPTY, ...initial });
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex",
-      alignItems: "center", justifyContent: "center", zIndex: 100,
-    }} onClick={onClose}>
-      <div style={{
-        background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "4px",
-        padding: "1.5rem", width: "min(500px, 94vw)",
-      }} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--text)", margin: "0 0 1rem" }}>
-          {initial?.path_prefix ? "Edit Route" : "New Route"}
-        </h2>
-        {[
-          { label: "Path Prefix", key: "path_prefix", placeholder: "/v1/auth" },
-          { label: "Upstream", key: "upstream", placeholder: "auth-service" },
-        ].map(({ label, key, placeholder }) => (
-          <div key={key} style={{ marginBottom: "0.75rem" }}>
-            <label style={{ display: "block", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "0.25rem" }}>{label}</label>
-            <input
-              className="input mono"
-              value={(form as Record<string, unknown>)[key] as string}
-              onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-              placeholder={placeholder}
-            />
-          </div>
-        ))}
-        <div style={{ marginBottom: "0.75rem" }}>
-          <label style={{ display: "block", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "0.25rem" }}>Auth Mode</label>
-          <select className="input" value={form.auth_mode} onChange={(e) => setForm({ ...form, auth_mode: e.target.value as Route["auth_mode"] })}>
-            <option value="required">required</option>
-            <option value="none">none</option>
-            <option value="method_split">method_split</option>
-          </select>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">{initial?.path_prefix ? "Edit Route" : "New Route"}</h2>
+          <p className="modal-subtitle">Configure routing rules for this path prefix</p>
         </div>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem", color: "var(--text)", marginBottom: "1rem", cursor: "pointer" }}>
-          <input type="checkbox" checked={form.strip_prefix} onChange={(e) => setForm({ ...form, strip_prefix: e.target.checked })} />
-          Strip path prefix before forwarding
-        </label>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button className="btn btn-primary" onClick={() => onSave(form)}>Save</button>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <div className="modal-body">
+          {[
+            { label: "Path Prefix", key: "path_prefix", placeholder: "/v1/auth" },
+            { label: "Upstream Service", key: "upstream", placeholder: "auth-service" },
+          ].map(({ label, key, placeholder }) => (
+            <div key={key} className="form-group">
+              <label className="form-label">{label}</label>
+              <input
+                className="input mono"
+                value={(form as Record<string, unknown>)[key] as string}
+                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                placeholder={placeholder}
+              />
+            </div>
+          ))}
+          <div className="form-group">
+            <label className="form-label">Auth Mode</label>
+            <select className="input" value={form.auth_mode} onChange={(e) => setForm({ ...form, auth_mode: e.target.value as Route["auth_mode"] })}>
+              <option value="required">required — JWT required on all methods</option>
+              <option value="none">none — public, no auth</option>
+              <option value="method_split">method_split — GET/HEAD public, mutations require JWT</option>
+            </select>
+          </div>
+          <label className="form-group" style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem", color: "var(--text)", cursor: "pointer" }}>
+            <input type="checkbox" checked={form.strip_prefix} onChange={(e) => setForm({ ...form, strip_prefix: e.target.checked })} />
+            Strip path prefix before forwarding to upstream
+          </label>
+          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+            <button className="btn btn-primary" onClick={() => onSave(form)}>Save Route</button>
+            <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          </div>
         </div>
       </div>
     </div>
@@ -226,16 +245,16 @@ export default function RoutesPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--text)", margin: 0 }}>Routes</h1>
-          <p style={{ fontSize: "0.8125rem", color: "var(--muted)", margin: "0.25rem 0 0" }}>
+          <h1 className="page-title">Routes</h1>
+          <p className="page-subtitle">
             {routes.length} route{routes.length !== 1 ? "s" : ""} configured
           </p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button className="btn btn-ghost" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
-          <button className="btn btn-primary" style={{ gap: "0.4rem" }} onClick={() => setCreating(true)}>
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
             <Plus size={14} /> New Route
           </button>
         </div>
@@ -257,9 +276,9 @@ export default function RoutesPage() {
           </thead>
           <tbody>
             {routes.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--muted)", padding: "2rem" }}>No routes yet</td></tr>
+              <tr><td colSpan={6}><div className="empty-state"><p className="empty-state-title">No routes configured</p><p className="empty-state-body">Add a route to start proxying traffic</p></div></td></tr>
             ) : routes.map((rt) => (
-              <tr key={rt.id}>
+              <tr key={rt.id} data-status={rt.enabled ? "ok" : "off"}>
                 <td className="mono">{rt.path_prefix}</td>
                 <td className="mono" style={{ color: "var(--muted)" }}>{rt.upstream}</td>
                 <td><span className="badge badge-gray">{rt.auth_mode}</span></td>

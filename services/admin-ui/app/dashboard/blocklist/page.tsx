@@ -49,12 +49,10 @@ export default function BlocklistPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--text)", margin: 0 }}>IP Blocklist</h1>
-          <p style={{ fontSize: "0.8125rem", color: "var(--muted)", margin: "0.25rem 0 0" }}>
-            {entries.length} blocked IP{entries.length !== 1 ? "s" : ""}
-          </p>
+          <h1 className="page-title">IP Blocklist</h1>
+          <p className="page-subtitle">{entries.length} blocked IP{entries.length !== 1 ? "s" : ""}</p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button className="btn btn-ghost" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
