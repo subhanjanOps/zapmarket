@@ -11,6 +11,14 @@ import (
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 )
 
+// UserListParams defines filters for listing users.
+type UserListParams struct {
+	Role   string // empty = all roles
+	Search string // partial match on email or full_name
+	Limit  int
+	Offset int
+}
+
 // UserRepository defines the interface for user persistence.
 type UserRepository interface {
 	CreateUser(ctx context.Context, user *domain.User) error
@@ -19,6 +27,11 @@ type UserRepository interface {
 	UpdateUser(ctx context.Context, user *domain.User) error
 	VerifyUser(ctx context.Context, userID uuid.UUID) error
 	DeleteUser(ctx context.Context, userID uuid.UUID) error
+
+	// Admin operations
+	ListUsers(ctx context.Context, params UserListParams) ([]*domain.User, int64, error)
+	UpdateSellerStatus(ctx context.Context, userID uuid.UUID, status string) error
+	ListSellers(ctx context.Context, status string, limit, offset int) ([]*domain.User, int64, error)
 }
 
 // OAuthRepository defines the interface for OAuth account persistence.

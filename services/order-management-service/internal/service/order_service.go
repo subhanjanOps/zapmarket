@@ -27,6 +27,11 @@ type OrderService interface {
 	ListSellerOrders(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error)
 	// GetSellerOrder returns a single order + its items if it contains the seller's SKUs.
 	GetSellerOrder(ctx context.Context, orderID, sellerID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
+
+	// Admin operations — no ownership checks.
+	ListAllOrders(ctx context.Context, params contracts.OrderListParams) ([]*domain.Order, int64, error)
+	AdminGetOrder(ctx context.Context, orderID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
+	AdminCancelOrder(ctx context.Context, orderID uuid.UUID) (*domain.Order, error)
 }
 
 // CheckoutItem is the per-SKU input to Checkout.
@@ -282,6 +287,52 @@ func (s *orderService) GetSellerOrder(ctx context.Context, orderID, sellerID uui
 		return nil, nil, pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
 	}
 	return order, items, nil
+}
+
+// ── Admin methods ──────────────────────────────────────────────────────────
+
+func (s *orderService) ListAllOrders(ctx context.Context, params contracts.OrderListParams) ([]*domain.Order, int64, error) {
+	return s.repo.ListAll(ctx, params)
+}
+
+func (s *orderService) AdminGetOrder(ctx context.Context, orderID uuid.UUID) (*domain.Order, []*domain.OrderItem, error) {
+	order, err := s.repo.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, nil, err
+	}
+	items, err := s.repo.GetOrderItems(ctx, orderID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return order, items, nil
+}
+
+func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) (*domain.Order, error) {
+	order, err := s.repo.GetByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if err := order.Transition(domain.OrderCancelled); err != nil {
+		return nil, err
+	}
+
+	items, err := s.repo.GetOrderItems(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	s.compensate(ctx, orderID, items)
+
+	cancelPayload, _ := json.Marshal(map[string]string{
+		"order_id": orderID.String(),
+		"reason":   "admin_cancelled",
+	})
+	if err := s.repo.MarkCancelled(ctx, orderID, cancelPayload); err != nil {
+		return nil, err
+	}
+
+	order.Status = domain.OrderCancelled
+	s.logger.Info("order admin-cancelled", "order_id", orderID)
+	return order, nil
 }
 
 // compensate releases all reservations that were already made before a

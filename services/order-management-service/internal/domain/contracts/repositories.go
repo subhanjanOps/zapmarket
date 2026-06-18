@@ -2,10 +2,21 @@ package contracts
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 )
+
+// OrderListParams defines filters for admin order listing.
+type OrderListParams struct {
+	Status string
+	UserID *uuid.UUID
+	From   *time.Time
+	To     *time.Time
+	Limit  int
+	Offset int
+}
 
 // OrderRepository defines all persistence operations for the order saga.
 // All mutations that transition order status also write an outbox row in the
@@ -42,4 +53,7 @@ type OrderRepository interface {
 	// MarkCancelled sets order status → CANCELLED and writes the outbox event
 	// in one DB transaction.
 	MarkCancelled(ctx context.Context, orderID uuid.UUID, outboxPayload []byte) error
+
+	// ListAll returns all orders with optional filters — admin use only.
+	ListAll(ctx context.Context, params OrderListParams) ([]*domain.Order, int64, error)
 }

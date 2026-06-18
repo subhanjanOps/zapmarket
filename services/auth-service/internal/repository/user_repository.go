@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
 )
 
 // UserRepository handles user database operations
@@ -25,8 +27,8 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // CreateUser creates a new user in the database
 func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, phone, password_hash, full_name, role, is_verified, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO users (id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -37,6 +39,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) erro
 		user.FullName,
 		user.Role,
 		user.IsVerified,
+		user.SellerStatus,
 		user.CreatedAt,
 		user.UpdatedAt,
 	)
@@ -54,7 +57,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) erro
 // GetUserByEmail retrieves a user by email
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, phone, password_hash, full_name, role, is_verified, created_at, updated_at, deleted_at
+		SELECT id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at, deleted_at
 		FROM users
 		WHERE email = $1 AND deleted_at IS NULL
 	`
@@ -68,6 +71,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 		&user.FullName,
 		&user.Role,
 		&user.IsVerified,
+		&user.SellerStatus,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.DeletedAt,
@@ -86,7 +90,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 // GetUserByID retrieves a user by ID
 func (r *UserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, phone, password_hash, full_name, role, is_verified, created_at, updated_at, deleted_at
+		SELECT id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at, deleted_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -100,6 +104,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*do
 		&user.FullName,
 		&user.Role,
 		&user.IsVerified,
+		&user.SellerStatus,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.DeletedAt,
@@ -198,4 +203,127 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userID uuid.UUID) error
 	}
 
 	return nil
+}
+
+// ── Admin methods ─────────────────────────────────────────────────────────────
+
+const userSelectCols = `id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at, deleted_at`
+
+func scanUserRow(row interface {
+	Scan(...any) error
+}) (*domain.User, error) {
+	u := &domain.User{}
+	err := row.Scan(&u.ID, &u.Email, &u.Phone, &u.PasswordHash, &u.FullName, &u.Role, &u.IsVerified, &u.SellerStatus, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to scan user: %v", err), err)
+	}
+	return u, nil
+}
+
+// ListUsers returns a paginated list of users filtered by role and/or search term.
+func (r *UserRepository) ListUsers(ctx context.Context, params contracts.UserListParams) ([]*domain.User, int64, error) {
+	args := []any{}
+	conditions := []string{"deleted_at IS NULL"}
+	i := 1
+
+	if params.Role != "" {
+		conditions = append(conditions, fmt.Sprintf("role = $%d", i))
+		args = append(args, params.Role)
+		i++
+	}
+	if params.Search != "" {
+		conditions = append(conditions, fmt.Sprintf("(email ILIKE $%d OR full_name ILIKE $%d)", i, i+1))
+		like := "%" + params.Search + "%"
+		args = append(args, like, like)
+		i += 2
+	}
+
+	where := "WHERE " + strings.Join(conditions, " AND ")
+
+	var total int64
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users "+where, args...).Scan(&total); err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to count users", err)
+	}
+
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	args = append(args, limit, params.Offset)
+	query := fmt.Sprintf("SELECT %s FROM users %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d",
+		userSelectCols, where, i, i+1)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to list users", err)
+	}
+	defer rows.Close()
+
+	var users []*domain.User
+	for rows.Next() {
+		u, err := scanUserRow(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		users = append(users, u)
+	}
+	return users, total, rows.Err()
+}
+
+// UpdateSellerStatus sets seller_status for a seller user.
+func (r *UserRepository) UpdateSellerStatus(ctx context.Context, userID uuid.UUID, status string) error {
+	result, err := r.db.ExecContext(ctx,
+		"UPDATE users SET seller_status = $1, updated_at = $2 WHERE id = $3 AND role = 'seller' AND deleted_at IS NULL",
+		status, time.Now(), userID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to update seller status: %v", err), err)
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return pkgerrors.NewNotFound("USER_NOT_FOUND", "seller not found")
+	}
+	return nil
+}
+
+// ListSellers returns sellers, optionally filtered by seller_status.
+func (r *UserRepository) ListSellers(ctx context.Context, status string, limit, offset int) ([]*domain.User, int64, error) {
+	args := []any{}
+	conditions := []string{"role = 'seller'", "deleted_at IS NULL"}
+	i := 1
+
+	if status != "" {
+		conditions = append(conditions, fmt.Sprintf("seller_status = $%d", i))
+		args = append(args, status)
+		i++
+	}
+
+	where := "WHERE " + strings.Join(conditions, " AND ")
+
+	var total int64
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users "+where, args...).Scan(&total); err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to count sellers", err)
+	}
+
+	if limit <= 0 {
+		limit = 20
+	}
+	args = append(args, limit, offset)
+	query := fmt.Sprintf("SELECT %s FROM users %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d",
+		userSelectCols, where, i, i+1)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to list sellers", err)
+	}
+	defer rows.Close()
+
+	var sellers []*domain.User
+	for rows.Next() {
+		u, err := scanUserRow(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		sellers = append(sellers, u)
+	}
+	return sellers, total, rows.Err()
 }

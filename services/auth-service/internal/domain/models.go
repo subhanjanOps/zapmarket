@@ -24,6 +24,7 @@ type User struct {
 	FullName     string
 	Role         string
 	IsVerified   bool
+	SellerStatus *string // nil for non-sellers; "PENDING" | "APPROVED" | "SUSPENDED"
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    *time.Time

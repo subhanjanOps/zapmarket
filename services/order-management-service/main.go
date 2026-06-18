@@ -106,6 +106,7 @@ func main() {
 	repo := repository.NewOrderRepository(db)
 	svc := service.NewOrderService(repo, inventoryClient, paymentClient, rdb, log)
 	handler := httphandler.NewOrderHandler(svc)
+	adminHandler := httphandler.NewAdminOrderHandler(svc)
 
 	// ── Router ───────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -114,6 +115,16 @@ func main() {
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httphandler.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	// Admin order routes — require admin JWT role.
+	// Register /v1/admin/orders BEFORE any broader /v1/admin prefix on another service.
+	r.Route("/v1/admin/orders", func(r chi.Router) {
+		r.Use(authMW.Authenticate)
+		r.Use(authMW.RequireRole("admin"))
+		r.Get("/", adminHandler.AdminListOrders)
+		r.Get("/{id}", adminHandler.AdminGetOrder)
+		r.Post("/{id}/cancel", adminHandler.AdminCancelOrder)
 	})
 
 	r.Route("/v1/orders", func(r chi.Router) {

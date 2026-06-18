@@ -104,6 +104,7 @@ func main() {
 
 	// Initialize HTTP handlers
 	httpHandler := httphandler.NewHandler(authService, oauthService, cfg)
+	adminHandler := httphandler.NewAdminHandler(userRepo, cfg)
 
 	// Setup HTTP server
 	mux := http.NewServeMux()
@@ -125,6 +126,16 @@ func main() {
 	mux.Handle("/v1/docs/", httpSwagger.Handler(httpSwagger.URL("/v1/docs/swagger.json")))
 
 	// Health check endpoint
+	// Admin routes — all require admin JWT
+	adminMux := http.NewServeMux()
+	adminMux.HandleFunc("GET /v1/admin/users", adminHandler.ListUsers)
+	adminMux.HandleFunc("GET /v1/admin/users/{id}", adminHandler.GetUser)
+	adminMux.HandleFunc("PUT /v1/admin/users/{id}/role", adminHandler.UpdateUserRole)
+	adminMux.HandleFunc("DELETE /v1/admin/users/{id}", adminHandler.DeactivateUser)
+	adminMux.HandleFunc("GET /v1/admin/sellers", adminHandler.ListSellers)
+	adminMux.HandleFunc("PATCH /v1/admin/sellers/{id}/status", adminHandler.UpdateSellerStatus)
+	mux.Handle("/v1/admin/", adminHandler.AdminAuthMiddleware(adminMux))
+
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"ok"}`)

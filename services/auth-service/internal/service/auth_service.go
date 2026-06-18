@@ -57,6 +57,13 @@ func (s *AuthService) RegisterUserPassword(ctx context.Context, email, password,
 	}
 
 	now := time.Now()
+
+	var sellerStatus *string
+	if role == string(domain.RoleSeller) {
+		s := "PENDING"
+		sellerStatus = &s
+	}
+
 	user := &domain.User{
 		ID:           uuid.New(),
 		Email:        email,
@@ -64,6 +71,7 @@ func (s *AuthService) RegisterUserPassword(ctx context.Context, email, password,
 		FullName:     fullName,
 		Role:         role,
 		IsVerified:   true,
+		SellerStatus: sellerStatus,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}

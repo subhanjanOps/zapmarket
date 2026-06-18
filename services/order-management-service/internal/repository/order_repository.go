@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
 )
 
 type OrderRepository struct {
@@ -213,6 +216,67 @@ func scanOrder(row *sql.Row) (*domain.Order, error) {
 		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to get order", err)
 	}
 	return o, nil
+}
+
+// ListAll returns all orders with optional filters — admin use only.
+func (r *OrderRepository) ListAll(ctx context.Context, params contracts.OrderListParams) ([]*domain.Order, int64, error) {
+	args := []any{}
+	conditions := []string{"deleted_at IS NULL"}
+	i := 1
+
+	if params.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("status = $%d", i))
+		args = append(args, params.Status)
+		i++
+	}
+	if params.UserID != nil {
+		conditions = append(conditions, fmt.Sprintf("user_id = $%d", i))
+		args = append(args, *params.UserID)
+		i++
+	}
+	if params.From != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", i))
+		args = append(args, *params.From)
+		i++
+	}
+	if params.To != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", i))
+		args = append(args, *params.To)
+		i++
+	}
+
+	where := "WHERE " + strings.Join(conditions, " AND ")
+
+	var total int64
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM orders "+where, args...).Scan(&total); err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to count orders", err)
+	}
+
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	args = append(args, limit, params.Offset)
+	query := fmt.Sprintf(
+		"SELECT id, user_id, idempotency_key, status, total_amount, currency, payment_id, created_at, updated_at FROM orders %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d",
+		where, i, i+1,
+	)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to list orders", err)
+	}
+	defer rows.Close()
+
+	var orders []*domain.Order
+	for rows.Next() {
+		o, err := scanOrderRow(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		orders = append(orders, o)
+	}
+	return orders, total, rows.Err()
 }
 
 func scanOrderRow(rows *sql.Rows) (*domain.Order, error) {

@@ -260,6 +260,24 @@ services:
       - zapnet
     restart: unless-stopped
 
+  backoffice-ui:
+    build:
+      context: ./services/backoffice-ui
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_GATEWAY_URL=http://localhost:8000
+    container_name: zapmarket-backoffice-ui
+    depends_on:
+      - api-gateway
+    environment:
+      - PORT=3003
+      - HOSTNAME=0.0.0.0
+    ports:
+      - "3003:3003"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: zapmarket-kafka-ui
