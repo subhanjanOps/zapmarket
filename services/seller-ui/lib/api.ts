@@ -23,10 +23,11 @@ function auth(token: string): Record<string, string> {
 export interface LoginResponse { token: string; }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
-  return req("/v1/auth/login", {
+  const r = await req<{ access_token: string }>("/v1/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+  return { token: r.access_token };
 }
 
 export async function register(
@@ -37,7 +38,7 @@ export async function register(
 ): Promise<void> {
   return req("/v1/auth/register", {
     method: "POST",
-    body: JSON.stringify({ first_name, last_name, email, password, role: "seller" }),
+    body: JSON.stringify({ full_name: first_name+" "+last_name, email, password, role: "seller" }),
   });
 }
 
@@ -75,18 +76,23 @@ export async function getProducts(
   if (params.limit)   q.set("limit",   String(params.limit));
   if (params.offset)  q.set("offset",  String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
-  return req(`/v1/products${qs}`, { headers: auth(token) });
+  const r = await req<{ data: Product[]; total: number; page: number; page_size: number }>(
+    `/api/v1/products${qs}`, { headers: auth(token) },
+  );
+  return { products: r.data ?? [], total: r.total ?? 0, limit: r.page_size ?? 20, offset: ((r.page ?? 1) - 1) * (r.page_size ?? 20) };
 }
 
 export async function getProduct(token: string, id: string): Promise<Product> {
-  return req(`/v1/products/${id}`, { headers: auth(token) });
+  const r = await req<{ data: Product }>(`/api/v1/products/${id}`, { headers: auth(token) });
+  return r.data;
 }
 
 export async function createProduct(
   token: string,
   data: { name: string; slug: string; description: string; category_id: string; status: string },
 ): Promise<Product> {
-  return req("/v1/products", { method: "POST", body: JSON.stringify(data), headers: auth(token) });
+  const r = await req<{ data: Product }>("/api/v1/products", { method: "POST", body: JSON.stringify(data), headers: auth(token) });
+  return r.data;
 }
 
 export async function updateProduct(
@@ -94,11 +100,12 @@ export async function updateProduct(
   id: string,
   data: Partial<{ name: string; slug: string; description: string; category_id: string; status: string }>,
 ): Promise<Product> {
-  return req(`/v1/products/${id}`, { method: "PUT", body: JSON.stringify(data), headers: auth(token) });
+  const r = await req<{ data: Product }>(`/api/v1/products/${id}`, { method: "PUT", body: JSON.stringify(data), headers: auth(token) });
+  return r.data;
 }
 
 export async function deleteProduct(token: string, id: string): Promise<void> {
-  return req(`/v1/products/${id}`, { method: "DELETE", headers: auth(token) });
+  return req(`/api/v1/products/${id}`, { method: "DELETE", headers: auth(token) });
 }
 
 // ── SKUs ──────────────────────────────────────────────────────────────────────
@@ -117,7 +124,8 @@ export interface SKU {
 }
 
 export async function getSkus(token: string, productId: string): Promise<{ skus: SKU[] }> {
-  return req(`/v1/products/${productId}/skus`, { headers: auth(token) });
+  const r = await req<{ data: SKU[] }>(`/api/v1/skus?product_id=${productId}`, { headers: auth(token) });
+  return { skus: r.data ?? [] };
 }
 
 export async function createSku(
@@ -133,7 +141,8 @@ export async function createSku(
     is_active: boolean;
   },
 ): Promise<SKU> {
-  return req("/v1/skus", { method: "POST", body: JSON.stringify(data), headers: auth(token) });
+  const r = await req<{ data: SKU }>("/api/v1/skus", { method: "POST", body: JSON.stringify(data), headers: auth(token) });
+  return r.data;
 }
 
 export async function updateSku(
@@ -141,11 +150,12 @@ export async function updateSku(
   id: string,
   data: Partial<Omit<SKU, "id" | "product_id" | "created_at">>,
 ): Promise<SKU> {
-  return req(`/v1/skus/${id}`, { method: "PUT", body: JSON.stringify(data), headers: auth(token) });
+  const r = await req<{ data: SKU }>(`/api/v1/skus/${id}`, { method: "PUT", body: JSON.stringify(data), headers: auth(token) });
+  return r.data;
 }
 
 export async function deleteSku(token: string, id: string): Promise<void> {
-  return req(`/v1/skus/${id}`, { method: "DELETE", headers: auth(token) });
+  return req(`/api/v1/skus/${id}`, { method: "DELETE", headers: auth(token) });
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
@@ -160,7 +170,8 @@ export interface ProductImage {
 }
 
 export async function getImages(token: string, productId: string): Promise<{ images: ProductImage[] }> {
-  return req(`/v1/products/${productId}/images`, { headers: auth(token) });
+  const r = await req<{ data: ProductImage[] }>(`/api/v1/products/${productId}/images`, { headers: auth(token) });
+  return { images: r.data ?? [] };
 }
 
 export async function uploadImage(
@@ -172,7 +183,7 @@ export async function uploadImage(
   const fd = new FormData();
   fd.append("image", file);
   if (skuId) fd.append("sku_id", skuId);
-  const res = await fetch(`${GW}/v1/products/${productId}/images`, {
+  const res = await fetch(`${GW}/api/v1/products/${productId}/images`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: fd,
@@ -182,7 +193,8 @@ export async function uploadImage(
     try { const j = await res.json(); msg = j.error ?? j.message ?? msg; } catch { /* */ }
     throw new Error(msg);
   }
-  return res.json();
+  const r = await res.json();
+  return r.data ?? r;
 }
 
 export async function setImagePosition(
@@ -191,7 +203,7 @@ export async function setImagePosition(
   imageId: string,
   position: number,
 ): Promise<void> {
-  return req(`/v1/products/${productId}/images/${imageId}`, {
+  return req(`/api/v1/products/${productId}/images/${imageId}/position`, {
     method: "PATCH",
     body: JSON.stringify({ position }),
     headers: auth(token),
@@ -199,7 +211,7 @@ export async function setImagePosition(
 }
 
 export async function deleteImage(token: string, productId: string, imageId: string): Promise<void> {
-  return req(`/v1/products/${productId}/images/${imageId}`, { method: "DELETE", headers: auth(token) });
+  return req(`/api/v1/products/${productId}/images/${imageId}`, { method: "DELETE", headers: auth(token) });
 }
 
 // ── Categories ────────────────────────────────────────────────────────────────
@@ -207,7 +219,8 @@ export async function deleteImage(token: string, productId: string, imageId: str
 export interface Category { id: string; name: string; slug: string; }
 
 export async function getCategories(): Promise<{ categories: Category[] }> {
-  return req("/v1/categories");
+  const r = await req<{ data: Category[] }>("/api/v1/categories");
+  return { categories: r.data ?? [] };
 }
 
 // ── Orders (seller) ───────────────────────────────────────────────────────────
@@ -253,16 +266,21 @@ export async function getSellerOrders(
   if (params.limit)  q.set("limit",  String(params.limit));
   if (params.offset) q.set("offset", String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
-  return req(`/v1/orders/seller${qs}`, { headers: auth(token) });
+  const r = await req<{ data: Order[] | null }>(`/v1/orders/seller${qs}`, { headers: auth(token) });
+  const orders = r.data ?? [];
+  return { orders, total: orders.length, limit: params.limit ?? 20, offset: params.offset ?? 0 };
 }
 
 export async function getSellerOrder(
   token: string,
   id: string,
 ): Promise<{ order: Order; items: OrderItem[] }> {
-  return req(`/v1/orders/seller/${id}`, { headers: auth(token) });
+  const r = await req<{ data: Order & { items: OrderItem[] } }>(`/v1/orders/seller/${id}`, { headers: auth(token) });
+  const { items, ...order } = r.data;
+  return { order: order as Order, items: items ?? [] };
 }
 
 export async function cancelOrder(token: string, id: string): Promise<Order> {
-  return req(`/v1/orders/${id}/cancel`, { method: "POST", headers: auth(token) });
+  const r = await req<{ data: Order }>(`/v1/orders/${id}/cancel`, { method: "POST", headers: auth(token) });
+  return r.data;
 }
