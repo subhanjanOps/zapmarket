@@ -55,40 +55,68 @@ func (cr *CategoryRepository) CreateCategory(
 	return nil
 }
 
-func (cr *CategoryRepository) BulkCreateCategories(ctx context.Context, categories []*domain.Category) error {
+func (cr *CategoryRepository) BulkCreateCategories(ctx context.Context, categories []*domain.Category) ([]*domain.Category, error) {
 	if len(categories) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	tx, err := cr.db.BeginTx(ctx, nil)
 	if err != nil {
-		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to begin transaction", err)
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to begin transaction", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
+	// ON CONFLICT DO UPDATE SET id=id is a no-op update that forces RETURNING
+	// to emit the existing row — giving callers the real ID for parent linking.
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO categories (id, name, slug, parent_id, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, NOW(), NOW())
-		ON CONFLICT (slug) DO NOTHING
+		ON CONFLICT (slug) DO UPDATE SET updated_at = categories.updated_at
+		RETURNING id, name, slug, parent_id, created_at, updated_at
 	`)
 	if err != nil {
-		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to prepare statement", err)
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to prepare statement", err)
 	}
 	defer stmt.Close()
 
+	result := make([]*domain.Category, 0, len(categories))
 	for _, cat := range categories {
-		if _, err := stmt.ExecContext(ctx, cat.ID, cat.Name, cat.Slug, cat.ParentID); err != nil {
-			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
-				return pkgerrors.NewConflict("CATEGORY_ALREADY_EXISTS", fmt.Sprintf("category with slug '%s' already exists", cat.Slug))
-			}
-			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to insert category", err)
+		row := stmt.QueryRowContext(ctx, cat.ID, cat.Name, cat.Slug, cat.ParentID)
+		persisted := &domain.Category{}
+		if err := row.Scan(&persisted.ID, &persisted.Name, &persisted.Slug, &persisted.ParentID, &persisted.CreatedAt, &persisted.UpdatedAt); err != nil {
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan inserted category", err)
 		}
+		result = append(result, persisted)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to commit transaction", err)
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to commit transaction", err)
 	}
-	return nil
+	return result, nil
+}
+
+func (cr *CategoryRepository) GetCategoriesByNames(ctx context.Context, names []string) (map[string]uuid.UUID, error) {
+	if len(names) == 0 {
+		return map[string]uuid.UUID{}, nil
+	}
+	rows, err := cr.db.QueryContext(ctx,
+		`SELECT id, name FROM categories WHERE name = ANY($1) AND deleted_at IS NULL`,
+		pq.Array(names),
+	)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to look up parent names", err)
+	}
+	defer rows.Close()
+	result := make(map[string]uuid.UUID, len(names))
+	for rows.Next() {
+		var id uuid.UUID
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan category name", err)
+		}
+		result[name] = id
+	}
+	return result, rows.Err()
 }
 
 func (cr *CategoryRepository) GetCategoryByID(

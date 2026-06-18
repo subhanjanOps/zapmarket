@@ -69,9 +69,19 @@ func (h *CategoryHandler) CreateCategory(w http.ResponseWriter, r *http.Request)
 	SuccessResponse(w, http.StatusCreated, category)
 }
 
+// BulkCategoryItem is one row in the bulk-import payload. Either parent_id
+// (UUID) or parent_name (resolved server-side) may be supplied; parent_name
+// takes precedence when both are present.
+type BulkCategoryItem struct {
+	Name       string     `json:"name"`
+	Slug       string     `json:"slug"`
+	ParentID   *uuid.UUID `json:"parent_id,omitempty"`
+	ParentName *string    `json:"parent_name,omitempty"`
+}
+
 // BulkCreateCategoriesRequest is the payload for the bulk-import endpoint.
 type BulkCreateCategoriesRequest struct {
-	Categories []CreateCategoryRequest `json:"categories"`
+	Categories []BulkCategoryItem `json:"categories"`
 }
 
 // BulkCreateCategories creates multiple categories in one transaction
@@ -94,12 +104,13 @@ func (h *CategoryHandler) BulkCreateCategories(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	categories := make([]*domain.Category, 0, len(req.Categories))
+	categories := make([]*domain.BulkCategoryInput, 0, len(req.Categories))
 	for _, c := range req.Categories {
-		categories = append(categories, &domain.Category{
-			Name:     c.Name,
-			Slug:     c.Slug,
-			ParentID: c.ParentID,
+		categories = append(categories, &domain.BulkCategoryInput{
+			Name:       c.Name,
+			Slug:       c.Slug,
+			ParentID:   c.ParentID,
+			ParentName: c.ParentName,
 		})
 	}
 

@@ -18,6 +18,15 @@ type Category struct {
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
+// BulkCategoryInput is the service-layer input for one row of a bulk import.
+// ParentName is resolved server-side to a ParentID before insertion.
+type BulkCategoryInput struct {
+	Name       string
+	Slug       string
+	ParentID   *uuid.UUID
+	ParentName *string
+}
+
 // DefaultPageSize and MaxPageSize bound every list endpoint's limit/offset
 // query params so a client can't force an unbounded table scan.
 const (

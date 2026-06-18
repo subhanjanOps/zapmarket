@@ -112,7 +112,7 @@ export const createCategory = (
 
 export const bulkCreateCategories = (
   token: string,
-  categories: { name: string; slug: string; parent_id?: string }[],
+  categories: { name: string; slug: string; parent_name?: string }[],
 ) => req<{ data: Category[] }>("/api/v1/categories/bulk", {
   method: "POST", body: JSON.stringify({ categories }), headers: auth(token),
 }).then((r) => r.data ?? []);

@@ -178,7 +178,12 @@
       "Bash(docker restart *)",
       "Bash(grep -v \"showAlert\\\\|showConfirm\\\\|//.*alert\\\\|//.*confirm\")",
       "Bash(xargs grep -l \"authctx\")",
-      "Bash(psql -U zapuser -d apigateway -c \"SELECT path, auth_mode FROM gateway_routes WHERE path LIKE '%categor%' ORDER BY path;\")"
+      "Bash(psql -U zapuser -d apigateway -c \"SELECT path, auth_mode FROM gateway_routes WHERE path LIKE '%categor%' ORDER BY path;\")",
+      "PowerShell($env:PGPASSWORD=\"zappass123\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -h localhost -U zapuser -d userauth -c \"SELECT email, role FROM users WHERE role='admin' LIMIT 3;\" 2>&1)",
+      "PowerShell(docker exec -i $\\(docker ps --filter \"name=postgres\" --format \"{{.Names}}\" | head -1\\) psql -U zapuser -d userauth -c \"SELECT email, role FROM users WHERE role='admin' LIMIT 3;\" 2>&1)",
+      "PowerShell(docker port zapmarket-postgres *)",
+      "PowerShell(netstat *)",
+      "PowerShell(curl *)"
     ]
   }
 }

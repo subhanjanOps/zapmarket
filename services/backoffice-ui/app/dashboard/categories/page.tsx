@@ -229,50 +229,16 @@ export default function CategoriesPage() {
               const token = getToken();
               if (!token) throw new Error("Not authenticated");
 
-              // Seed name→id from categories already in the DB
-              const nameToId = new Map<string, string>(rows.map((c) => [c.name, c.id]));
+              // Server resolves parent_name → parent_id, handles ordering.
+              // One API call for the entire CSV regardless of depth or size.
+              const payload = csvRows.map((r) => ({
+                name: r.name.trim(),
+                slug: r.slug.trim(),
+                parent_name: r.parent_name?.trim() || undefined,
+              }));
 
-              // Pass 1: roots (no parent_name)
-              const roots = csvRows.filter((r) => !r.parent_name?.trim());
-              const children = csvRows.filter((r) => !!r.parent_name?.trim());
-
-              const errors: { row: number; message: string }[] = [];
-              let ok = 0;
-
-              if (roots.length > 0) {
-                try {
-                  const created = await bulkCreateCategories(token, roots.map((r) => ({ name: r.name, slug: r.slug })));
-                  created.forEach((c) => nameToId.set(c.name, c.id));
-                  ok += created.length;
-                } catch (e) {
-                  errors.push({ row: 0, message: `Root categories: ${e instanceof Error ? e.message : "failed"}` });
-                }
-              }
-
-              // Pass 2: children — resolve parent_id from the map built in pass 1
-              if (children.length > 0) {
-                const resolved: { name: string; slug: string; parent_id?: string }[] = [];
-                children.forEach((r, i) => {
-                  const parentName = r.parent_name.trim();
-                  const parent_id = nameToId.get(parentName);
-                  if (!parent_id) {
-                    errors.push({ row: roots.length + i + 2, message: `Parent "${parentName}" not found` });
-                  } else {
-                    resolved.push({ name: r.name, slug: r.slug, parent_id });
-                  }
-                });
-
-                if (resolved.length > 0) {
-                  try {
-                    const created = await bulkCreateCategories(token, resolved);
-                    ok += created.length;
-                  } catch (e) {
-                    errors.push({ row: 0, message: `Subcategories: ${e instanceof Error ? e.message : "failed"}` });
-                  }
-                }
-              }
-
-              return { ok, errors };
+              const created = await bulkCreateCategories(token, payload);
+              return { ok: created.length, errors: [] };
             }}
             onDone={load}
           />
