@@ -98,16 +98,17 @@ export default function UsersPage() {
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
-              <th>Verified</th>
+              <th>Email verified</th>
+              <th>Seller status</th>
               <th>Joined</th>
               <th style={{ width: 160 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <TableSkeleton rows={8} cols={6} />
+              <TableSkeleton rows={8} cols={7} />
             ) : rows.length === 0 ? (
-              <tr><td colSpan={6}><div className="empty-state"><p className="empty-state-title">No users found</p></div></td></tr>
+              <tr><td colSpan={7}><div className="empty-state"><p className="empty-state-title">No users found</p></div></td></tr>
             ) : (
               rows.map((u) => (
                 <tr key={u.id}>
@@ -121,6 +122,15 @@ export default function UsersPage() {
                   <td>
                     <span className={`status-dot ${u.is_verified ? "status-dot-green" : "status-dot-amber"}`} style={{ marginRight: 6 }} />
                     {u.is_verified ? "Yes" : "No"}
+                  </td>
+                  <td>
+                    {u.role === "seller" && u.seller_status ? (
+                      <span className={`badge ${u.seller_status === "APPROVED" ? "badge-green" : u.seller_status === "PENDING" ? "badge-yellow" : "badge-red"}`}>
+                        {u.seller_status}
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
                   </td>
                   <td style={{ color: "var(--text-2)" }}>{new Date(u.created_at).toLocaleDateString()}</td>
                   <td>

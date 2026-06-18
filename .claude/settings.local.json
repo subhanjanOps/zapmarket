@@ -174,7 +174,8 @@
       "Bash(python -m json.tool)",
       "Bash(xargs grep -l \"func Paginated\\\\|func SuccessResponse\")",
       "Bash(xargs grep -n \"Paginated\\\\|struct\\\\|page\\\\|total\\\\|data\")",
-      "Bash(xargs grep -l \"Paginated\")"
+      "Bash(xargs grep -l \"Paginated\")",
+      "Bash(docker restart *)"
     ]
   }
 }

@@ -303,7 +303,7 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 			origin := r.Header.Get("Origin")
 			if originAllowed(origin, allowedOrigin) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, Idempotency-Key")
 				w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
 				w.Header().Set("Access-Control-Max-Age", "3600")

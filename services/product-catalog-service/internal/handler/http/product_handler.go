@@ -263,25 +263,39 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	attrs := existingProduct.Attributes
+	// Merge: start from existing, apply only the fields the caller provided.
+	product := &domain.Product{
+		ID:          id,
+		CategoryID:  existingProduct.CategoryID,
+		SellerID:    existingProduct.SellerID,
+		Name:        existingProduct.Name,
+		Slug:        existingProduct.Slug,
+		Description: existingProduct.Description,
+		Attributes:  existingProduct.Attributes,
+		Status:      existingProduct.Status,
+	}
+	if req.CategoryID != uuid.Nil {
+		product.CategoryID = req.CategoryID
+	}
+	if req.Name != "" {
+		product.Name = req.Name
+	}
+	if req.Slug != "" {
+		product.Slug = req.Slug
+	}
+	if req.Description != nil {
+		product.Description = req.Description
+	}
+	if req.Status != "" {
+		product.Status = domain.ProductStatus(req.Status)
+	}
 	if req.Attributes != nil {
-		var err error
-		attrs, err = attributesToRawMessage(req.Attributes)
+		attrs, err := attributesToRawMessage(req.Attributes)
 		if err != nil {
 			ErrorResponse(w, http.StatusBadRequest, "INVALID_ATTRIBUTES", "attributes must be valid JSON")
 			return
 		}
-	}
-
-	product := &domain.Product{
-		ID:          id,
-		CategoryID:  req.CategoryID,
-		SellerID:    existingProduct.SellerID,
-		Name:        req.Name,
-		Slug:        req.Slug,
-		Description: req.Description,
-		Attributes:  attrs,
-		Status:      domain.ProductStatus(req.Status),
+		product.Attributes = attrs
 	}
 
 	if err := h.productService.UpdateProduct(r.Context(), product); err != nil {

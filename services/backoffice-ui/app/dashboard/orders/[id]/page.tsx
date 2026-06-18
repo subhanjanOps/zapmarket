@@ -6,7 +6,7 @@ import Link from "next/link";
 import { getToken } from "@/lib/auth";
 import { adminGetOrder, adminCancelOrder, type AdminOrder, type OrderItem } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
-import { Skeleton } from "@/app/components/Skeleton";
+import Skeleton from "@/app/components/Skeleton";
 
 function fmt(cents: number, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
@@ -59,7 +59,7 @@ export default function OrderDetailPage() {
 
       {loading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {[120, 80, 200, 160].map((w, i) => <Skeleton key={i} style={{ width: w, height: 20 }} />)}
+          {[120, 80, 200, 160].map((w, i) => <Skeleton key={i} w={w} h={20} />)}
         </div>
       ) : !order ? (
         <div className="empty-state">
