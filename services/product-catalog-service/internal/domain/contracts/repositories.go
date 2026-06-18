@@ -20,10 +20,11 @@ type CategoryRepository interface {
 	// returns the persisted rows. On slug conflict the existing row is returned,
 	// preserving its real ID for parent resolution.
 	BulkCreateCategories(ctx context.Context, categories []*domain.Category) ([]*domain.Category, error)
-	// GetCategoriesByNames returns id+name for every category whose name is in
-	// the given set. Used by the bulk-import service to resolve parent_name →
-	// parent_id without fetching the entire table.
-	GetCategoriesByNames(ctx context.Context, names []string) (map[string]uuid.UUID, error)
+	// GetCategoriesByNameOrSlug returns a lookup map for every category whose
+	// name OR slug matches any value in the given set. The map contains entries
+	// for both name and slug so callers can resolve either convention used in
+	// an imported CSV without fetching the entire table.
+	GetCategoriesByNameOrSlug(ctx context.Context, values []string) (map[string]uuid.UUID, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (*domain.Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (*domain.Category, error)
 	// GetCategoryList returns the matching page of categories plus the total

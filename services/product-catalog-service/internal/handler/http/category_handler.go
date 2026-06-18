@@ -123,6 +123,12 @@ func (h *CategoryHandler) BulkCreateCategories(w http.ResponseWriter, r *http.Re
 	SuccessResponse(w, http.StatusCreated, created)
 }
 
+// TODO(csv-import-service): Async CSV import for categories is planned as a
+// dedicated import-service that reads from a job queue, processes large CSVs
+// in the background, and reports progress via WebSocket or polling. The
+// synchronous BulkCreateCategories endpoint above handles small programmatic
+// batches; bulk CSV uploads from the UI will go through that service instead.
+
 // GetCategoryByID returns a category by ID
 //
 //	@Summary		Get category by ID

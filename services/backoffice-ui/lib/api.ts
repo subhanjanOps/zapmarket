@@ -1,4 +1,4 @@
-const GW = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+export const GW = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${GW}${path}`, {

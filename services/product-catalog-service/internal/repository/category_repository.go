@@ -95,26 +95,28 @@ func (cr *CategoryRepository) BulkCreateCategories(ctx context.Context, categori
 	return result, nil
 }
 
-func (cr *CategoryRepository) GetCategoriesByNames(ctx context.Context, names []string) (map[string]uuid.UUID, error) {
-	if len(names) == 0 {
+func (cr *CategoryRepository) GetCategoriesByNameOrSlug(ctx context.Context, values []string) (map[string]uuid.UUID, error) {
+	if len(values) == 0 {
 		return map[string]uuid.UUID{}, nil
 	}
 	rows, err := cr.db.QueryContext(ctx,
-		`SELECT id, name FROM categories WHERE name = ANY($1) AND deleted_at IS NULL`,
-		pq.Array(names),
+		`SELECT id, name, slug FROM categories WHERE (name = ANY($1) OR slug = ANY($1)) AND deleted_at IS NULL`,
+		pq.Array(values),
 	)
 	if err != nil {
-		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to look up parent names", err)
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to look up parent names/slugs", err)
 	}
 	defer rows.Close()
-	result := make(map[string]uuid.UUID, len(names))
+	// Index by both name and slug so the caller can resolve whichever the CSV used.
+	result := make(map[string]uuid.UUID, len(values)*2)
 	for rows.Next() {
 		var id uuid.UUID
-		var name string
-		if err := rows.Scan(&id, &name); err != nil {
-			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan category name", err)
+		var name, slug string
+		if err := rows.Scan(&id, &name, &slug); err != nil {
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan category row", err)
 		}
 		result[name] = id
+		result[slug] = id
 	}
 	return result, rows.Err()
 }

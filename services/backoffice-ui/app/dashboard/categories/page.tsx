@@ -3,17 +3,17 @@
 import { useEffect, useState, useCallback } from "react";
 import { getToken } from "@/lib/auth";
 import {
-  getCategories, createCategory, updateCategory, deleteCategory, bulkCreateCategories,
+  getCategories, createCategory, updateCategory, deleteCategory,
   type Category,
 } from "@/lib/api";
 import { TableSkeleton } from "@/app/components/Skeleton";
-import { ExportButton, ImportButton } from "@/app/components/BulkIO";
+import { ExportButton } from "@/app/components/BulkIO";
 import { showAlert, showConfirm } from "@/app/components/Dialog";
 
 const PAGE_SIZE = 20;
 const CAT_EXPORT_HEADERS = ["id", "name", "slug", "parent_id", "created_at"];
-const CAT_IMPORT_HEADERS = ["name", "slug", "parent_name"];
-const CAT_TEMPLATE = { name: "Electronics", slug: "electronics", parent_name: "" };
+// TODO(csv-import-service): bulk CSV import will be added once the async
+// import-service (job queue + worker) is in place.
 
 type FormState = { name: string; slug: string; parent_id: string };
 const EMPTY: FormState = { name: "", slug: "", parent_id: "" };
@@ -220,27 +220,6 @@ export default function CategoriesPage() {
               const r = await getCategories({ limit: 10000, offset: 0 });
               return r.data as unknown as Record<string, unknown>[];
             }}
-          />
-          <ImportButton
-            title="Categories"
-            expectedHeaders={CAT_IMPORT_HEADERS}
-            templateRow={CAT_TEMPLATE}
-            importAll={async (csvRows) => {
-              const token = getToken();
-              if (!token) throw new Error("Not authenticated");
-
-              // Server resolves parent_name → parent_id, handles ordering.
-              // One API call for the entire CSV regardless of depth or size.
-              const payload = csvRows.map((r) => ({
-                name: r.name.trim(),
-                slug: r.slug.trim(),
-                parent_name: r.parent_name?.trim() || undefined,
-              }));
-
-              const created = await bulkCreateCategories(token, payload);
-              return { ok: created.length, errors: [] };
-            }}
-            onDone={load}
           />
           <button className="btn btn-primary" onClick={openCreate}>+ New category</button>
         </div>

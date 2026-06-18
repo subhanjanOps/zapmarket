@@ -76,31 +76,33 @@ func (cs *categoryService) BulkCreateCategories(ctx context.Context, inputs []*d
 		}
 	}
 
-	// Collect the parent names that must be resolved from the DB — only those
-	// not already provided as a UUID and not satisfiable within this same batch.
-	inputNames := make(map[string]struct{}, len(inputs))
+	// Index every input by both name and slug so parent references work
+	// regardless of which convention the CSV uses.
+	inBatch := make(map[string]struct{}, len(inputs)*2)
 	for _, in := range inputs {
-		inputNames[in.Name] = struct{}{}
+		inBatch[in.Name] = struct{}{}
+		inBatch[in.Slug] = struct{}{}
 	}
-	var externalNames []string
+
+	// Collect parent references that must be resolved from the DB — only
+	// those not satisfiable within this same batch.
+	var externalRefs []string
 	for _, in := range inputs {
 		if in.ParentName != nil && *in.ParentName != "" {
-			if _, inBatch := inputNames[*in.ParentName]; !inBatch {
-				externalNames = append(externalNames, *in.ParentName)
+			if _, ok := inBatch[*in.ParentName]; !ok {
+				externalRefs = append(externalRefs, *in.ParentName)
 			}
 		}
 	}
 
-	// One batch SELECT for all external parent names.
-	nameToID, err := cs.categoryRepo.GetCategoriesByNames(ctx, externalNames)
+	// One batch SELECT matching by name OR slug for maximum CSV compatibility.
+	lookup, err := cs.categoryRepo.GetCategoriesByNameOrSlug(ctx, externalRefs)
 	if err != nil {
 		return nil, err
 	}
 
 	// Topological sort: each wave contains inputs whose parent is already
-	// resolved (either from the DB lookup or from a prior wave's output).
-	// nameToID grows as waves complete, so child-of-child works automatically.
-	resolved := make(map[string]uuid.UUID) // name → new ID, built wave by wave
+	// resolved. lookup grows as waves complete so child-of-child works.
 	remaining := make([]*domain.BulkCategoryInput, len(inputs))
 	copy(remaining, inputs)
 
@@ -112,31 +114,23 @@ func (cs *categoryService) BulkCreateCategories(ctx context.Context, inputs []*d
 
 		for _, in := range remaining {
 			if in.ParentName == nil || *in.ParentName == "" {
-				// Root category — no parent needed.
+				wave = append(wave, in)
+			} else if _, ok := lookup[*in.ParentName]; ok {
 				wave = append(wave, in)
 			} else {
-				pName := *in.ParentName
-				if _, ok := nameToID[pName]; ok {
-					wave = append(wave, in)
-				} else if _, ok := resolved[pName]; ok {
-					wave = append(wave, in)
-				} else {
-					still = append(still, in)
-				}
+				still = append(still, in)
 			}
 		}
 
 		if len(wave) == 0 {
-			// Remaining rows reference parent names that don't exist.
-			names := make([]string, 0, len(still))
+			unresolved := make([]string, 0, len(still))
 			for _, in := range still {
-				names = append(names, *in.ParentName)
+				unresolved = append(unresolved, *in.ParentName)
 			}
 			return nil, pkgerrors.NewValidation("UNRESOLVABLE_PARENTS",
-				"parent categories not found: "+strings.Join(uniqueStrings(names), ", "))
+				"parent categories not found: "+strings.Join(uniqueStrings(unresolved), ", "))
 		}
 
-		// Build Category objects for this wave with resolved parent IDs.
 		waveCategories := make([]*domain.Category, 0, len(wave))
 		for _, in := range wave {
 			cat := &domain.Category{
@@ -146,10 +140,7 @@ func (cs *categoryService) BulkCreateCategories(ctx context.Context, inputs []*d
 				ParentID: in.ParentID,
 			}
 			if in.ParentName != nil && *in.ParentName != "" {
-				pName := *in.ParentName
-				if id, ok := nameToID[pName]; ok {
-					cat.ParentID = &id
-				} else if id, ok := resolved[pName]; ok {
+				if id, ok := lookup[*in.ParentName]; ok {
 					cat.ParentID = &id
 				}
 			}
@@ -161,10 +152,10 @@ func (cs *categoryService) BulkCreateCategories(ctx context.Context, inputs []*d
 			return nil, err
 		}
 
-		// Extend resolved map so the next wave can reference names created here.
+		// Index persisted rows by both name and slug for the next wave.
 		for _, cat := range persisted {
-			resolved[cat.Name] = cat.ID
-			nameToID[cat.Name] = cat.ID
+			lookup[cat.Name] = cat.ID
+			lookup[cat.Slug] = cat.ID
 		}
 		ordered = append(ordered, persisted...)
 		remaining = still

@@ -109,10 +109,11 @@ interface ImportProps {
   importRow?: (row: Record<string, string>) => Promise<void>;
   /**
    * Alternative to importRow: called once with ALL parsed rows.
-   * Return ok count + any row-level errors. Use this for endpoints that
-   * support bulk insert to avoid per-row API calls (and rate limiting).
+   * Return ok count + any row-level errors.
    */
   importAll?: (rows: Record<string, string>[]) => Promise<{ ok: number; errors: { row: number; message: string }[] }>;
+  // TODO(csv-import-service): csvUpload prop (multipart POST) will be
+  // re-added once the async import-service handles large CSV jobs.
   onDone: () => void;
 }
 
@@ -175,7 +176,6 @@ function ImportModal({ title, expectedHeaders, templateRow, importRow, importAll
     let result: ImportResult;
 
     if (importAll) {
-      // Single bulk API call — progress jumps to 100% when done
       try {
         result = await importAll(parsed.rows);
       } catch (e: unknown) {
