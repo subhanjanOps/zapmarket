@@ -206,6 +206,8 @@ type UserResponse struct {
 	Role string `json:"role" example:"buyer"`
 	// Email verification status
 	IsVerified bool `json:"is_verified" example:"true"`
+	// Seller approval status (PENDING, APPROVED, SUSPENDED) — only present for seller role
+	SellerStatus *string `json:"seller_status,omitempty" example:"PENDING"`
 	// Creation timestamp
 	CreatedAt string `json:"created_at" example:"2023-01-01T00:00:00Z"`
 }
@@ -226,7 +228,7 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, errMsg strin
 
 // userToResponse converts domain User to API response
 func userToResponse(user *domain.User) *UserResponse {
-	return &UserResponse{
+	resp := &UserResponse{
 		ID:         user.ID.String(),
 		Email:      user.Email,
 		Phone:      user.Phone,
@@ -235,6 +237,10 @@ func userToResponse(user *domain.User) *UserResponse {
 		IsVerified: user.IsVerified,
 		CreatedAt:  user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}
+	if user.Role == "seller" && user.SellerStatus != nil {
+		resp.SellerStatus = user.SellerStatus
+	}
+	return resp
 }
 
 // Register handles POST /auth/register

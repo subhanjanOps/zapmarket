@@ -4,7 +4,8 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Splash } from "@/app/components/Skeleton";
 import { getToken, clearToken } from "@/lib/auth";
-import { LayoutDashboard, Package, ShoppingBag, LogOut } from "lucide-react";
+import { getMe } from "@/lib/api";
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Clock } from "lucide-react";
 
 type ThemeId = "walnut" | "cream" | "slate" | "solarized-dark" | "solarized-light";
 
@@ -39,15 +40,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [ready, setReady]         = useState(false);
   const [theme, setTheme]         = useState<ThemeId>("walnut");
   const [navigating, setNavigating] = useState(false);
+  const [sellerStatus, setSellerStatus] = useState<string | null>(null);
   const prevPath = useRef(pathname);
   const clock    = useClock();
 
   useEffect(() => {
-    if (!getToken()) { router.replace("/login"); return; }
+    const token = getToken();
+    if (!token) { router.replace("/login"); return; }
     const saved = (localStorage.getItem("zap-theme") as ThemeId) ?? "walnut";
     setTheme(saved);
     document.documentElement.setAttribute("data-theme", saved);
-    setReady(true);
+    getMe(token).then((me) => {
+      setSellerStatus(me.user.seller_status ?? "APPROVED");
+      setReady(true);
+    }).catch(() => {
+      // if /me fails, still let them in — server may be unreachable
+      setSellerStatus("APPROVED");
+      setReady(true);
+    });
   }, [router]);
 
   function applyTheme(id: ThemeId) {
@@ -66,6 +76,60 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname]);
 
   if (!ready) return <Splash />;
+
+  if (sellerStatus !== "APPROVED") {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--bg)",
+        flexDirection: "column",
+        gap: "1.5rem",
+        padding: "2rem",
+        textAlign: "center",
+      }}>
+        <div style={{
+          width: 64,
+          height: 64,
+          borderRadius: "50%",
+          background: "var(--surface)",
+          border: "2px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          <Clock size={28} style={{ color: "var(--accent)" }} />
+        </div>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--fg)" }}>
+            {sellerStatus === "SUSPENDED" ? "Account Suspended" : "Approval Pending"}
+          </h2>
+          <p style={{ margin: "0.5rem 0 0", color: "var(--muted)", fontSize: "0.9rem", maxWidth: 360 }}>
+            {sellerStatus === "SUSPENDED"
+              ? "Your seller account has been suspended. Please contact support for assistance."
+              : "Your seller account is under review. An admin will approve your application shortly. Check back later."}
+          </p>
+        </div>
+        <button
+          onClick={() => { clearToken(); router.replace("/login"); }}
+          style={{
+            marginTop: "0.5rem",
+            padding: "0.5rem 1.25rem",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "transparent",
+            color: "var(--muted)",
+            cursor: "pointer",
+            fontSize: "0.85rem",
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>

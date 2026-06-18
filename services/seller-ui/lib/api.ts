@@ -31,6 +31,22 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return { token: r.access_token };
 }
 
+export interface MeResponse {
+  user: {
+    id: string;
+    email: string;
+    full_name: string;
+    role: string;
+    is_verified: boolean;
+    seller_status?: string;
+    created_at: string;
+  };
+}
+
+export async function getMe(token: string): Promise<MeResponse> {
+  return req<MeResponse>("/v1/auth/me", { headers: auth(token) });
+}
+
 export async function register(
   first_name: string,
   last_name: string,
