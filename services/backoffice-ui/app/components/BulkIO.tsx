@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { showAlert } from "@/app/components/Dialog";
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ export function ExportButton<T extends Record<string, unknown>>({ filename, head
       const csv = toCSV(headers, rows as Record<string, unknown>[]);
       downloadCSV(filename, csv);
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Export failed");
+      await showAlert(e instanceof Error ? e.message : "Export failed");
     } finally {
       setBusy(false);
     }
@@ -249,15 +250,33 @@ function ImportModal({ title, expectedHeaders, templateRow, importRow, onDone, o
                         <tr>{parsed.headers.map((h) => <th key={h}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
-                        {parsed.rows.slice(0, 5).map((row, i) => (
-                          <tr key={i}>
-                            {parsed.headers.map((h) => (
-                              <td key={h} style={{ color: row[h] ? "var(--text-2)" : "var(--muted)", fontStyle: row[h] ? "normal" : "italic" }}>
-                                {row[h] || "—"}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
+                        {(() => {
+                          // Show first 2 rows + up to 3 rows that have the most filled columns
+                          // so optional columns (like parent_name) are visible in the preview.
+                          const score = (r: Record<string, string>) =>
+                            parsed.headers.filter((h) => r[h]).length;
+                          const head = parsed.rows.slice(0, 2);
+                          const rest = parsed.rows.slice(2);
+                          const rich = [...rest]
+                            .sort((a, b) => score(b) - score(a))
+                            .slice(0, 3);
+                          // Deduplicate while preserving order
+                          const seen = new Set(head.map((_, i) => i));
+                          const preview = [...head];
+                          for (const r of rich) {
+                            const idx = parsed.rows.indexOf(r);
+                            if (!seen.has(idx)) { seen.add(idx); preview.push(r); }
+                          }
+                          return preview.map((row, i) => (
+                            <tr key={i}>
+                              {parsed.headers.map((h) => (
+                                <td key={h} style={{ color: row[h] ? "var(--text-2)" : "var(--muted)", fontStyle: row[h] ? "normal" : "italic" }}>
+                                  {row[h] || "—"}
+                                </td>
+                              ))}
+                            </tr>
+                          ));
+                        })()}
                         {parsed.rows.length > 5 && (
                           <tr><td colSpan={parsed.headers.length} style={{ color: "var(--muted)", fontStyle: "italic" }}>
                             … and {parsed.rows.length - 5} more rows

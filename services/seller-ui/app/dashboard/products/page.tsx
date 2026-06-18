@@ -6,6 +6,7 @@ import { getToken } from "@/lib/auth";
 import { getProducts, deleteProduct, Product } from "@/lib/api";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { SkeletonTableCard } from "@/app/components/Skeleton";
+import { showAlert, showConfirm } from "@/app/components/Dialog";
 
 const STATUSES = ["All", "ACTIVE", "DRAFT", "ARCHIVED"] as const;
 const PAGE_SIZE = 20;
@@ -37,7 +38,7 @@ export default function ProductsPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    if (!await showConfirm(`Delete "${name}"? This cannot be undone.`)) return;
     const token = getToken();
     if (!token) return;
     setDeleting(id);
@@ -45,7 +46,7 @@ export default function ProductsPage() {
       await deleteProduct(token, id);
       load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Delete failed");
+      await showAlert(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setDeleting(null);
     }

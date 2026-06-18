@@ -8,6 +8,7 @@ import { getSellerOrder, cancelOrder, Order, OrderItem } from "@/lib/api";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { StatusTimeline } from "@/app/components/StatusTimeline";
 import { SkeletonTableCard, Skel } from "@/app/components/Skeleton";
+import { showConfirm } from "@/app/components/Dialog";
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,7 +28,7 @@ export default function OrderDetailPage() {
   }, [id]);
 
   async function handleCancel() {
-    if (!confirm("Cancel this order? This cannot be undone.")) return;
+    if (!await showConfirm("Cancel this order? This cannot be undone.")) return;
     const token = getToken();
     if (!token) return;
     setCancelling(true);

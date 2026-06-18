@@ -214,6 +214,16 @@ func (h *ProductHandler) GetProductList(w http.ResponseWriter, r *http.Request) 
 		filters.SellerID = &sellerID
 	}
 
+	// Sellers can only see their own products regardless of any query param.
+	if user := authctx.UserFromContext(r.Context()); user != nil && user.Role == "seller" {
+		sellerID, err := uuid.Parse(user.Id)
+		if err != nil {
+			ErrorResponse(w, http.StatusInternalServerError, "INVALID_USER_ID", "authenticated user id is not a valid UUID")
+			return
+		}
+		filters.SellerID = &sellerID
+	}
+
 	products, total, err := h.productService.GetProductList(r.Context(), filters)
 	if err != nil {
 		HandleError(w, err)

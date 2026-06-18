@@ -6,6 +6,7 @@ import { getToken } from "@/lib/auth";
 import { adminListOrders, adminCancelOrder, type AdminOrder } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
+import { showAlert, showConfirm } from "@/app/components/Dialog";
 
 const STATUSES = ["", "PENDING", "RESERVED", "CONFIRMED", "CANCELLED"];
 const PAGE_SIZE = 20;
@@ -46,12 +47,12 @@ export default function OrdersPage() {
   useEffect(() => { load(); }, [load]);
 
   async function cancel(id: string) {
-    if (!confirm("Force-cancel this order?")) return;
+    if (!await showConfirm("Force-cancel this order?")) return;
     const token = getToken();
     if (!token) return;
     setCancelling(id);
     try { await adminCancelOrder(token, id); load(); }
-    catch (e: unknown) { alert(e instanceof Error ? e.message : "Failed"); }
+    catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Failed"); }
     finally { setCancelling(null); }
   }
 

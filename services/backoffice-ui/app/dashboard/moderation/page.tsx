@@ -6,6 +6,7 @@ import { getToken } from "@/lib/auth";
 import { getProducts, updateProduct, type Product } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
+import { showAlert } from "@/app/components/Dialog";
 
 const PAGE_SIZE = 20;
 
@@ -35,7 +36,7 @@ export default function ModerationPage() {
       await updateProduct(token, p.id, { status: "ACTIVE" });
       load();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed");
+      await showAlert(e instanceof Error ? e.message : "Failed");
     } finally {
       setUpdating(null);
     }
@@ -49,7 +50,7 @@ export default function ModerationPage() {
       await updateProduct(token, p.id, { status: "ARCHIVED" });
       load();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed");
+      await showAlert(e instanceof Error ? e.message : "Failed");
     } finally {
       setUpdating(null);
     }

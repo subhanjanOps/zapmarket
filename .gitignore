@@ -4,3 +4,4 @@ bin/
 *.out
 vendor/
 node_modules
+*.csv

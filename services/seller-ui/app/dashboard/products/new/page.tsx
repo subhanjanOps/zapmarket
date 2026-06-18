@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/auth";
-import { createProduct, createSku, uploadImage, getCategories, Category } from "@/lib/api";
+import { createProduct, createSku, uploadImage } from "@/lib/api";
+import CategoryCombobox from "@/app/components/CategoryCombobox";
 import { SKUEditor, SKUDraft } from "@/app/components/SKUEditor";
 import { ImageDropzone } from "@/app/components/ImageDropzone";
 
@@ -19,16 +20,11 @@ export default function NewProductPage() {
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId]   = useState("");
   const [status, setStatus]           = useState<"DRAFT" | "ACTIVE">("DRAFT");
-  const [categories, setCategories]   = useState<Category[]>([]);
   const [skus, setSkus]               = useState<SKUDraft[]>([]);
   const [productId, setProductId]     = useState<string | null>(null);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState("");
   const [step, setStep]               = useState<"info" | "skus" | "images" | "publish">("info");
-
-  useEffect(() => {
-    getCategories().then((r) => setCategories(r.categories ?? [])).catch(() => { /* non-fatal */ });
-  }, []);
 
   function handleNameChange(v: string) {
     setName(v);
@@ -146,10 +142,11 @@ export default function NewProductPage() {
             </div>
             <div>
               <label className="form-label">Category</label>
-              <select style={inputStyle} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="">— Select category —</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <CategoryCombobox
+                value={categoryId}
+                onChange={setCategoryId}
+                style={inputStyle}
+              />
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button className="btn btn-primary" onClick={saveBasicInfo} disabled={saving}>

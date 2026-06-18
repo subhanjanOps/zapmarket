@@ -2,6 +2,7 @@ const GW = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${GW}${path}`, {
+    cache: "no-store",
     ...opts,
     headers: { "Content-Type": "application/json", ...opts.headers },
   });
@@ -216,11 +217,18 @@ export async function deleteImage(token: string, productId: string, imageId: str
 
 // ── Categories ────────────────────────────────────────────────────────────────
 
-export interface Category { id: string; name: string; slug: string; }
+export interface Category { id: string; name: string; slug: string; parent_id?: string; }
 
-export async function getCategories(): Promise<{ categories: Category[] }> {
-  const r = await req<{ data: Category[] }>("/api/v1/categories");
-  return { categories: r.data ?? [] };
+export async function getCategories(params: {
+  search?: string; limit?: number; offset?: number;
+} = {}): Promise<{ categories: Category[]; total: number }> {
+  const q = new URLSearchParams();
+  if (params.search)             q.set("search", params.search);
+  if (params.limit  != null)     q.set("limit",  String(params.limit));
+  if (params.offset != null)     q.set("offset", String(params.offset));
+  const qs = q.toString() ? `?${q}` : "";
+  const r = await req<{ data: Category[]; total: number }>(`/api/v1/categories${qs}`);
+  return { categories: r.data ?? [], total: r.total ?? 0 };
 }
 
 // ── Orders (seller) ───────────────────────────────────────────────────────────

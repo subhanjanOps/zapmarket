@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
+import { showAlert, showConfirm } from "@/app/components/Dialog";
 
 const ROLES = ["", "buyer", "seller", "admin"];
 const PAGE_SIZE = 20;
@@ -59,11 +60,11 @@ export default function UsersPage() {
   }
 
   async function deactivate(u: AdminUser) {
-    if (!confirm(`Deactivate ${u.email}? This will immediately revoke their access.`)) return;
+    if (!await showConfirm(`Deactivate ${u.email}? This will immediately revoke their access.`)) return;
     const token = getToken();
     if (!token) return;
     try { await adminDeactivateUser(token, u.id); load(); }
-    catch (e: unknown) { alert(e instanceof Error ? e.message : "Failed"); }
+    catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Failed"); }
   }
 
   const pages = Math.ceil(total / PAGE_SIZE);

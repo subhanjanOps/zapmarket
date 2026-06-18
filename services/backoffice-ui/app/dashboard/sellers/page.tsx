@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { getToken } from "@/lib/auth";
 import { adminListSellers, adminUpdateSellerStatus, type AdminUser } from "@/lib/api";
 import { TableSkeleton } from "@/app/components/Skeleton";
+import { showAlert } from "@/app/components/Dialog";
 
 const STATUSES = ["", "PENDING", "APPROVED", "SUSPENDED"];
 const PAGE_SIZE = 20;
@@ -55,7 +56,7 @@ export default function SellersPage() {
         setPendingCount((n) => Math.max(0, n - 1));
       }
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed");
+      await showAlert(e instanceof Error ? e.message : "Failed");
     } finally {
       setUpdating(null);
     }

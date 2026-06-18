@@ -8,6 +8,7 @@ import { getProducts, getCategories, createProduct, updateProduct, deleteProduct
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
 import { ExportButton, ImportButton } from "@/app/components/BulkIO";
+import { showAlert, showConfirm } from "@/app/components/Dialog";
 
 const PROD_EXPORT_HEADERS = ["id", "name", "slug", "category_id", "seller_id", "status", "created_at"];
 const PROD_IMPORT_HEADERS = ["name", "slug", "category_id", "seller_id", "status"];
@@ -63,17 +64,17 @@ export default function ProductsPage() {
       await updateProduct(token, p.id, { status: next });
       load();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Update failed");
+      await showAlert(e instanceof Error ? e.message : "Update failed");
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this product?")) return;
+    if (!await showConfirm("Delete this product?")) return;
     const token = getToken();
     if (!token) return;
     setDeleting(id);
     try { await deleteProduct(token, id); load(); }
-    catch (e: unknown) { alert(e instanceof Error ? e.message : "Delete failed"); }
+    catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Delete failed"); }
     finally { setDeleting(null); }
   }
 

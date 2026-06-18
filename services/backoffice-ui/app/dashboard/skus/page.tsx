@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getToken } from "@/lib/auth";
 import { getSkus, updateSku, deleteSku, type SKU } from "@/lib/api";
 import { TableSkeleton } from "@/app/components/Skeleton";
+import { showAlert, showConfirm } from "@/app/components/Dialog";
 
 const PAGE_SIZE = 20;
 
@@ -45,19 +46,19 @@ export default function SkusPage() {
       await updateSku(token, s.id, { is_active: !s.is_active });
       load();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Update failed");
+      await showAlert(e instanceof Error ? e.message : "Update failed");
     } finally {
       setToggling(null);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this SKU?")) return;
+    if (!await showConfirm("Delete this SKU?")) return;
     const token = getToken();
     if (!token) return;
     setDeleting(id);
     try { await deleteSku(token, id); load(); }
-    catch (e: unknown) { alert(e instanceof Error ? e.message : "Delete failed"); }
+    catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Delete failed"); }
     finally { setDeleting(null); }
   }
 

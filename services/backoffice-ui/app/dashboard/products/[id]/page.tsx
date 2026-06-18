@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
+import { showAlert, showConfirm } from "@/app/components/Dialog";
 
 export default function ProductDetailPage() {
   const { id }                     = useParams<{ id: string }>();
@@ -52,14 +53,14 @@ export default function ProductDetailPage() {
   }
 
   async function handleDeleteImage(imageId: string) {
-    if (!confirm("Remove this image?")) return;
+    if (!await showConfirm("Remove this image?")) return;
     const token = getToken();
     if (!token) return;
     try {
       await deleteImage(token, id, imageId);
       setImages((imgs) => imgs.filter((i) => i.id !== imageId));
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Delete failed");
+      await showAlert(e instanceof Error ? e.message : "Delete failed");
     }
   }
 

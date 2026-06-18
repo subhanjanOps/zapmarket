@@ -7,6 +7,7 @@ import { getToken } from "@/lib/auth";
 import { adminGetOrder, adminCancelOrder, type AdminOrder, type OrderItem } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import Skeleton from "@/app/components/Skeleton";
+import { showAlert, showConfirm } from "@/app/components/Dialog";
 
 function fmt(cents: number, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
@@ -32,7 +33,7 @@ export default function OrderDetailPage() {
   }, [id]);
 
   async function cancel() {
-    if (!order || !confirm("Force-cancel this order?")) return;
+    if (!order || !await showConfirm("Force-cancel this order?")) return;
     const token = getToken();
     if (!token) return;
     setCancelling(true);
@@ -42,7 +43,7 @@ export default function OrderDetailPage() {
       const refreshed = await adminGetOrder(token2, id);
       setOrder(refreshed);
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed");
+      await showAlert(e instanceof Error ? e.message : "Failed");
     } finally {
       setCancelling(false);
     }
