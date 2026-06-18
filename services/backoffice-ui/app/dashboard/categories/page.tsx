@@ -282,7 +282,7 @@ export default function CategoriesPage() {
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div style={{
+        <div className="bulk-bar" style={{
           display: "flex", alignItems: "center", gap: "0.75rem",
           padding: "0.625rem 1rem", marginBottom: "0.75rem",
           background: "var(--accent-bg)", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",

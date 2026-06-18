@@ -428,6 +428,7 @@ tbody tr:hover td { background: var(--surface2); }
   justify-content: center;
   z-index: 200;
   padding: 1rem;
+  animation: overlay-in 0.18s ease;
 }
 
 .modal {
@@ -438,6 +439,7 @@ tbody tr:hover td { background: var(--surface2); }
   width: min(560px, 100%);
   max-height: 90vh;
   overflow-y: auto;
+  animation: modal-in 0.22s cubic-bezier(0.34,1.36,0.64,1);
 }
 
 .modal-header {
@@ -654,3 +656,82 @@ tbody tr:hover td { background: var(--surface2); }
 }
 .timeline-label.active { color: var(--accent); font-weight: 500; }
 .timeline-label.done   { color: var(--success); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
+.dialog-card { animation: dialog-in 0.2s cubic-bezier(0.34,1.4,0.64,1); }
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+/* Card hover lift */
+.card { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+.card:hover { box-shadow: var(--shadow-lg); }
+
+/* Button press */
+.btn:active:not(:disabled) { transform: translateY(1px); }
+
+/* Table row stagger */
+@keyframes row-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0);     }
+}
+tbody tr { animation: row-in 0.18s ease both; }
+tbody tr:nth-child(1)  { animation-delay: 0.02s; }
+tbody tr:nth-child(2)  { animation-delay: 0.04s; }
+tbody tr:nth-child(3)  { animation-delay: 0.06s; }
+tbody tr:nth-child(4)  { animation-delay: 0.08s; }
+tbody tr:nth-child(5)  { animation-delay: 0.10s; }
+tbody tr:nth-child(6)  { animation-delay: 0.12s; }
+tbody tr:nth-child(7)  { animation-delay: 0.14s; }
+tbody tr:nth-child(8)  { animation-delay: 0.16s; }
+tbody tr:nth-child(n+9){ animation-delay: 0.18s; }
+
+/* Badge pop */
+@keyframes badge-in {
+  from { opacity: 0; transform: scale(0.7); }
+  to   { opacity: 1; transform: scale(1);   }
+}
+.badge { animation: badge-in 0.16s cubic-bezier(0.34,1.4,0.64,1); }
+
+/* Page header entrance */
+@keyframes header-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.page-header { animation: header-in 0.22s ease; }
+
+/* Timeline step pop on done */
+@keyframes step-done {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+.timeline-dot.done { animation: step-done 0.3s cubic-bezier(0.34,1.4,0.64,1); }
+
+/* Respect reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

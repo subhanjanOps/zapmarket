@@ -99,13 +99,14 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
             position: "fixed", inset: 0, zIndex: 9999,
             display: "flex", alignItems: "center", justifyContent: "center",
             background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)",
-            padding: "1rem",
+            padding: "1rem", animation: "overlay-in 0.18s ease",
           }}
           onMouseDown={(e) => { if (e.target === e.currentTarget) dismiss(false); }}
         >
           <div
             role="dialog"
             aria-modal="true"
+            className="dialog-card"
             style={{
               background: "var(--surface)",
               border: "1px solid var(--border)",
