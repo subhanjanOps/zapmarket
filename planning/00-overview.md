@@ -35,6 +35,7 @@ and Payment expose gRPC servers).
 7. **[Stage 7 — Event Bus & Outbox Activation](07-event-bus-outbox.md)** ✅ **Complete** — Kafka live (apache/kafka KRaft), outbox relay on all 3 event-producing services, topic constants, Kafka UI. Note: Go polling relay used instead of Debezium (same guarantees, less ops overhead).
 8. **[Stage 8 — API Gateway](08-api-gateway.md)** ✅ **Complete** — chi + ReverseProxy ingress on port 8000, JWT validation at edge, Redis-backed rate limiting (per-IP + per-user), circuit breakers (gobreaker), request ID propagation.
 9. **[Stage 9 — Redis Caching Layer](09-redis-caching.md)** ✅ **Complete** — `pkg/redis`, Lua atomic inventory reservation, idempotency cache for order + payment, catalog decorator cache, auth token blacklist + `/v1/auth/logout` endpoint. (9.6 rate limiting deferred to Stage 8; 9.7 cart not in scope.)
+14. **[Stage 14 — Async CSV Import Service](14-async-csv-import-service.md)** 📋 **Planned** — internal `batch-processor` service: catalog-service uploads CSV to MinIO + emits `catalog.import.requested` Kafka event; batch-processor consumes, inserts in batches via `/categories/bulk`; publishes `catalog.import.completed`; catalog-service SSE streams status to UI.
 10. **[Stage 10 — Observability](10-observability.md)** — Phase 15: Prometheus, OpenTelemetry, Grafana.
 11. **[Stage 11 — Kubernetes & CI/CD](11-k8s-cicd.md)** — Phases 16 + 17.
 12. **[Stage 12 — Production Readiness](12-production-readiness.md)** — Phase 18: security hardening, reliability patterns, final completion criteria sign-off.
