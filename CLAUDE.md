@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ZapMarket is a Go monorepo of six microservices managed via `go.work`. Each service is an independent Go module under `services/`. Shared packages live in `pkg/`.
 
+## ZapMarket AI Instructions
+
+Before making any changes, read and follow:
+
+- docs/engineering-standards.md
+- docs/architecture-principles.md
+- docs/coding-guidelines.md
+- docs/service-template.md
+
+These documents are the source of truth for all engineering decisions.
+
 **Services and their ports:**
 
 | Service | HTTP | gRPC | DB name |
