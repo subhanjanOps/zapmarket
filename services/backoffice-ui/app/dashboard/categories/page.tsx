@@ -9,7 +9,7 @@ import {
 import { TableSkeleton } from "@/app/components/Skeleton";
 import { ExportButton } from "@/app/components/BulkIO";
 import { showAlert, showConfirm } from "@/app/components/Dialog";
-import { Search, X } from "lucide-react";
+import { Search, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
 const PAGE_SIZE = 20;
 const CAT_EXPORT_HEADERS = ["id", "name", "slug", "parent_id", "created_at"];
@@ -21,6 +21,37 @@ const EMPTY: FormState = { name: "", slug: "", parent_id: "" };
 
 function slugify(s: string) {
   return s.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+}
+
+// ── Sortable column header ─────────────────────────────────────────────────────
+
+function SortTh({ label, field, current, order, onSort }: {
+  label: string;
+  field: string;
+  current: string;
+  order: "asc" | "desc";
+  onSort: (f: any) => void;
+}) {
+  const active = current === field;
+  const Icon = active ? (order === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
+  return (
+    <th
+      onClick={() => onSort(field)}
+      style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
+    >
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: "0.25rem",
+        color: active ? "var(--accent)" : undefined,
+        transition: "color 0.12s",
+      }}>
+        {label}
+        <Icon
+          size={11}
+          style={{ opacity: active ? 1 : 0.4, transition: "opacity 0.12s", flexShrink: 0 }}
+        />
+      </span>
+    </th>
+  );
 }
 
 // ── Pagination bar ────────────────────────────────────────────────────────────
@@ -106,42 +137,41 @@ export default function CategoriesPage() {
   const [rootCats, setRootCats]       = useState<Category[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Sort state
+  type SortField = "name" | "created_at";
+  const [sortBy, setSortBy]       = useState<SortField>("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
   const pages = Math.ceil(total / PAGE_SIZE) || 1;
 
   // Load root categories once for the filter dropdown
   useEffect(() => {
-    getCategories({ limit: 200, offset: 0 })
-      .then((r) => setRootCats(r.data.filter((c) => !c.parent_id)))
+    getCategories({ root_only: true, limit: 200, offset: 0 })
+      .then((r) => setRootCats(r.data))
       .catch(() => {});
   }, []);
 
-  const load = useCallback((p = page, q = search, pf = parentFilter) => {
+  const load = useCallback((
+    p = page, q = search, pf = parentFilter,
+    sb: SortField = sortBy, so: "asc" | "desc" = sortOrder,
+  ) => {
     setLoading(true);
-    // For "root only": API has no root filter, so fetch a large page and filter client-side.
-    // Data is small (≤233 cats), so this is fine.
-    const isRoot = pf === "root";
     const apiParams: Parameters<typeof getCategories>[0] = {
-      limit: isRoot ? 500 : PAGE_SIZE,
-      offset: isRoot ? 0 : (p - 1) * PAGE_SIZE,
+      limit:      PAGE_SIZE,
+      offset:     (p - 1) * PAGE_SIZE,
+      sort_by:    sb,
+      sort_order: so,
     };
-    if (q.trim()) apiParams.search = q.trim();
-    if (!isRoot && pf !== "all") apiParams.parent_id = pf;
+    if (q.trim())       apiParams.search    = q.trim();
+    if (pf === "root")  apiParams.root_only = true;
+    else if (pf !== "all") apiParams.parent_id = pf;
 
     getCategories(apiParams)
-      .then((r) => {
-        let data = r.data;
-        let tot = r.total ?? data.length;
-        if (isRoot) {
-          data = data.filter((c) => !c.parent_id);
-          tot = data.length;
-        }
-        setRows(data);
-        setTotal(tot);
-      })
+      .then((r) => { setRows(r.data); setTotal(r.total ?? r.data.length); })
       .catch(console.error)
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search, parentFilter]);
+  }, [page, search, parentFilter, sortBy, sortOrder]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setSelected(new Set()); }, [rows]);
@@ -171,6 +201,14 @@ export default function CategoriesPage() {
     setPage(1);
     setSelected(new Set());
     load(1, search, val);
+  }
+
+  function handleSort(field: SortField) {
+    const nextOrder = sortBy === field && sortOrder === "asc" ? "desc" : "asc";
+    setSortBy(field);
+    setSortOrder(nextOrder);
+    setPage(1);
+    load(1, search, parentFilter, field, nextOrder);
   }
 
   function openCreate() {
@@ -324,11 +362,11 @@ export default function CategoriesPage() {
           </optgroup>
         </select>
         {/* Active filter chips */}
-        {(search || parentFilter !== "all") && (
+        {(search || parentFilter !== "all" || sortBy !== "name" || sortOrder !== "asc") && (
           <button
             className="btn btn-ghost"
             style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem" }}
-            onClick={() => { setSearch(""); setParentFilter("all"); setPage(1); setSelected(new Set()); load(1, "", "all"); }}
+            onClick={() => { setSearch(""); setParentFilter("all"); setPage(1); setSelected(new Set()); setSortBy("name"); setSortOrder("asc"); load(1, "", "all", "name", "asc"); }}
           >
             Clear filters
           </button>
@@ -375,10 +413,10 @@ export default function CategoriesPage() {
                   style={{ cursor: "pointer" }}
                 />
               </th>
-              <th>Name</th>
+              <SortTh label="Name" field="name" current={sortBy} order={sortOrder} onSort={handleSort} />
               <th>Slug</th>
               <th>Parent</th>
-              <th>Created</th>
+              <SortTh label="Created" field="created_at" current={sortBy} order={sortOrder} onSort={handleSort} />
               <th style={{ width: 96, textAlign: "right" }}>Actions</th>
             </tr>
           </thead>

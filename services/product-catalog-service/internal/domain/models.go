@@ -36,6 +36,7 @@ const (
 
 type CategoryFilters struct {
 	ParentID *uuid.UUID
+	RootOnly bool
 	Search   string
 
 	Limit  int

@@ -193,6 +193,7 @@ func (h *CategoryHandler) GetCategoryBySlug(w http.ResponseWriter, r *http.Reque
 //	@Param			search		query		string	false	"Search by name"
 //	@Param			sort_by		query		string	false	"Sort field: name|created_at|updated_at"
 //	@Param			sort_order	query		string	false	"Sort direction: asc|desc"
+//	@Param			root_only	query		bool	false	"If true, return only root categories (parent_id IS NULL)"
 //	@Success		200			{object}	Response{data=[]domain.Category}
 //	@Failure		400			{object}	Response
 //	@Router			/api/v1/categories [get]
@@ -203,6 +204,7 @@ func (h *CategoryHandler) GetCategoryList(w http.ResponseWriter, r *http.Request
 		Search:    r.URL.Query().Get("search"),
 		SortBy:    r.URL.Query().Get("sort_by"),
 		SortOrder: r.URL.Query().Get("sort_order"),
+		RootOnly:  r.URL.Query().Get("root_only") == "true",
 		Limit:     limit,
 		Offset:    offset,
 	}

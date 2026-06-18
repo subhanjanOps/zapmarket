@@ -91,12 +91,19 @@ async function listReq<T>(path: string, token?: string): Promise<PageEnvelope<T>
 
 // ── Categories ────────────────────────────────────────────────────────────────
 
-export const getCategories = (params: { search?: string; parent_id?: string | null; limit?: number; offset?: number } = {}) => {
+export const getCategories = (params: {
+  search?: string; parent_id?: string | null; root_only?: boolean;
+  limit?: number; offset?: number;
+  sort_by?: string; sort_order?: "asc" | "desc";
+} = {}) => {
   const q = new URLSearchParams();
-  if (params.search)     q.set("search",    params.search);
-  if (params.parent_id)  q.set("parent_id", params.parent_id);
-  if (params.limit  != null) q.set("limit",  String(params.limit));
-  if (params.offset != null) q.set("offset", String(params.offset));
+  if (params.search)          q.set("search",     params.search);
+  if (params.parent_id)       q.set("parent_id",  params.parent_id);
+  if (params.root_only)       q.set("root_only",  "true");
+  if (params.limit  != null)  q.set("limit",      String(params.limit));
+  if (params.offset != null)  q.set("offset",     String(params.offset));
+  if (params.sort_by)         q.set("sort_by",    params.sort_by);
+  if (params.sort_order)      q.set("sort_order", params.sort_order);
   const qs = q.toString() ? `?${q}` : "";
   return listReq<Category>(`/api/v1/categories${qs}`);
 };

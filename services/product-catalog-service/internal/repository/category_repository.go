@@ -200,7 +200,9 @@ func categoryListWhere(filters *domain.CategoryFilters) (string, []interface{}) 
 		return where, args
 	}
 
-	if filters.ParentID != nil {
+	if filters.RootOnly {
+		where += " AND parent_id IS NULL"
+	} else if filters.ParentID != nil {
 		where += fmt.Sprintf(" AND parent_id = $%d", argPos)
 		args = append(args, *filters.ParentID)
 		argPos++
