@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
@@ -31,6 +32,7 @@ import (
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
+	"github.com/zapmarket/zapmarket/pkg/registry"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/order-management-service/docs"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
@@ -147,6 +149,11 @@ func main() {
 	relayCtx, relayCancel := context.WithCancel(context.Background())
 	go outboxRelay.Run(relayCtx)
 	log.Info("outbox relay started", "brokers", cfg.KafkaBrokers)
+
+	instanceID := uuid.New().String()
+	addr := fmt.Sprintf("http://zapmarket-order-management-service:%d", cfg.HTTPPort)
+	go registry.Heartbeat(relayCtx, rdb, "order-management-service", instanceID, addr, log)
+	log.Info("registered with gateway registry", "addr", addr)
 
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)

@@ -3,29 +3,41 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { getToken, clearToken } from "@/lib/auth";
-import { Route, Network, ScrollText, LogOut } from "lucide-react";
+import { LayoutDashboard, Route, Network, ScrollText, BarChart2, ShieldOff, LogOut, Sun, Moon } from "lucide-react";
 
 const NAV = [
-  { href: "/dashboard",          label: "routes",   icon: Route      },
-  { href: "/dashboard/registry", label: "registry", icon: Network    },
-  { href: "/dashboard/audit",    label: "audit",    icon: ScrollText },
+  { href: "/dashboard",             label: "overview",   icon: LayoutDashboard },
+  { href: "/dashboard/routes",      label: "routes",     icon: Route           },
+  { href: "/dashboard/registry",    label: "registry",   icon: Network         },
+  { href: "/dashboard/audit",       label: "audit",      icon: ScrollText      },
+  { href: "/dashboard/metrics",     label: "metrics",    icon: BarChart2       },
+  { href: "/dashboard/blocklist",   label: "blocklist",  icon: ShieldOff       },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
     if (!getToken()) router.replace("/login");
     else setReady(true);
   }, [router]);
 
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
   if (!ready) return null;
 
   function logout() {
     clearToken();
     router.push("/login");
+  }
+
+  function toggleTheme() {
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
   }
 
   return (
@@ -41,17 +53,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         background: "var(--surface)",
         borderRight: "1px solid var(--border)",
       }}>
-        {/* Logo mark */}
-        <div style={{ padding: "0 1.25rem", marginBottom: "2rem" }}>
-          <span className="mono" style={{ fontSize: "0.9375rem", fontWeight: 600, letterSpacing: "-0.01em", color: "var(--text)" }}>
-            ZAP
-          </span>
-          <span className="mono" style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--accent)" }}>
-            /
-          </span>
-          <span className="mono" style={{ fontSize: "0.9375rem", fontWeight: 600, letterSpacing: "-0.01em", color: "var(--muted)" }}>
-            GATEWAY
-          </span>
+        {/* Logo + theme toggle */}
+        <div style={{ padding: "0 1.25rem", marginBottom: "2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <span className="mono" style={{ fontSize: "0.9375rem", fontWeight: 600, letterSpacing: "-0.01em", color: "var(--text)" }}>
+              ZAP
+            </span>
+            <span className="mono" style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--accent)" }}>
+              /
+            </span>
+            <span className="mono" style={{ fontSize: "0.9375rem", fontWeight: 600, letterSpacing: "-0.01em", color: "var(--muted)" }}>
+              GATEWAY
+            </span>
+          </div>
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--muted)",
+              padding: "0.25rem",
+              borderRadius: "3px",
+              display: "flex",
+              alignItems: "center",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
+          >
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
         </div>
 
         {/* Nav */}
@@ -85,7 +117,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Separator + sign out */}
+        {/* Sign out */}
         <div style={{ padding: "0 0.5rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem", marginTop: "0.5rem" }}>
           <button
             onClick={logout}

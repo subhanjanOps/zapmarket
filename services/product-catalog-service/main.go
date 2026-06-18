@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	goredis "github.com/redis/go-redis/v9"
@@ -34,6 +35,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	pb "github.com/zapmarket/zapmarket/pkg/proto/catalog"
+	"github.com/zapmarket/zapmarket/pkg/registry"
 	"github.com/zapmarket/zapmarket/pkg/storage"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/product-catalog-service/docs"
@@ -201,6 +203,15 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	svcCtx, svcCancel := context.WithCancel(context.Background())
+	defer svcCancel()
+	if rdb != nil {
+		instanceID := uuid.New().String()
+		addr := fmt.Sprintf("http://zapmarket-product-catalog-service:%d", cfg.HTTPPort)
+		go registry.Heartbeat(svcCtx, rdb, "product-catalog-service", instanceID, addr, log)
+		log.Info("registered with gateway registry", "addr", addr)
+	}
+
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -216,6 +227,7 @@ func main() {
 	}()
 
 	<-quit
+	svcCancel()
 	log.Info("shutting down servers")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

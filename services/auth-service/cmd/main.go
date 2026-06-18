@@ -31,6 +31,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	goredis "github.com/redis/go-redis/v9"
@@ -42,6 +43,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
+	"github.com/zapmarket/zapmarket/pkg/registry"
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/auth-service/docs"
@@ -91,7 +93,7 @@ func main() {
 	// ── Redis (optional — auth still works without it) ───────────────────────
 	rdb := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		slog.Warn("Redis unavailable — token blacklist disabled", "addr", cfg.RedisURL, "error", err)
+		slog.Warn("Redis unavailable — token blacklist and registry disabled", "addr", cfg.RedisURL, "error", err)
 	} else {
 		authService.SetRedis(rdb)
 		defer rdb.Close()
@@ -166,9 +168,20 @@ func main() {
 		}
 	}()
 
+	// ── Registry heartbeat ────────────────────────────────────────────────────
+	svcCtx, svcCancel := context.WithCancel(context.Background())
+	defer svcCancel()
+	if rdb.Ping(svcCtx).Err() == nil {
+		instanceID := uuid.New().String()
+		addr := fmt.Sprintf("http://zapmarket-auth-service:%d", cfg.HTTPPort)
+		go registry.Heartbeat(svcCtx, rdb, "auth-service", instanceID, addr, slog.Default())
+		slog.Info("registered with gateway registry", "addr", addr)
+	}
+
 	// Wait for shutdown signal
 	<-sigChan
 	slog.Info("Shutdown signal received, gracefully shutting down")
+	svcCancel()
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

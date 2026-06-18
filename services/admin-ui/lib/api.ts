@@ -30,6 +30,39 @@ export type RegistryInstance = {
   instance_id: string;
   addr: string;
   started_at: string;
+  healthy: boolean;
+};
+
+export type UpstreamMetric = {
+  name: string;
+  total: number;
+  errors: number;
+  req_per_min: number;
+  error_rate: number;
+};
+
+export type BlocklistEntry = {
+  ip: string;
+  reason: string;
+  blocked_at: string;
+};
+
+export type Stats = {
+  active_routes: number;
+  total_routes: number;
+  live_instances: number;
+  live_services: number;
+  recent_audit: AuditEntry[];
+  upstreams: UpstreamMetric[];
+};
+
+export type ProbeResult = {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+  latency_ms: number;
+  upstream: string;
+  addr: string;
 };
 
 async function apiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
@@ -58,6 +91,11 @@ export async function login(email: string, password: string): Promise<string> {
   if (!res.ok) throw new Error(json.error?.message ?? "Login failed");
   return json.access_token as string;
 }
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+export const getStats = (token: string) =>
+  apiFetch<Stats>("/gateway/v1/stats", token);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -89,6 +127,7 @@ export type AuditParams = {
   from?: string;
   to?: string;
   limit?: number;
+  after_id?: number;
 };
 
 export const getAudit = (token: string, params: AuditParams = {}) => {
@@ -106,3 +145,39 @@ export const getRegistry = (token: string) =>
   apiFetch<{ instances: RegistryInstance[]; count: number }>("/gateway/v1/registry", token).then(
     (d) => d.instances ?? []
   );
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+
+export const getMetrics = (token: string) =>
+  apiFetch<{ upstreams: UpstreamMetric[] }>("/gateway/v1/metrics", token).then(
+    (d) => d.upstreams ?? []
+  );
+
+// ── Probe ─────────────────────────────────────────────────────────────────────
+
+export const probeRoute = (
+  token: string,
+  req: { method: string; path: string; token?: string; headers?: Record<string, string>; body?: string }
+) =>
+  apiFetch<ProbeResult>("/gateway/v1/probe", token, {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+
+// ── Blocklist ─────────────────────────────────────────────────────────────────
+
+export const getBlocklist = (token: string) =>
+  apiFetch<{ blocked: BlocklistEntry[]; count: number }>("/gateway/v1/blocklist", token).then(
+    (d) => d.blocked ?? []
+  );
+
+export const blockIP = (token: string, ip: string, reason?: string) =>
+  apiFetch<{ blocked: boolean }>("/gateway/v1/blocklist", token, {
+    method: "POST",
+    body: JSON.stringify({ ip, reason: reason ?? "" }),
+  });
+
+export const unblockIP = (token: string, ip: string) =>
+  apiFetch<{ removed: boolean }>(`/gateway/v1/blocklist/${encodeURIComponent(ip)}`, token, {
+    method: "DELETE",
+  });

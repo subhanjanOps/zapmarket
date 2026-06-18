@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"google.golang.org/grpc/reflection"
@@ -21,6 +22,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
+	"github.com/zapmarket/zapmarket/pkg/registry"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	pb "github.com/zapmarket/zapmarket/pkg/proto/inventory"
 	grpchandler "github.com/zapmarket/zapmarket/services/inventory-service/internal/handler/grpc"
@@ -105,6 +107,11 @@ func main() {
 	relayCtx, relayCancel := context.WithCancel(context.Background())
 	go outboxRelay.Run(relayCtx)
 	log.Info("outbox relay started", "brokers", cfg.KafkaBrokers)
+
+	instanceID := uuid.New().String()
+	addr := fmt.Sprintf("http://zapmarket-inventory-service:%d", cfg.HTTPPort)
+	go registry.Heartbeat(relayCtx, rdb, "inventory-service", instanceID, addr, log)
+	log.Info("registered with gateway registry", "addr", addr)
 
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)

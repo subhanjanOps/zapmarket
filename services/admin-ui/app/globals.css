@@ -119,3 +119,28 @@ tr:hover td { background: var(--surface2); }
 .badge-blue   { background: #0a1f38; color: #7ab8f5;          border: 1px solid #153259; }
 .badge-gray   { background: #0f1820; color: var(--muted);    border: 1px solid var(--border); }
 .badge-teal   { background: #062018; color: var(--accent);   border: 1px solid #0a3326; }
+
+/* ── Light theme ────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --background: #f0f4f8;
+  --surface:    #ffffff;
+  --surface2:   #e8edf2;
+  --border:     #cdd5df;
+  --text:       #1a2533;
+  --muted:      #6b7d8f;
+  --accent:     #009e72;
+  --accent-dim: #007855;
+  --accent-hover: #00b882;
+  --danger:     #cc2200;
+  --success:    #1a8a56;
+  --warning:    #c07800;
+}
+
+[data-theme="light"] .badge-green  { background: #d4f0e4; color: var(--success);  border: 1px solid #a8dfc8; }
+[data-theme="light"] .badge-red    { background: #fde4df; color: var(--danger);   border: 1px solid #f4b5ad; }
+[data-theme="light"] .badge-yellow { background: #fef3d4; color: var(--warning);  border: 1px solid #f5d98a; }
+[data-theme="light"] .badge-blue   { background: #ddeeff; color: #1a5fa8;          border: 1px solid #aaccee; }
+[data-theme="light"] .badge-gray   { background: #e8edf2; color: var(--muted);    border: 1px solid var(--border); }
+[data-theme="light"] .badge-teal   { background: #d4f0e7; color: var(--accent);   border: 1px solid #a0dcc8; }
+[data-theme="light"] .btn-danger   { background: #fde4df; color: var(--danger);   border: 1px solid #f4b5ad; }
+[data-theme="light"] .btn-danger:hover { background: #f9c9c3; }

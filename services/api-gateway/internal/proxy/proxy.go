@@ -14,14 +14,14 @@ import (
 )
 
 // Upstream holds a reverse proxy + circuit breaker for one downstream service.
-// The target URL is resolved at request time by the caller.
 type Upstream struct {
-	name    string
-	logger  *slog.Logger
-	breaker *gobreaker.CircuitBreaker[struct{}]
+	name      string
+	logger    *slog.Logger
+	breaker   *gobreaker.CircuitBreaker[struct{}]
+	OnRequest func(upstream string, status int, latency time.Duration)
 
 	mu      sync.Mutex
-	proxies map[string]*httputil.ReverseProxy // keyed by target addr
+	proxies map[string]*httputil.ReverseProxy
 }
 
 // New creates an Upstream for the named service.
@@ -48,10 +48,14 @@ func New(name string, logger *slog.Logger) *Upstream {
 
 // ServeHTTP proxies the request to targetAddr.
 func (u *Upstream) ServeHTTP(w http.ResponseWriter, r *http.Request, targetAddr string) {
+	start := time.Now()
+	status := http.StatusOK
+
 	_, err := u.breaker.Execute(func() (struct{}, error) {
 		rp := u.getProxy(targetAddr)
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		rp.ServeHTTP(rec, r)
+		status = rec.status
 		if rec.status >= 500 {
 			return struct{}{}, fmt.Errorf("upstream %s returned %d", u.name, rec.status)
 		}
@@ -59,10 +63,20 @@ func (u *Upstream) ServeHTTP(w http.ResponseWriter, r *http.Request, targetAddr 
 	})
 
 	if err == gobreaker.ErrOpenState || err == gobreaker.ErrTooManyRequests {
+		status = http.StatusServiceUnavailable
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
+		w.WriteHeader(status)
 		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"CIRCUIT_OPEN","message":"service temporarily unavailable"}}`))
 	}
+
+	if u.OnRequest != nil {
+		u.OnRequest(u.name, status, time.Since(start))
+	}
+}
+
+// CircuitState returns the current circuit breaker state as a string.
+func (u *Upstream) CircuitState() string {
+	return u.breaker.State().String()
 }
 
 func (u *Upstream) getProxy(addr string) *httputil.ReverseProxy {
@@ -76,7 +90,6 @@ func (u *Upstream) getProxy(addr string) *httputil.ReverseProxy {
 	target, err := url.Parse(addr)
 	if err != nil {
 		u.logger.Error("invalid upstream addr", "addr", addr, "error", err)
-		// Return a proxy to localhost that will fail gracefully.
 		target, _ = url.Parse("http://localhost:1")
 	}
 
@@ -101,7 +114,6 @@ func (u *Upstream) getProxy(addr string) *httputil.ReverseProxy {
 	return rp
 }
 
-// responseRecorder captures the status code for the circuit breaker.
 type responseRecorder struct {
 	http.ResponseWriter
 	status int

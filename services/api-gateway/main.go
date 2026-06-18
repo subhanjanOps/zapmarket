@@ -24,6 +24,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/admin"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/audit"
 	gw "github.com/zapmarket/zapmarket/services/api-gateway/internal/middleware"
+	"github.com/zapmarket/zapmarket/services/api-gateway/internal/metrics"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/proxy"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/registry"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/routes"
@@ -115,6 +116,9 @@ func main() {
 	// ── Rate limiter ───────────────────────────────────────────────────────
 	rl := gw.NewRateLimiter(rdb)
 
+	// ── Metrics tracker ────────────────────────────────────────────────────
+	tracker := metrics.NewTracker()
+
 	// ── Upstream pool ──────────────────────────────────────────────────────
 	upstreams := make(map[string]*proxy.Upstream) // service name → proxy pool
 
@@ -123,6 +127,9 @@ func main() {
 			return u
 		}
 		u := proxy.New(name, log)
+		u.OnRequest = func(upstream string, status int, _ time.Duration) {
+			tracker.Track(upstream, status)
+		}
 		upstreams[name] = u
 		return u
 	}
@@ -135,6 +142,7 @@ func main() {
 		r.Use(chimw.Recoverer)
 		r.Use(gw.RequestID)
 		r.Use(corsMiddleware(adminUIOrigin))
+		r.Use(gw.Blocklist(rdb))
 		r.Use(rl.Limit)
 
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +151,7 @@ func main() {
 		})
 
 		// Admin API — requires admin JWT.
-		adminHandler := admin.NewHandler(db, redisReg)
+		adminHandler := admin.NewHandler(db, redisReg, tracker, rdb, resolve)
 		r.Route("/gateway/v1", func(r chi.Router) {
 			r.Use(authMW.Authenticate)
 			r.Use(admin.RequireAdmin)
@@ -151,7 +159,6 @@ func main() {
 		})
 
 		for _, route := range loader.Routes() {
-			route := route // capture for closure
 			upstream := getUpstream(route.Upstream)
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

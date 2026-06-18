@@ -38,4 +38,6 @@ use ./pkg/kafka
 
 use ./pkg/redis
 
+use ./pkg/registry
+
 use ./services/api-gateway

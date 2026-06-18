@@ -18,6 +18,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
+	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
 	github.com/zapmarket/zapmarket/pkg/swaggerx v0.0.0
 	google.golang.org/grpc v1.81.1
 )
@@ -64,5 +65,6 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
 	github.com/zapmarket/zapmarket/pkg/migrate => ../../pkg/migrate
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
+	github.com/zapmarket/zapmarket/pkg/registry => ../../pkg/registry
 	github.com/zapmarket/zapmarket/pkg/swaggerx => ../../pkg/swaggerx
 )

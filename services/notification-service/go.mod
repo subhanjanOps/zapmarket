@@ -3,11 +3,13 @@ module github.com/zapmarket/zapmarket/services/notification-service
 go 1.25.0
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/zapmarket/zapmarket/pkg/config v0.0.0
 	github.com/zapmarket/zapmarket/pkg/kafka v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
+	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
 )
 
 require (
@@ -23,4 +25,5 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/config => ../../pkg/config
 	github.com/zapmarket/zapmarket/pkg/kafka => ../../pkg/kafka
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
+	github.com/zapmarket/zapmarket/pkg/registry => ../../pkg/registry
 )
