@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -44,8 +45,6 @@ func main() {
 	// ── Notifier ──────────────────────────────────────────────────────────────
 	n := notifier.NewLogNotifier(log)
 
-	log.Info("kafka consumer ready", "brokers", cfg.KafkaBrokers, "topic", "orders")
-
 	handler := consumer.New(n, rdb, log)
 
 	// ── Health endpoint ───────────────────────────────────────────────────────
@@ -76,24 +75,46 @@ func main() {
 	go registry.Heartbeat(ctx, rdb, "notification-service", instanceID, addr, log)
 	log.Info("registered with gateway registry", "addr", addr)
 
-	log.Info("notification service started, consuming events")
+	// ── Consume all three topics concurrently ─────────────────────────────────
+	topics := []string{
+		pkgkafka.TopicOrders,
+		pkgkafka.TopicPayments,
+		pkgkafka.TopicInventory,
+	}
+
+	var wg sync.WaitGroup
+	for _, topic := range topics {
+		wg.Add(1)
+		go func(t string) {
+			defer wg.Done()
+			runConsumer(ctx, cfg.KafkaBrokers, t, handler, log)
+		}(topic)
+	}
+
+	log.Info("notification service started", "topics", topics)
+	wg.Wait()
+	log.Info("notification service stopped")
+}
+
+// runConsumer runs a consumer for a single topic, restarting on transient errors.
+func runConsumer(ctx context.Context, brokers []string, topic string, h *consumer.Handler, log *slog.Logger) {
+	log.Info("starting consumer", "topic", topic)
 	for {
 		if ctx.Err() != nil {
-			break
+			return
 		}
-		c := pkgkafka.NewConsumer(cfg.KafkaBrokers, "orders", "notification-service")
-		if err := c.Run(ctx, handler.Handle); err != nil {
+		c := pkgkafka.NewConsumer(brokers, topic, "notification-service")
+		if err := c.Run(ctx, h.Handle); err != nil {
 			_ = c.Close()
-			log.Error("consumer error, retrying in 5s", "error", err)
+			log.Error("consumer error, retrying in 5s", "topic", topic, "error", err)
 			select {
 			case <-ctx.Done():
+				return
 			case <-time.After(5 * time.Second):
 			}
 			continue
 		}
 		_ = c.Close()
-		break
+		return
 	}
-
-	log.Info("notification service stopped")
 }

@@ -63,11 +63,13 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 
 func (h *Handler) buildNotification(eventType string, payload map[string]string) (notifier.Notification, bool) {
 	switch eventType {
+
+	// ── Order events ──────────────────────────────────────────────────────────
 	case "order.confirmed":
 		return notifier.Notification{
 			UserID:    payload["user_id"],
 			EventType: eventType,
-			Subject:   "Your order has been confirmed!",
+			Subject:   "Your order has been confirmed",
 			Body:      fmt.Sprintf("Order %s has been confirmed and payment captured. Thank you for shopping with ZapMarket!", payload["order_id"]),
 		}, true
 
@@ -77,6 +79,44 @@ func (h *Handler) buildNotification(eventType string, payload map[string]string)
 			EventType: eventType,
 			Subject:   "Your order has been cancelled",
 			Body:      fmt.Sprintf("Order %s has been cancelled. If you have any questions, please contact support.", payload["order_id"]),
+		}, true
+
+	// ── Payment events ────────────────────────────────────────────────────────
+	case "payment.captured":
+		return notifier.Notification{
+			UserID:    payload["user_id"],
+			EventType: eventType,
+			Subject:   "Payment successful",
+			Body:      fmt.Sprintf("Your payment of %s %s for order %s was successful.", payload["amount"], payload["currency"], payload["order_id"]),
+		}, true
+
+	case "payment.failed":
+		return notifier.Notification{
+			UserID:    payload["user_id"],
+			EventType: eventType,
+			Subject:   "Payment failed",
+			Body:      fmt.Sprintf("We were unable to process your payment for order %s. Please update your payment details and try again.", payload["order_id"]),
+		}, true
+
+	case "payment.refunded":
+		return notifier.Notification{
+			UserID:    payload["user_id"],
+			EventType: eventType,
+			Subject:   "Refund processed",
+			Body:      fmt.Sprintf("A refund of %s %s for order %s has been processed and will appear within 3-5 business days.", payload["amount"], payload["currency"], payload["order_id"]),
+		}, true
+
+	// ── Inventory events ──────────────────────────────────────────────────────
+	case "inventory.reserved":
+		// Informational — no user-facing notification needed.
+		return notifier.Notification{}, false
+
+	case "inventory.depleted":
+		return notifier.Notification{
+			UserID:    payload["seller_id"],
+			EventType: eventType,
+			Subject:   "Stock depleted for your product",
+			Body:      fmt.Sprintf("SKU %s is now out of stock. Update your inventory to continue selling.", payload["sku_id"]),
 		}, true
 
 	default:

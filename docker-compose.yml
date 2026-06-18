@@ -98,7 +98,8 @@ services:
       dockerfile: services/auth-service/Dockerfile
     container_name: zapmarket-auth-service
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       - DB_HOST=zapmarket-postgres
       - DB_PORT=5432
@@ -126,9 +127,12 @@ services:
       dockerfile: services/product-catalog-service/Dockerfile
     container_name: zapmarket-product-catalog-service
     depends_on:
-      - postgres
-      - auth-service
-      - minio-init
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     environment:
       - DB_HOST=zapmarket-postgres
       - DB_PORT=5432
@@ -201,7 +205,7 @@ services:
         condition: service_started
     environment:
       - HTTP_PORT=8000
-      - DB_HOST=postgres
+      - DB_HOST=zapmarket-postgres
       - DB_PORT=5432
       - DB_USER=zapuser
       - DB_PASSWORD=zappass123
