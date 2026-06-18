@@ -137,6 +137,13 @@ export const getProducts = (params: ProductParams = {}, token?: string) => {
 export const getProduct = (id: string) =>
   req<{ data: Product }>(`/api/v1/products/${id}`).then((r) => r.data);
 
+export const createProduct = (
+  token: string,
+  body: { name: string; slug: string; category_id: string; seller_id: string; description?: string; status?: string },
+) => req<{ data: Product }>("/api/v1/products", {
+  method: "POST", body: JSON.stringify(body), headers: auth(token),
+}).then((r) => r.data);
+
 export const updateProduct = (
   token: string,
   id: string,

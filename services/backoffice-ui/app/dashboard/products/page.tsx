@@ -4,9 +4,14 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
-import { getProducts, getCategories, updateProduct, deleteProduct, type Product, type Category } from "@/lib/api";
+import { getProducts, getCategories, createProduct, updateProduct, deleteProduct, type Product, type Category } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
+import { ExportButton, ImportButton } from "@/app/components/BulkIO";
+
+const PROD_EXPORT_HEADERS = ["id", "name", "slug", "category_id", "seller_id", "status", "created_at"];
+const PROD_IMPORT_HEADERS = ["name", "slug", "category_id", "seller_id", "status"];
+const PROD_TEMPLATE = { name: "iPhone 16", slug: "iphone-16", category_id: "<uuid>", seller_id: "<uuid>", status: "DRAFT" };
 
 const STATUSES = ["", "DRAFT", "ACTIVE", "ARCHIVED"];
 const PAGE_SIZE = 20;
@@ -80,6 +85,43 @@ export default function ProductsPage() {
         <div>
           <h1 className="page-title">Products</h1>
           <p className="page-subtitle">{total} product{total === 1 ? "" : "s"}</p>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <ExportButton
+            filename="products.csv"
+            headers={PROD_EXPORT_HEADERS}
+            fetchAll={async () => {
+              const token = getToken() ?? undefined;
+              const PAGE = 100;
+              const first = await getProducts({ limit: PAGE, offset: 0 }, token);
+              const all: Product[] = [...first.data];
+              const totalCount = first.total;
+              let offset = PAGE;
+              while (offset < totalCount) {
+                const r = await getProducts({ limit: PAGE, offset }, token);
+                all.push(...r.data);
+                offset += PAGE;
+              }
+              return all as unknown as Record<string, unknown>[];
+            }}
+          />
+          <ImportButton
+            title="Products"
+            expectedHeaders={PROD_IMPORT_HEADERS}
+            templateRow={PROD_TEMPLATE}
+            importRow={async (row) => {
+              const token = getToken();
+              if (!token) throw new Error("Not authenticated");
+              await createProduct(token, {
+                name: row.name,
+                slug: row.slug,
+                category_id: row.category_id,
+                seller_id: row.seller_id,
+                status: row.status || "DRAFT",
+              });
+            }}
+            onDone={load}
+          />
         </div>
       </div>
 

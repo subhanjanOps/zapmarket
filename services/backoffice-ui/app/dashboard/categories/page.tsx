@@ -7,6 +7,10 @@ import {
   type Category,
 } from "@/lib/api";
 import { TableSkeleton } from "@/app/components/Skeleton";
+import { ExportButton, ImportButton } from "@/app/components/BulkIO";
+
+const CAT_HEADERS = ["id", "name", "slug", "parent_id", "created_at"];
+const CAT_TEMPLATE = { id: "(auto)", name: "Electronics", slug: "electronics", parent_id: "", created_at: "" };
 
 type FormState = { name: string; slug: string; parent_id: string };
 const EMPTY: FormState = { name: "", slug: "", parent_id: "" };
@@ -97,7 +101,32 @@ export default function CategoriesPage() {
           <h1 className="page-title">Categories</h1>
           <p className="page-subtitle">{total} categor{total === 1 ? "y" : "ies"}</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ New category</button>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <ExportButton
+            filename="categories.csv"
+            headers={CAT_HEADERS}
+            fetchAll={async () => {
+              const r = await getCategories();
+              return r.data as unknown as Record<string, unknown>[];
+            }}
+          />
+          <ImportButton
+            title="Categories"
+            expectedHeaders={["name", "slug"]}
+            templateRow={CAT_TEMPLATE}
+            importRow={async (row) => {
+              const token = getToken();
+              if (!token) throw new Error("Not authenticated");
+              await createCategory(token, {
+                name: row.name,
+                slug: row.slug,
+                parent_id: row.parent_id || undefined,
+              });
+            }}
+            onDone={load}
+          />
+          <button className="btn btn-primary" onClick={openCreate}>+ New category</button>
+        </div>
       </div>
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
