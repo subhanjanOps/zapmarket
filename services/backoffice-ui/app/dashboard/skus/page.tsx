@@ -65,7 +65,7 @@ export default function SkusPage() {
   const pages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <div className="page-content">
       <div className="page-header">
         <div>
           <h1 className="page-title">SKUs</h1>
@@ -91,7 +91,7 @@ export default function SkusPage() {
         />
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ border: "1px solid var(--border)", borderRadius: 7, overflow: "hidden" }}>
         <table>
           <thead>
             <tr>

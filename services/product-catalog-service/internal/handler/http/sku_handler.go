@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -24,7 +25,7 @@ func NewSKUHandler(skuService service.SKUService) *SKUHandler {
 type CreateSKURequest struct {
 	ProductID    uuid.UUID   `json:"product_id"`
 	SKUCode      string      `json:"sku_code"`
-	VariantAttrs interface{} `json:"variant_attrs,omitempty"`
+	VariantAttrs interface{} `json:"attributes,omitempty"`
 	PriceAmount  int64       `json:"price_amount"`
 	ComparePrice *int64      `json:"compare_price,omitempty"`
 	Currency     string      `json:"currency,omitempty"`
@@ -36,7 +37,7 @@ type CreateSKURequest struct {
 type UpdateSKURequest struct {
 	ProductID    uuid.UUID   `json:"product_id"`
 	SKUCode      string      `json:"sku_code"`
-	VariantAttrs interface{} `json:"variant_attrs,omitempty"`
+	VariantAttrs interface{} `json:"attributes,omitempty"`
 	PriceAmount  int64       `json:"price_amount"`
 	ComparePrice *int64      `json:"compare_price,omitempty"`
 	Currency     string      `json:"currency,omitempty"`
@@ -65,9 +66,16 @@ func (h *SKUHandler) CreateSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	variantAttrs, err := json.Marshal(req.VariantAttrs)
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid attributes")
+		return
+	}
+
 	sku := &domain.SKU{
 		ProductID:    req.ProductID,
 		SKUCode:      req.SKUCode,
+		VariantAttrs: variantAttrs,
 		PriceAmount:  req.PriceAmount,
 		ComparePrice: req.ComparePrice,
 		Currency:     req.Currency,
@@ -195,10 +203,16 @@ func (h *SKUHandler) UpdateSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	variantAttrs, err := json.Marshal(req.VariantAttrs)
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid attributes")
+		return
+	}
+
 	sku := &domain.SKU{
 		ID:           id,
-		ProductID:    req.ProductID,
 		SKUCode:      req.SKUCode,
+		VariantAttrs: variantAttrs,
 		PriceAmount:  req.PriceAmount,
 		ComparePrice: req.ComparePrice,
 		Currency:     req.Currency,

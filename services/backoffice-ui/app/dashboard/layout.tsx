@@ -3,43 +3,59 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import {
+  LayoutDashboard,
+  Tag,
+  Package,
+  Layers,
+  Users,
+  Store,
+  ClipboardList,
+  ShieldCheck,
+  LogOut,
+  type LucideIcon,
+} from "lucide-react";
 import { getToken, clearToken } from "@/lib/auth";
+import { CommandPalette } from "@/app/components/CommandPalette";
 
 const THEMES = [
-  { name: "walnut",          color: "#e08c42" },
-  { name: "cream",           color: "#c45e18" },
-  { name: "slate",           color: "#6b9ef0" },
-  { name: "solarized-dark",  color: "#2aa198" },
-  { name: "solarized-light", color: "#268bd2" },
+  { name: "walnut",          color: "#e08c42", label: "Walnut" },
+  { name: "cream",           color: "#c45e18", label: "Cream" },
+  { name: "slate",           color: "#6b9ef0", label: "Slate" },
+  { name: "solarized-dark",  color: "#2aa198", label: "Solarized Dark" },
+  { name: "solarized-light", color: "#268bd2", label: "Solarized Light" },
 ];
 
-const NAV = [
+interface NavItem { href: string; icon: LucideIcon; label: string }
+interface NavGroup { section: string; items: NavItem[] }
+
+const NAV: NavGroup[] = [
   {
     section: "Overview",
     items: [
-      { href: "/dashboard",            icon: "⊞", label: "Dashboard" },
+      { href: "/dashboard",            icon: LayoutDashboard, label: "Dashboard" },
     ],
   },
   {
     section: "Catalog",
     items: [
-      { href: "/dashboard/categories", icon: "◉", label: "Categories" },
-      { href: "/dashboard/products",   icon: "▣", label: "Products" },
-      { href: "/dashboard/skus",       icon: "◈", label: "SKUs" },
+      { href: "/dashboard/categories", icon: Tag,     label: "Categories" },
+      { href: "/dashboard/products",   icon: Package, label: "Products" },
+      { href: "/dashboard/skus",       icon: Layers,  label: "SKUs" },
     ],
   },
   {
     section: "Users & Orders",
     items: [
-      { href: "/dashboard/users",      icon: "◎", label: "Users" },
-      { href: "/dashboard/sellers",    icon: "⬡", label: "Sellers" },
-      { href: "/dashboard/orders",     icon: "≡", label: "Orders" },
+      { href: "/dashboard/users",   icon: Users,         label: "Users" },
+      { href: "/dashboard/sellers", icon: Store,         label: "Sellers" },
+      { href: "/dashboard/orders",  icon: ClipboardList, label: "Orders" },
     ],
   },
   {
     section: "Compliance",
     items: [
-      { href: "/dashboard/moderation", icon: "✓", label: "Moderation" },
+      { href: "/dashboard/moderation", icon: ShieldCheck, label: "Moderation" },
     ],
   },
 ];
@@ -81,97 +97,69 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      {/* ── Sidebar ──────────────────────────────────────────── */}
-      <aside
-        style={{
-          width: 220,
-          flexShrink: 0,
-          background: "var(--surface)",
-          borderRight: "1px solid var(--border)",
-          display: "flex",
-          flexDirection: "column",
-          position: "sticky",
-          top: 0,
-          height: "100vh",
-          overflowY: "auto",
-        }}
-      >
+      {/* ── Sidebar ──────────────────────────────────────────────────── */}
+      <aside style={{
+        width: 216,
+        flexShrink: 0,
+        background: "var(--surface)",
+        borderRight: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        position: "sticky",
+        top: 0,
+        height: "100vh",
+        overflowY: "auto",
+      }}>
+
         {/* Wordmark */}
-        <div
-          style={{
-            padding: "1rem 0.875rem 0.75rem",
-            borderBottom: "1px solid var(--border)",
+        <div style={{
+          padding: "1.125rem 1rem 1rem",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5625rem",
+        }}>
+          <div style={{
+            width: 24,
+            height: 24,
+            borderRadius: 5,
+            background: "var(--accent)",
             display: "flex",
             alignItems: "center",
-            gap: "0.5rem",
-          }}
-        >
-          <span
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: 6,
-              background: "var(--accent)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 13,
-              fontWeight: 700,
-              color: "var(--accent-text)",
-              flexShrink: 0,
-            }}
-          >
-            Z
-          </span>
+            justifyContent: "center",
+            fontSize: 11,
+            fontWeight: 800,
+            color: "var(--accent-text)",
+            flexShrink: 0,
+            letterSpacing: "-0.03em",
+          }}>
+            ZM
+          </div>
           <div>
-            <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
+            <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--text)", lineHeight: 1.25, letterSpacing: "-0.01em" }}>
               ZapMarket
             </div>
-            <div style={{ fontSize: "0.625rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              Backoffice
+            <div style={{ fontSize: "0.5625rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 1 }}>
+              Admin Console
             </div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: "0.5rem 0" }}>
+        <nav style={{ flex: 1, paddingBottom: "0.5rem" }}>
           {NAV.map((group) => (
             <div key={group.section}>
               <div className="nav-section">{group.section}</div>
               {group.items.map((item) => {
                 const active = isActive(item.href);
+                const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                      padding: "0.4375rem 0.875rem",
-                      margin: "1px 0.375rem",
-                      borderRadius: 6,
-                      fontSize: "0.8125rem",
-                      fontWeight: active ? 600 : 400,
-                      color: active ? "var(--accent)" : "var(--text-2)",
-                      background: active ? "var(--accent-bg)" : "transparent",
-                      textDecoration: "none",
-                      transition: "background 0.1s, color 0.1s",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!active) {
-                        (e.currentTarget as HTMLElement).style.background = "var(--surface2)";
-                        (e.currentTarget as HTMLElement).style.color = "var(--text)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!active) {
-                        (e.currentTarget as HTMLElement).style.background = "transparent";
-                        (e.currentTarget as HTMLElement).style.color = "var(--text-2)";
-                      }
-                    }}
+                    className={`nav-item${active ? " nav-item-active" : ""}`}
                   >
-                    <span style={{ fontSize: 14, opacity: 0.8 }}>{item.icon}</span>
+                    <Icon size={14} strokeWidth={active ? 2 : 1.75} className="nav-icon" />
                     {item.label}
                   </Link>
                 );
@@ -181,23 +169,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* Bottom: theme picker + sign out */}
-        <div
-          style={{
-            padding: "0.75rem 0.875rem",
-            borderTop: "1px solid var(--border)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.625rem",
-          }}
-        >
+        <div style={{
+          padding: "0.75rem 1rem",
+          borderTop: "1px solid var(--border)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.5rem",
+        }}>
+          {/* ⌘K hint */}
+          <button
+            onClick={() => {
+              window.dispatchEvent(
+                Object.assign(new KeyboardEvent("keydown", { key: "k", bubbles: true }), { metaKey: true })
+              );
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "0.25rem 0",
+              width: "100%",
+            }}
+            title="Open command palette"
+          >
+            <span style={{ fontSize: "0.6875rem", color: "var(--muted)", flex: 1, textAlign: "left" }}>Command palette</span>
+            <span className="kbd">⌘K</span>
+          </button>
+
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-            <span style={{ fontSize: "0.6875rem", color: "var(--muted)", marginRight: "0.25rem" }}>Theme</span>
+            <span style={{ fontSize: "0.625rem", fontWeight: 500, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: "0.125rem" }}>
+              Theme
+            </span>
             {THEMES.map((t) => (
               <button
                 key={t.name}
                 className="theme-dot"
-                aria-label={t.name}
+                aria-label={t.label}
                 aria-pressed={theme === t.name}
+                title={t.label}
                 onClick={() => applyTheme(t.name)}
                 style={{ background: t.color }}
               />
@@ -206,17 +218,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button
             className="btn btn-ghost"
             onClick={signOut}
-            style={{ width: "100%", justifyContent: "flex-start", fontSize: "0.8rem", padding: "0.375rem 0.5rem" }}
+            style={{
+              width: "100%",
+              justifyContent: "flex-start",
+              fontSize: "0.75rem",
+              padding: "0.375rem 0.375rem",
+              gap: "0.5rem",
+              color: "var(--muted)",
+              borderColor: "transparent",
+            }}
           >
-            <span>⏻</span> Sign out
+            <LogOut size={13} strokeWidth={1.75} />
+            Sign out
           </button>
         </div>
       </aside>
 
-      {/* ── Main ─────────────────────────────────────────────── */}
+      {/* ── Main ─────────────────────────────────────────────────────── */}
       <main style={{ flex: 1, minWidth: 0, overflowX: "hidden" }}>
         {children}
       </main>
+
+      {/* ── Command palette ──────────────────────────────────────────── */}
+      <CommandPalette />
     </div>
   );
 }

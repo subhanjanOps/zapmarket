@@ -250,25 +250,28 @@ func (sr *SkuRepository) UpdateSku(
 	query := `
 		UPDATE skus
 		SET
-			product_id = $1,
-			sku_code = $2,
-			variant_attrs = $3,
-			price_amount = $4,
-			compare_price = $5,
-			currency = $6,
-			weight_grams = $7,
-			is_active = $8,
+			sku_code = $1,
+			variant_attrs = $2,
+			price_amount = $3,
+			compare_price = $4,
+			currency = $5,
+			weight_grams = $6,
+			is_active = $7,
 			updated_at = NOW()
-		WHERE id = $9
+		WHERE id = $8
 		AND deleted_at IS NULL
 	`
+
+	variantAttrs, err := json.Marshal(sku.VariantAttrs)
+	if err != nil {
+		return pkgerrors.NewValidation("INVALID_DATA", "variant_attrs must be valid JSON")
+	}
 
 	result, err := sr.db.ExecContext(
 		ctx,
 		query,
-		sku.ProductID,
 		sku.SKUCode,
-		sku.VariantAttrs,
+		variantAttrs,
 		sku.PriceAmount,
 		sku.ComparePrice,
 		sku.Currency,

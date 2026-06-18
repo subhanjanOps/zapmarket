@@ -206,7 +206,7 @@ export default function CategoriesPage() {
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <div className="page-content">
       <div className="page-header">
         <div>
           <h1 className="page-title">Categories</h1>
@@ -252,11 +252,11 @@ export default function CategoriesPage() {
         </div>
       )}
 
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ border: "1px solid var(--border)", borderRadius: 7, overflow: "hidden" }}>
         <table>
           <thead>
             <tr>
-              <th style={{ width: 36, padding: "0.625rem 0.75rem" }}>
+              <th style={{ width: 36, padding: "0.4375rem 0.75rem" }}>
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -269,7 +269,7 @@ export default function CategoriesPage() {
               <th>Slug</th>
               <th>Parent</th>
               <th>Created</th>
-              <th style={{ width: 120 }}>Actions</th>
+              <th style={{ width: 96, textAlign: "right" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -293,7 +293,7 @@ export default function CategoriesPage() {
                     style={{ background: checked ? "var(--accent-bg)" : undefined, cursor: "pointer" }}
                     onClick={() => toggleRow(cat.id)}
                   >
-                    <td style={{ padding: "0.625rem 0.75rem" }} onClick={(e) => e.stopPropagation()}>
+                    <td style={{ padding: "0.4375rem 0.75rem" }} onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={checked}
@@ -305,12 +305,13 @@ export default function CategoriesPage() {
                     <td><span className="mono" style={{ color: "var(--text-2)" }}>{cat.slug}</span></td>
                     <td>{parentName(cat.parent_id)}</td>
                     <td style={{ color: "var(--text-2)" }}>{new Date(cat.created_at).toLocaleDateString()}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: "flex", gap: "0.375rem" }}>
-                        <button className="btn btn-ghost" style={{ padding: "0.25rem 0.625rem", fontSize: "0.75rem" }} onClick={() => openEdit(cat)}>Edit</button>
+                    <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right" }}>
+                      <div className="row-actions">
+                        <button className="btn-icon" onClick={() => openEdit(cat)}>
+                          Edit
+                        </button>
                         <button
-                          className="btn btn-danger"
-                          style={{ padding: "0.25rem 0.625rem", fontSize: "0.75rem" }}
+                          className="btn-icon btn-icon-danger"
                           onClick={() => handleDelete(cat.id)}
                           disabled={deleting === cat.id}
                         >

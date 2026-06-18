@@ -104,10 +104,6 @@ func (ss *skuService) UpdateSKU(ctx context.Context, sku *domain.SKU) error {
 		return pkgerrors.NewValidation("INVALID_DATA", "sku code is required")
 	}
 
-	if sku.ProductID == uuid.Nil {
-		return pkgerrors.NewValidation("INVALID_DATA", "product id is required")
-	}
-
 	if sku.PriceAmount <= 0 {
 		return pkgerrors.NewValidation("INVALID_DATA", "price amount must be greater than zero")
 	}
