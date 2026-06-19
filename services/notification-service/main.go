@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,13 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
-	"github.com/zapmarket/zapmarket/pkg/registry"
 	"github.com/zapmarket/zapmarket/services/notification-service/internal/consumer"
 	"github.com/zapmarket/zapmarket/services/notification-service/internal/notifier"
 )
@@ -69,11 +66,6 @@ func main() {
 		log.Info("shutting down notification service")
 		cancel()
 	}()
-
-	instanceID := uuid.New().String()
-	addr := fmt.Sprintf("http://zapmarket-notification-service:%d", 8085)
-	go registry.Heartbeat(ctx, rdb, "notification-service", instanceID, addr, log)
-	log.Info("registered with gateway registry", "addr", addr)
 
 	// ── Consume all three topics concurrently ─────────────────────────────────
 	topics := []string{

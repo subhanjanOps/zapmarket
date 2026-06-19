@@ -1,12 +1,6 @@
-"use client";
+// Token is stored in an httpOnly cookie managed by the BFF routes in /app/api/auth/.
+// JavaScript code never touches the raw JWT.
 
-const KEY = "seller_token";
-
-export const saveToken = (t: string) => {
-  if (t && t !== "undefined" && t !== "null") localStorage.setItem(KEY, t);
-};
-export const getToken = (): string | null => {
-  const t = localStorage.getItem(KEY);
-  return t && t !== "undefined" && t !== "null" ? t : null;
-};
-export const clearToken = () => localStorage.removeItem(KEY);
+export async function logout(): Promise<void> {
+  await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+}

@@ -226,9 +226,15 @@ func swaggerBasePath(doc *swaggerDoc) string {
 // deriveAuthMode analyses operations in the swagger doc and returns the most
 // appropriate gateway auth_mode:
 //
-//   - "none"         — no operation has a security requirement
-//   - "required"     — all operations (including GET) have a security requirement
-//   - "method_split" — GET/HEAD operations are public; write methods require auth
+//   - "none"         — no operation has a security requirement, OR the security
+//     pattern is mixed and cannot be cleanly expressed as a blanket rule
+//   - "required"     — every operation has a security requirement
+//   - "method_split" — GET/HEAD operations are all public; all write methods require auth
+//
+// When the pattern is mixed (some ops public, some secured, no clean method
+// split), the gateway defaults to "none" and lets each service enforce its own
+// per-endpoint auth. A blanket "required" in that case would block public
+// endpoints like login/register that intentionally have no auth requirement.
 func deriveAuthMode(doc *swaggerDoc) string {
 	totalOps := 0
 	securedOps := 0
@@ -259,27 +265,30 @@ func deriveAuthMode(doc *swaggerDoc) string {
 	if securedOps == totalOps {
 		return "required"
 	}
-	// Some ops are public. If reads are unsecured and writes are secured → method_split.
+	// Clean method split: all reads are public, all writes are secured.
 	if totalReadOps > 0 && securedReadOps == 0 && securedOps > 0 {
 		return "method_split"
 	}
-	// Mixed but not cleanly split — default to required (safer).
-	return "required"
+	// Mixed pattern with no clean rule — let each service enforce its own auth.
+	return "none"
 }
 
 func (ab *AutoBinder) applyRoute(ctx context.Context, serviceName string, route routeSpec) {
-	var existingUpstream string
+	var existingUpstream, existingAuthMode string
 	err := ab.db.QueryRowContext(ctx,
-		`SELECT upstream FROM gateway_routes WHERE path_prefix = $1 AND enabled = true`,
+		`SELECT upstream, auth_mode FROM gateway_routes WHERE path_prefix = $1 AND enabled = true`,
 		route.PathPrefix,
-	).Scan(&existingUpstream)
+	).Scan(&existingUpstream, &existingAuthMode)
 
 	switch {
 	case err == sql.ErrNoRows:
 		_, insertErr := ab.db.ExecContext(ctx,
 			`INSERT INTO gateway_routes (path_prefix, upstream, auth_mode, strip_prefix)
 			 VALUES ($1, $2, $3, $4)
-			 ON CONFLICT (path_prefix) DO NOTHING`,
+			 ON CONFLICT (path_prefix) DO UPDATE
+			   SET auth_mode = EXCLUDED.auth_mode
+			 WHERE gateway_routes.upstream = EXCLUDED.upstream
+			   AND gateway_routes.auth_mode != EXCLUDED.auth_mode`,
 			route.PathPrefix, serviceName, route.AuthMode, route.StripPrefix,
 		)
 		if insertErr != nil {
@@ -305,6 +314,22 @@ func (ab *AutoBinder) applyRoute(ctx context.Context, serviceName string, route 
 			Upstream: serviceName,
 			Detail:   fmt.Sprintf("conflict: existing=%s challenger=%s", existingUpstream, serviceName),
 		})
-	// existingUpstream == serviceName → already bound, nothing to do.
+	default:
+		// existingUpstream == serviceName. If auth_mode drifted, correct it.
+		if existingAuthMode != route.AuthMode {
+			_, updateErr := ab.db.ExecContext(ctx,
+				`UPDATE gateway_routes SET auth_mode = $1 WHERE path_prefix = $2 AND upstream = $3`,
+				route.AuthMode, route.PathPrefix, serviceName,
+			)
+			if updateErr != nil {
+				ab.logger.Warn("auto-bind: auth_mode update failed",
+					"prefix", route.PathPrefix, "error", updateErr)
+			} else {
+				ab.logger.Info("auto-bind: auth_mode corrected",
+					"prefix", route.PathPrefix,
+					"old", existingAuthMode,
+					"new", route.AuthMode)
+			}
+		}
 	}
 }

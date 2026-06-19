@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { SKU } from "@/lib/api";
 
 export interface SKUDraft {
+  _key: string;
   id?: string;
   sku_code: string;
   price_amount: number;
@@ -14,8 +15,11 @@ export interface SKUDraft {
   attributes: { key: string; value: string }[];
 }
 
+const skuInputStyle: React.CSSProperties = { padding: "0.375rem 0.625rem", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: "0.8125rem", fontFamily: "inherit", width: "100%" };
+
 function emptyDraft(): SKUDraft {
   return {
+    _key: crypto.randomUUID(),
     sku_code: "",
     price_amount: 0,
     price_currency: "USD",
@@ -69,12 +73,10 @@ export function SKUEditor({ initial = [], onChange }: Props) {
     onChange(next);
   }
 
-  const inputStyle: React.CSSProperties = { padding: "0.375rem 0.625rem", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: "0.8125rem", fontFamily: "inherit", width: "100%" };
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       {skus.map((sku, si) => (
-        <div key={si} className="card" style={{ padding: "1rem 1.25rem" }}>
+        <div key={sku._key} className="card" style={{ padding: "1rem 1.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.875rem" }}>
             <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--text-2)" }}>SKU #{si + 1}</span>
             {skus.length > 1 && (
@@ -87,19 +89,19 @@ export function SKUEditor({ initial = [], onChange }: Props) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.75rem", marginBottom: "0.75rem" }}>
             <div>
               <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>SKU Code *</label>
-              <input style={inputStyle} value={sku.sku_code} onChange={(e) => update(si, { sku_code: e.target.value })} placeholder="e.g. TSHIRT-BLK-M" />
+              <input style={skuInputStyle} value={sku.sku_code} onChange={(e) => update(si, { sku_code: e.target.value })} placeholder="e.g. TSHIRT-BLK-M" />
             </div>
             <div>
               <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>Price (USD) *</label>
-              <input style={inputStyle} type="number" min="0" step="0.01" value={sku.price_amount || ""} onChange={(e) => update(si, { price_amount: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
+              <input style={skuInputStyle} type="number" min="0" step="0.01" value={sku.price_amount || ""} onChange={(e) => update(si, { price_amount: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
             </div>
             <div>
               <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>Compare Price</label>
-              <input style={inputStyle} type="number" min="0" step="0.01" value={sku.compare_price || ""} onChange={(e) => update(si, { compare_price: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
+              <input style={skuInputStyle} type="number" min="0" step="0.01" value={sku.compare_price || ""} onChange={(e) => update(si, { compare_price: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
             </div>
             <div>
               <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>Weight (g)</label>
-              <input style={inputStyle} type="number" min="0" value={sku.weight_grams || ""} onChange={(e) => update(si, { weight_grams: parseInt(e.target.value) || 0 })} placeholder="0" />
+              <input style={skuInputStyle} type="number" min="0" value={sku.weight_grams || ""} onChange={(e) => update(si, { weight_grams: parseInt(e.target.value) || 0 })} placeholder="0" />
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", paddingBottom: "0.375rem" }}>
@@ -119,8 +121,8 @@ export function SKUEditor({ initial = [], onChange }: Props) {
             </div>
             {sku.attributes.map((attr, ai) => (
               <div key={ai} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.375rem", alignItems: "center" }}>
-                <input style={{ ...inputStyle, flex: 1 }} value={attr.key} onChange={(e) => updateAttr(si, ai, "key", e.target.value)} placeholder="e.g. Color" />
-                <input style={{ ...inputStyle, flex: 1 }} value={attr.value} onChange={(e) => updateAttr(si, ai, "value", e.target.value)} placeholder="e.g. Black" />
+                <input style={{ ...skuInputStyle, flex: 1 }} value={attr.key} onChange={(e) => updateAttr(si, ai, "key", e.target.value)} placeholder="e.g. Color" />
+                <input style={{ ...skuInputStyle, flex: 1 }} value={attr.value} onChange={(e) => updateAttr(si, ai, "value", e.target.value)} placeholder="e.g. Black" />
                 <button onClick={() => removeAttr(si, ai)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", flexShrink: 0, display: "flex" }}>
                   <Trash2 size={13} />
                 </button>

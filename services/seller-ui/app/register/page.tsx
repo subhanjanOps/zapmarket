@@ -2,8 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getToken } from "@/lib/auth";
-import { register } from "@/lib/api";
+import { getMe, register } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,9 +15,9 @@ export default function RegisterPage() {
   const [loading, setLoading]     = useState(false);
 
   useEffect(() => {
-    if (getToken()) { router.replace("/dashboard"); return; }
     const saved = localStorage.getItem("zap-theme") ?? "vibrant";
     document.documentElement.setAttribute("data-theme", saved);
+    getMe().then(() => router.replace("/dashboard")).catch(() => {/* not logged in */});
   }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -53,25 +52,25 @@ export default function RegisterPage() {
         )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">First name</label>
-            <input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} required placeholder="Jane" />
+            <label className="form-label" htmlFor="reg-first">First name</label>
+            <input id="reg-first" className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} required placeholder="Jane" />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Last name</label>
-            <input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} required placeholder="Smith" />
+            <label className="form-label" htmlFor="reg-last">Last name</label>
+            <input id="reg-last" className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} required placeholder="Smith" />
           </div>
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Email address</label>
-          <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="seller@example.com" autoComplete="email" />
+          <label className="form-label" htmlFor="reg-email">Email address</label>
+          <input id="reg-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="seller@example.com" autoComplete="email" />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Password</label>
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
+          <label className="form-label" htmlFor="reg-pw">Password</label>
+          <input id="reg-pw" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Confirm password</label>
-          <input className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
+          <label className="form-label" htmlFor="reg-pw2">Confirm password</label>
+          <input id="reg-pw2" className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
         </div>
         <button className="btn btn-primary" type="submit" disabled={loading} style={{ width: "100%", justifyContent: "center", marginTop: "0.25rem" }}>
           {loading ? "Creating account…" : "Create seller account"}

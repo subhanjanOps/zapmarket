@@ -1,22 +1,30 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getToken } from "@/lib/auth";
 import { createProduct, createSku, uploadImage } from "@/lib/api";
 import CategoryPicker from "@/app/components/CategoryPicker";
 import { SKUEditor, SKUDraft } from "@/app/components/SKUEditor";
 import { ImageDropzone } from "@/app/components/ImageDropzone";
 
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+const inputStyle: React.CSSProperties = {
+  padding: "0.46875rem 0.875rem", borderRadius: 7, border: "1px solid var(--border)",
+  background: "var(--surface2)", color: "var(--text)", fontSize: "0.8125rem",
+  fontFamily: "inherit", width: "100%", outline: "none",
+};
+
 export default function NewProductPage() {
   const router = useRouter();
 
-  const [name, setName]           = useState("");
-  const [slug, setSlug]           = useState("");
-  const [slugManual, setSlugManual] = useState(false);
+  const [name, setName]               = useState("");
+  const [slug, setSlug]               = useState("");
+  const [slugManual, setSlugManual]   = useState(false);
+  const [slugError, setSlugError]     = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId]   = useState("");
   const [status, setStatus]           = useState<"DRAFT" | "ACTIVE">("DRAFT");
@@ -31,13 +39,19 @@ export default function NewProductPage() {
     if (!slugManual) setSlug(slugify(v));
   }
 
+  function handleSlugBlur() {
+    const formatted = slugify(slug);
+    setSlug(formatted);
+    setSlugError(formatted && !SLUG_RE.test(formatted) ? "Slug must be lowercase letters, numbers, and hyphens only" : "");
+  }
+
   async function saveBasicInfo() {
-    const token = getToken();
-    if (!token) return;
     if (!name.trim()) { setError("Product name is required"); return; }
+    const finalSlug = slug || slugify(name);
+    if (!SLUG_RE.test(finalSlug)) { setError("Slug contains invalid characters"); return; }
     setSaving(true); setError("");
     try {
-      const p = await createProduct(token, { name: name.trim(), slug: slug || slugify(name), description, category_id: categoryId, status: "DRAFT" });
+      const p = await createProduct({ name: name.trim(), slug: finalSlug, description, category_id: categoryId, status: "DRAFT" });
       setProductId(p.id);
       setStep("skus");
     } catch (e) {
@@ -48,23 +62,30 @@ export default function NewProductPage() {
   }
 
   async function saveSkus() {
-    const token = getToken();
-    if (!token || !productId) return;
+    if (!productId) return;
     setSaving(true); setError("");
+    const validSkus = skus.filter((s) => s.sku_code.trim());
     try {
-      for (const s of skus) {
-        if (!s.sku_code.trim()) continue;
-        const attrs = Object.fromEntries(s.attributes.filter((a) => a.key).map((a) => [a.key, a.value]));
-        await createSku(token, {
-          product_id: productId,
-          sku_code: s.sku_code,
-          attributes: attrs,
-          price_amount: Math.round(s.price_amount * 100),
-          price_currency: s.price_currency,
-          compare_price: s.compare_price ? Math.round(s.compare_price * 100) : undefined,
-          weight_grams: s.weight_grams || undefined,
-          is_active: s.is_active,
-        });
+      const results = await Promise.allSettled(
+        validSkus.map((s) => {
+          const attrs = Object.fromEntries(s.attributes.filter((a) => a.key).map((a) => [a.key, a.value]));
+          return createSku({
+            product_id: productId,
+            sku_code: s.sku_code,
+            attributes: attrs,
+            price_amount: Math.round(s.price_amount * 100),
+            price_currency: s.price_currency,
+            compare_price: s.compare_price ? Math.round(s.compare_price * 100) : undefined,
+            weight_grams: s.weight_grams || undefined,
+            is_active: s.is_active,
+          });
+        }),
+      );
+      const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failures.length > 0) {
+        setError(`${failures.length} SKU(s) failed to save: ${failures[0].reason?.message ?? "Unknown error"}`);
+        setSaving(false);
+        return;
       }
       setStep("images");
     } catch (e) {
@@ -75,18 +96,16 @@ export default function NewProductPage() {
   }
 
   async function handleImageUpload(file: File) {
-    const token = getToken();
-    if (!token || !productId) throw new Error("No product ID");
-    await uploadImage(token, productId, file);
+    if (!productId) throw new Error("No product created yet — complete basic info first");
+    await uploadImage(productId, file);
   }
 
   async function publish() {
-    const token = getToken();
-    if (!token || !productId) return;
+    if (!productId) return;
     setSaving(true); setError("");
     try {
       const { updateProduct } = await import("@/lib/api");
-      await updateProduct(token, productId, { status });
+      await updateProduct(productId, { status });
       router.push(`/dashboard/products/${productId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to publish");
@@ -96,8 +115,6 @@ export default function NewProductPage() {
 
   const steps = ["info", "skus", "images", "publish"] as const;
   const stepIdx = steps.indexOf(step);
-
-  const inputStyle: React.CSSProperties = { padding: "0.46875rem 0.875rem", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: "0.8125rem", fontFamily: "inherit", width: "100%", outline: "none" };
 
   return (
     <>
@@ -129,23 +146,28 @@ export default function NewProductPage() {
         <div className="card" style={{ maxWidth: "42rem" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             <div>
-              <label className="form-label">Product Name *</label>
-              <input style={inputStyle} value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Leather Chelsea Boots" />
+              <label className="form-label" htmlFor="new-name">Product Name *</label>
+              <input id="new-name" style={inputStyle} value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Leather Chelsea Boots" />
             </div>
             <div>
-              <label className="form-label">Slug (URL path)</label>
-              <input style={{ ...inputStyle, fontFamily: "\"DM Mono\", monospace" }} value={slug} onChange={(e) => { setSlug(e.target.value); setSlugManual(true); }} placeholder="auto-generated from name" />
+              <label className="form-label" htmlFor="new-slug">Slug (URL path)</label>
+              <input
+                id="new-slug"
+                style={{ ...inputStyle, fontFamily: '"DM Mono", monospace' }}
+                value={slug}
+                onChange={(e) => { setSlug(e.target.value); setSlugManual(true); setSlugError(""); }}
+                onBlur={handleSlugBlur}
+                placeholder="auto-generated from name"
+              />
+              {slugError && <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--danger)" }}>{slugError}</p>}
             </div>
             <div>
-              <label className="form-label">Description</label>
-              <textarea style={{ ...inputStyle, minHeight: "6rem", resize: "vertical" }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe your product…" />
+              <label className="form-label" htmlFor="new-desc">Description</label>
+              <textarea id="new-desc" style={{ ...inputStyle, minHeight: "6rem", resize: "vertical" }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe your product…" />
             </div>
             <div>
               <label className="form-label">Category</label>
-              <CategoryPicker
-                value={categoryId}
-                onChange={setCategoryId}
-              />
+              <CategoryPicker value={categoryId} onChange={setCategoryId} />
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button className="btn btn-primary" onClick={saveBasicInfo} disabled={saving}>
@@ -183,8 +205,8 @@ export default function NewProductPage() {
         <div className="card" style={{ maxWidth: "32rem" }}>
           <h3 style={{ margin: "0 0 1rem", fontSize: "0.9375rem", fontWeight: 600 }}>Publish</h3>
           <div style={{ marginBottom: "1.5rem" }}>
-            <label className="form-label">Status</label>
-            <select style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value as "DRAFT" | "ACTIVE")}>
+            <label className="form-label" htmlFor="new-status">Status</label>
+            <select id="new-status" style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value as "DRAFT" | "ACTIVE")}>
               <option value="DRAFT">Draft — not publicly listed</option>
               <option value="ACTIVE">Active — live on marketplace</option>
             </select>

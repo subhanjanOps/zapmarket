@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { getToken } from "@/lib/auth";
 import { getSellerOrder, cancelOrder, Order, OrderItem } from "@/lib/api";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { StatusTimeline } from "@/app/components/StatusTimeline";
@@ -20,20 +19,16 @@ export default function OrderDetailPage() {
   const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-    getSellerOrder(token, id)
+    getSellerOrder(id)
       .then((r) => { setOrder(r.order); setItems(r.items ?? []); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [id]);
 
   async function handleCancel() {
     if (!await showConfirm("Cancel this order? This cannot be undone.")) return;
-    const token = getToken();
-    if (!token) return;
     setCancelling(true);
     try {
-      const updated = await cancelOrder(token, id);
+      const updated = await cancelOrder(id);
       setOrder(updated);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cancel failed");
@@ -42,8 +37,8 @@ export default function OrderDetailPage() {
     }
   }
 
-  const fmtMoney = (n: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
+  const fmtMoney = (amount: number, currency: string) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount / 100);
 
   if (loading) {
     return (
@@ -77,8 +72,8 @@ export default function OrderDetailPage() {
             <ArrowLeft size={15} />
           </Link>
           <div>
-            <h1 className="page-title" style={{ fontFamily: "\"DM Mono\", monospace", fontSize: "0.9375rem" }}>
-              {order.id.slice(0, 18)}…
+            <h1 className="page-title" style={{ fontFamily: '"DM Mono", monospace', fontSize: "0.9375rem" }}>
+              {order.id.slice(0, 18)}...
             </h1>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem" }}>
               <StatusBadge status={order.status} />
@@ -90,7 +85,7 @@ export default function OrderDetailPage() {
         </div>
         {canCancel && (
           <button className="btn btn-danger" onClick={handleCancel} disabled={cancelling}>
-            {cancelling ? "Cancelling…" : "Cancel Order"}
+            {cancelling ? "Cancelling..." : "Cancel Order"}
           </button>
         )}
       </div>
@@ -102,13 +97,11 @@ export default function OrderDetailPage() {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-        {/* Status timeline */}
         <div className="card">
           <h3 style={{ margin: "0 0 1.25rem", fontSize: "0.875rem", fontWeight: 600 }}>Status</h3>
           <StatusTimeline status={order.status} />
         </div>
 
-        {/* Buyer info */}
         <div className="card">
           <h3 style={{ margin: "0 0 0.875rem", fontSize: "0.875rem", fontWeight: 600 }}>Buyer</h3>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -120,46 +113,43 @@ export default function OrderDetailPage() {
           </p>
         </div>
 
-        {/* Line items */}
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div className="card-header">
             <span className="card-title">Line Items</span>
           </div>
           <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table>
-            <thead>
-              <tr><th>SKU</th><th>Product</th><th>Qty</th><th>Unit Price</th><th style={{ textAlign: "right" }}>Subtotal</th></tr>
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--muted)", padding: "1.5rem" }}>No line items</td></tr>
-              ) : items.map((item) => (
-                <tr key={item.id}>
-                  <td><span className="mono" style={{ fontSize: "0.8125rem" }}>{item.sku_code ?? item.sku_id.slice(0, 10)}</span></td>
-                  <td style={{ color: "var(--text-2)" }}>{item.product_name ?? "—"}</td>
-                  <td>{item.quantity}</td>
-                  <td className="mono">{fmtMoney(item.unit_price)}</td>
-                  <td className="mono" style={{ textAlign: "right", fontWeight: 500 }}>{fmtMoney(item.unit_price * item.quantity)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <table>
+              <thead>
+                <tr><th>SKU</th><th>Product</th><th>Qty</th><th>Unit Price</th><th style={{ textAlign: "right" }}>Subtotal</th></tr>
+              </thead>
+              <tbody>
+                {items.length === 0 ? (
+                  <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--muted)", padding: "1.5rem" }}>No line items</td></tr>
+                ) : items.map((item) => (
+                  <tr key={item.id}>
+                    <td><span className="mono" style={{ fontSize: "0.8125rem" }}>{item.sku_code ?? item.sku_id.slice(0, 10)}</span></td>
+                    <td style={{ color: "var(--text-2)" }}>{item.product_name ?? "No name"}</td>
+                    <td>{item.quantity}</td>
+                    <td className="mono">{fmtMoney(item.unit_price, item.currency)}</td>
+                    <td className="mono" style={{ textAlign: "right", fontWeight: 500 }}>{fmtMoney(item.unit_price * item.quantity, item.currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          {/* Totals footer */}
           <div style={{ padding: "0.875rem 1.125rem", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "0.375rem", alignItems: "flex-end" }}>
             <div style={{ display: "flex", gap: "3rem", fontSize: "0.8125rem", color: "var(--muted)" }}>
               <span>Subtotal</span>
-              <span className="mono">{fmtMoney(subtotal)}</span>
+              <span className="mono">{fmtMoney(subtotal, order.currency)}</span>
             </div>
             <div style={{ display: "flex", gap: "3rem", fontSize: "0.9375rem", fontWeight: 700, color: "var(--text)" }}>
               <span>Total</span>
-              <span className="mono">{fmtMoney(order.total_amount)}</span>
+              <span className="mono">{fmtMoney(order.total_amount, order.currency)}</span>
             </div>
           </div>
         </div>
 
-        {/* Raw IDs */}
         <div className="card" style={{ padding: "0.875rem 1.125rem" }}>
           <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
             {[["Order ID", order.id], ["Idempotency Key", order.idempotency_key], ["Updated", new Date(order.updated_at).toLocaleString()]].map(([label, val]) => (

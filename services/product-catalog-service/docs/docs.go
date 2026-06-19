@@ -1750,7 +1750,7 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
 	Host:             "localhost:8081",
-	BasePath:         "/",
+	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Product Catalog Service API",
 	Description:      "Manages products, SKUs, categories, and images for ZapMarket.",

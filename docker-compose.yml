@@ -236,6 +236,7 @@ services:
     environment:
       - PORT=3002
       - HOSTNAME=0.0.0.0
+      - GATEWAY_URL=http://zapmarket-api-gateway:8000
     ports:
       - "3002:3002"
     networks:

@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
-import { getToken } from "@/lib/auth";
 import { getProduct, updateProduct, getSkus, createSku, updateSku, deleteSku, getImages, uploadImage, deleteImage, getCategories, Product, SKU, ProductImage, Category } from "@/lib/api";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { SKUEditor, SKUDraft, skuToAttributes } from "@/app/components/SKUEditor";
 import { ImageDropzone } from "@/app/components/ImageDropzone";
-import { SkeletonTableCard, Skel } from "@/app/components/Skeleton";
+import { SkeletonTableCard } from "@/app/components/Skeleton";
 import { Trash2 } from "lucide-react";
+
+const inputStyle: React.CSSProperties = { padding: "0.46875rem 0.875rem", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: "0.8125rem", fontFamily: "inherit", width: "100%", outline: "none" };
 
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -27,7 +28,6 @@ export default function EditProductPage() {
   const [error, setError]         = useState("");
   const [saving, setSaving]       = useState(false);
 
-  // form state
   const [name, setName]           = useState("");
   const [slug, setSlug]           = useState("");
   const [description, setDescription] = useState("");
@@ -36,9 +36,7 @@ export default function EditProductPage() {
   const [skuDrafts, setSkuDrafts]     = useState<SKUDraft[]>([]);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-    Promise.all([getProduct(token, id), getSkus(token, id), getImages(token, id), getCategories()])
+    Promise.all([getProduct(id), getSkus(id), getImages(id), getCategories()])
       .then(([p, s, img, cats]) => {
         setProduct(p);
         setName(p.name);
@@ -48,6 +46,7 @@ export default function EditProductPage() {
         setStatus(p.status);
         setSkus(s.skus ?? []);
         setSkuDrafts((s.skus ?? []).map((sk) => ({
+          _key: sk.id ?? crypto.randomUUID(),
           id: sk.id,
           sku_code: sk.sku_code,
           price_amount: sk.price_amount / 100,
@@ -65,35 +64,35 @@ export default function EditProductPage() {
   }, [id]);
 
   async function saveProduct() {
-    const token = getToken();
-    if (!token || !product) return;
+    if (!product) return;
     setSaving(true); setError("");
     try {
-      await updateProduct(token, id, { name, slug: slug || slugify(name), description, category_id: categoryId, status });
+      await updateProduct(id, { name, slug: slug || slugify(name), description, category_id: categoryId, status });
 
-      // Sync SKUs: create new, update existing
       const existingIds = new Set(skus.map((s) => s.id));
-      for (const draft of skuDrafts) {
-        const attrs = Object.fromEntries(draft.attributes.filter((a) => a.key).map((a) => [a.key, a.value]));
-        if (draft.id && existingIds.has(draft.id)) {
-          await updateSku(token, draft.id, {
-            sku_code: draft.sku_code,
-            attributes: attrs,
-            price_amount: Math.round(draft.price_amount * 100),
-            compare_price: draft.compare_price ? Math.round(draft.compare_price * 100) : undefined,
-            weight_grams: draft.weight_grams || undefined,
-            is_active: draft.is_active,
-          });
-        } else if (draft.sku_code.trim()) {
-          await createSku(token, { product_id: id, sku_code: draft.sku_code, attributes: attrs, price_amount: Math.round(draft.price_amount * 100), price_currency: draft.price_currency, compare_price: draft.compare_price ? Math.round(draft.compare_price * 100) : undefined, weight_grams: draft.weight_grams || undefined, is_active: draft.is_active });
-        }
-      }
+      const skuResults = await Promise.allSettled(
+        skuDrafts.map((draft) => {
+          const attrs = Object.fromEntries(draft.attributes.filter((a) => a.key).map((a) => [a.key, a.value]));
+          if (draft.id && existingIds.has(draft.id)) {
+            return updateSku(draft.id, {
+              sku_code: draft.sku_code,
+              attributes: attrs,
+              price_amount: Math.round(draft.price_amount * 100),
+              compare_price: draft.compare_price ? Math.round(draft.compare_price * 100) : undefined,
+              weight_grams: draft.weight_grams || undefined,
+              is_active: draft.is_active,
+            });
+          } else if (draft.sku_code.trim()) {
+            return createSku({ product_id: id, sku_code: draft.sku_code, attributes: attrs, price_amount: Math.round(draft.price_amount * 100), price_currency: draft.price_currency, compare_price: draft.compare_price ? Math.round(draft.compare_price * 100) : undefined, weight_grams: draft.weight_grams || undefined, is_active: draft.is_active });
+          }
+          return Promise.resolve();
+        })
+      );
+      const failures = skuResults.filter((r) => r.status === "rejected");
+      if (failures.length > 0) { setError(`${failures.length} SKU(s) failed to save.`); setSaving(false); return; }
 
-      // Delete removed SKUs
       const draftIds = new Set(skuDrafts.filter((d) => d.id).map((d) => d.id));
-      for (const sku of skus) {
-        if (!draftIds.has(sku.id)) await deleteSku(token, sku.id);
-      }
+      await Promise.allSettled(skus.filter((s) => !draftIds.has(s.id)).map((s) => deleteSku(s.id)));
 
       router.push("/dashboard/products");
     } catch (e) {
@@ -104,20 +103,14 @@ export default function EditProductPage() {
   }
 
   async function handleImageUpload(file: File) {
-    const token = getToken();
-    if (!token) throw new Error("No token");
-    const img = await uploadImage(token, id, file);
+    const img = await uploadImage(id, file);
     setImages((prev) => [...prev, img]);
   }
 
   async function handleImageDelete(imgId: string) {
-    const token = getToken();
-    if (!token) return;
-    await deleteImage(token, id, imgId);
+    await deleteImage(id, imgId);
     setImages((prev) => prev.filter((i) => i.id !== imgId));
   }
-
-  const inputStyle: React.CSSProperties = { padding: "0.46875rem 0.875rem", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: "0.8125rem", fontFamily: "inherit", width: "100%", outline: "none" };
 
   if (loading) return <SkeletonTableCard cols={4} rows={6} />;
 
@@ -144,18 +137,25 @@ export default function EditProductPage() {
       {error && <div style={{ background: "color-mix(in srgb, var(--danger) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--danger) 25%, transparent)", borderRadius: 7, padding: "0.625rem 0.875rem", fontSize: "0.8125rem", color: "var(--danger)", marginBottom: "1rem" }}>{error}</div>}
 
       <div className="dash-overview-grid" style={{ display: "grid", gridTemplateColumns: "1fr 22rem", gap: "1.5rem", alignItems: "start" }}>
-        {/* Left: form + SKUs */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          {/* Basic info */}
           <div className="card">
             <h3 style={{ margin: "0 0 1rem", fontSize: "0.875rem", fontWeight: 600 }}>Basic Information</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-              <div><label className="form-label">Product Name *</label><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></div>
-              <div><label className="form-label">Slug</label><input style={{ ...inputStyle, fontFamily: "\"DM Mono\", monospace" }} value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
-              <div><label className="form-label">Description</label><textarea style={{ ...inputStyle, minHeight: "6rem", resize: "vertical" }} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
               <div>
-                <label className="form-label">Category</label>
-                <select style={inputStyle} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <label htmlFor="edit-name" className="form-label">Product Name *</label>
+                <input id="edit-name" style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="edit-slug" className="form-label">Slug</label>
+                <input id="edit-slug" style={{ ...inputStyle, fontFamily: '"DM Mono", monospace' }} value={slug} onChange={(e) => setSlug(e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="edit-desc" className="form-label">Description</label>
+                <textarea id="edit-desc" style={{ ...inputStyle, minHeight: "6rem", resize: "vertical" }} value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="edit-category" className="form-label">Category</label>
+                <select id="edit-category" style={inputStyle} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                   <option value="">— Select category —</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -163,26 +163,23 @@ export default function EditProductPage() {
             </div>
           </div>
 
-          {/* SKUs */}
           <div>
             <h3 style={{ margin: "0 0 0.75rem", fontSize: "0.875rem", fontWeight: 600, color: "var(--text)" }}>SKUs / Variants</h3>
             <SKUEditor initial={skuDrafts} onChange={setSkuDrafts} />
           </div>
         </div>
 
-        {/* Right: images + status */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {/* Status */}
           <div className="card">
             <h3 style={{ margin: "0 0 0.875rem", fontSize: "0.875rem", fontWeight: 600 }}>Status</h3>
-            <select style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <label htmlFor="edit-status" className="form-label" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0,0,0,0)" }}>Status</label>
+            <select id="edit-status" style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="DRAFT">Draft</option>
               <option value="ACTIVE">Active</option>
               <option value="ARCHIVED">Archived</option>
             </select>
           </div>
 
-          {/* Images */}
           <div className="card">
             <h3 style={{ margin: "0 0 0.875rem", fontSize: "0.875rem", fontWeight: 600 }}>Images</h3>
             {images.length > 0 && (

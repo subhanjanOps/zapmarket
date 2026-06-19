@@ -1,7 +1,8 @@
-const GW = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+// All authenticated requests proxy through /api/proxy/[...path] which reads
+// the httpOnly seller_token cookie and adds Authorization server-side.
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${GW}${path}`, {
+  const res = await fetch(path, {
     cache: "no-store",
     ...opts,
     headers: { "Content-Type": "application/json", ...opts.headers },
@@ -15,20 +16,20 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-function auth(token: string): Record<string, string> {
-  return { Authorization: `Bearer ${token}` };
-}
-
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
-export interface LoginResponse { token: string; }
-
-export async function login(email: string, password: string): Promise<LoginResponse> {
-  const r = await req<{ access_token: string }>("/v1/auth/login", {
+export async function login(email: string, password: string): Promise<void> {
+  const res = await fetch("/api/auth/login", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
+    cache: "no-store",
   });
-  return { token: r.access_token };
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.error ?? j.message ?? msg; } catch { /* */ }
+    throw new Error(msg);
+  }
 }
 
 export interface MeResponse {
@@ -43,8 +44,8 @@ export interface MeResponse {
   };
 }
 
-export async function getMe(token: string): Promise<MeResponse> {
-  return req<MeResponse>("/v1/auth/me", { headers: auth(token) });
+export async function getMe(): Promise<MeResponse> {
+  return req<MeResponse>("/api/auth/me");
 }
 
 export async function register(
@@ -53,9 +54,9 @@ export async function register(
   email: string,
   password: string,
 ): Promise<void> {
-  return req("/v1/auth/register", {
+  return req("/api/proxy/v1/auth/register", {
     method: "POST",
-    body: JSON.stringify({ full_name: first_name+" "+last_name, email, password, role: "seller" }),
+    body: JSON.stringify({ full_name: first_name + " " + last_name, email, password, role: "seller" }),
   });
 }
 
@@ -84,7 +85,6 @@ export interface ProductsResponse {
 }
 
 export async function getProducts(
-  token: string,
   params: { status?: string; search?: string; limit?: number; offset?: number } = {},
 ): Promise<ProductsResponse> {
   const q = new URLSearchParams();
@@ -94,35 +94,33 @@ export async function getProducts(
   if (params.offset)  q.set("offset",  String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
   const r = await req<{ data: Product[]; total: number; page: number; page_size: number }>(
-    `/api/v1/products${qs}`, { headers: auth(token) },
+    `/api/proxy/api/v1/products${qs}`,
   );
   return { products: r.data ?? [], total: r.total ?? 0, limit: r.page_size ?? 20, offset: ((r.page ?? 1) - 1) * (r.page_size ?? 20) };
 }
 
-export async function getProduct(token: string, id: string): Promise<Product> {
-  const r = await req<{ data: Product }>(`/api/v1/products/${id}`, { headers: auth(token) });
+export async function getProduct(id: string): Promise<Product> {
+  const r = await req<{ data: Product }>(`/api/proxy/api/v1/products/${id}`);
   return r.data;
 }
 
 export async function createProduct(
-  token: string,
   data: { name: string; slug: string; description: string; category_id: string; status: string },
 ): Promise<Product> {
-  const r = await req<{ data: Product }>("/api/v1/products", { method: "POST", body: JSON.stringify(data), headers: auth(token) });
+  const r = await req<{ data: Product }>("/api/proxy/api/v1/products", { method: "POST", body: JSON.stringify(data) });
   return r.data;
 }
 
 export async function updateProduct(
-  token: string,
   id: string,
   data: Partial<{ name: string; slug: string; description: string; category_id: string; status: string }>,
 ): Promise<Product> {
-  const r = await req<{ data: Product }>(`/api/v1/products/${id}`, { method: "PUT", body: JSON.stringify(data), headers: auth(token) });
+  const r = await req<{ data: Product }>(`/api/proxy/api/v1/products/${id}`, { method: "PUT", body: JSON.stringify(data) });
   return r.data;
 }
 
-export async function deleteProduct(token: string, id: string): Promise<void> {
-  return req(`/api/v1/products/${id}`, { method: "DELETE", headers: auth(token) });
+export async function deleteProduct(id: string): Promise<void> {
+  return req(`/api/proxy/api/v1/products/${id}`, { method: "DELETE" });
 }
 
 // ── SKUs ──────────────────────────────────────────────────────────────────────
@@ -140,13 +138,12 @@ export interface SKU {
   created_at: string;
 }
 
-export async function getSkus(token: string, productId: string): Promise<{ skus: SKU[] }> {
-  const r = await req<{ data: SKU[] }>(`/api/v1/skus?product_id=${productId}`, { headers: auth(token) });
+export async function getSkus(productId: string): Promise<{ skus: SKU[] }> {
+  const r = await req<{ data: SKU[] }>(`/api/proxy/api/v1/skus?product_id=${productId}`);
   return { skus: r.data ?? [] };
 }
 
 export async function createSku(
-  token: string,
   data: {
     product_id: string;
     sku_code: string;
@@ -158,21 +155,20 @@ export async function createSku(
     is_active: boolean;
   },
 ): Promise<SKU> {
-  const r = await req<{ data: SKU }>("/api/v1/skus", { method: "POST", body: JSON.stringify(data), headers: auth(token) });
+  const r = await req<{ data: SKU }>("/api/proxy/api/v1/skus", { method: "POST", body: JSON.stringify(data) });
   return r.data;
 }
 
 export async function updateSku(
-  token: string,
   id: string,
   data: Partial<Omit<SKU, "id" | "product_id" | "created_at">>,
 ): Promise<SKU> {
-  const r = await req<{ data: SKU }>(`/api/v1/skus/${id}`, { method: "PUT", body: JSON.stringify(data), headers: auth(token) });
+  const r = await req<{ data: SKU }>(`/api/proxy/api/v1/skus/${id}`, { method: "PUT", body: JSON.stringify(data) });
   return r.data;
 }
 
-export async function deleteSku(token: string, id: string): Promise<void> {
-  return req(`/api/v1/skus/${id}`, { method: "DELETE", headers: auth(token) });
+export async function deleteSku(id: string): Promise<void> {
+  return req(`/api/proxy/api/v1/skus/${id}`, { method: "DELETE" });
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
@@ -186,25 +182,17 @@ export interface ProductImage {
   created_at: string;
 }
 
-export async function getImages(token: string, productId: string): Promise<{ images: ProductImage[] }> {
-  const r = await req<{ data: ProductImage[] }>(`/api/v1/products/${productId}/images`, { headers: auth(token) });
+export async function getImages(productId: string): Promise<{ images: ProductImage[] }> {
+  const r = await req<{ data: ProductImage[] }>(`/api/proxy/api/v1/products/${productId}/images`);
   return { images: r.data ?? [] };
 }
 
-export async function uploadImage(
-  token: string,
-  productId: string,
-  file: File,
-  skuId?: string,
-): Promise<ProductImage> {
+export async function uploadImage(productId: string, file: File, skuId?: string): Promise<ProductImage> {
   const fd = new FormData();
   fd.append("image", file);
   if (skuId) fd.append("sku_id", skuId);
-  const res = await fetch(`${GW}/api/v1/products/${productId}/images`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: fd,
-  });
+  // No Content-Type — browser sets multipart/form-data with boundary automatically.
+  const res = await fetch(`/api/proxy/api/v1/products/${productId}/images`, { method: "POST", body: fd, cache: "no-store" });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { const j = await res.json(); msg = j.error ?? j.message ?? msg; } catch { /* */ }
@@ -214,21 +202,12 @@ export async function uploadImage(
   return r.data ?? r;
 }
 
-export async function setImagePosition(
-  token: string,
-  productId: string,
-  imageId: string,
-  position: number,
-): Promise<void> {
-  return req(`/api/v1/products/${productId}/images/${imageId}/position`, {
-    method: "PATCH",
-    body: JSON.stringify({ position }),
-    headers: auth(token),
-  });
+export async function setImagePosition(productId: string, imageId: string, position: number): Promise<void> {
+  return req(`/api/proxy/api/v1/products/${productId}/images/${imageId}/position`, { method: "PATCH", body: JSON.stringify({ position }) });
 }
 
-export async function deleteImage(token: string, productId: string, imageId: string): Promise<void> {
-  return req(`/api/v1/products/${productId}/images/${imageId}`, { method: "DELETE", headers: auth(token) });
+export async function deleteImage(productId: string, imageId: string): Promise<void> {
+  return req(`/api/proxy/api/v1/products/${productId}/images/${imageId}`, { method: "DELETE" });
 }
 
 // ── Categories ────────────────────────────────────────────────────────────────
@@ -239,12 +218,12 @@ export async function getCategories(params: {
   search?: string; parent_id?: string; limit?: number; offset?: number;
 } = {}): Promise<{ categories: Category[]; total: number }> {
   const q = new URLSearchParams();
-  if (params.search)             q.set("search",    params.search);
-  if (params.parent_id)          q.set("parent_id", params.parent_id);
-  if (params.limit  != null)     q.set("limit",     String(params.limit));
-  if (params.offset != null)     q.set("offset",    String(params.offset));
+  if (params.search)         q.set("search",    params.search);
+  if (params.parent_id)      q.set("parent_id", params.parent_id);
+  if (params.limit  != null) q.set("limit",     String(params.limit));
+  if (params.offset != null) q.set("offset",    String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
-  const r = await req<{ data: Category[]; total: number }>(`/api/v1/categories${qs}`);
+  const r = await req<{ data: Category[]; total: number }>(`/api/proxy/api/v1/categories${qs}`);
   return { categories: r.data ?? [], total: r.total ?? 0 };
 }
 
@@ -281,7 +260,6 @@ export interface OrdersResponse {
 }
 
 export async function getSellerOrders(
-  token: string,
   params: { status?: string; from?: string; to?: string; limit?: number; offset?: number } = {},
 ): Promise<OrdersResponse> {
   const q = new URLSearchParams();
@@ -291,21 +269,25 @@ export async function getSellerOrders(
   if (params.limit)  q.set("limit",  String(params.limit));
   if (params.offset) q.set("offset", String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
-  const r = await req<{ data: Order[] | null }>(`/v1/orders/seller${qs}`, { headers: auth(token) });
+  const r = await req<{ data: Order[] | null; total?: number; page?: number; page_size?: number }>(
+    `/api/proxy/v1/orders/seller${qs}`,
+  );
   const orders = r.data ?? [];
-  return { orders, total: orders.length, limit: params.limit ?? 20, offset: params.offset ?? 0 };
+  return {
+    orders,
+    total: r.total ?? orders.length,
+    limit: r.page_size ?? params.limit ?? 20,
+    offset: r.page != null ? (r.page - 1) * (r.page_size ?? 20) : (params.offset ?? 0),
+  };
 }
 
-export async function getSellerOrder(
-  token: string,
-  id: string,
-): Promise<{ order: Order; items: OrderItem[] }> {
-  const r = await req<{ data: Order & { items: OrderItem[] } }>(`/v1/orders/seller/${id}`, { headers: auth(token) });
+export async function getSellerOrder(id: string): Promise<{ order: Order; items: OrderItem[] }> {
+  const r = await req<{ data: Order & { items: OrderItem[] } }>(`/api/proxy/v1/orders/seller/${id}`);
   const { items, ...order } = r.data;
   return { order: order as Order, items: items ?? [] };
 }
 
-export async function cancelOrder(token: string, id: string): Promise<Order> {
-  const r = await req<{ data: Order }>(`/v1/orders/${id}/cancel`, { method: "POST", headers: auth(token) });
+export async function cancelOrder(id: string): Promise<Order> {
+  const r = await req<{ data: Order }>(`/api/proxy/v1/orders/${id}/cancel`, { method: "POST" });
   return r.data;
 }

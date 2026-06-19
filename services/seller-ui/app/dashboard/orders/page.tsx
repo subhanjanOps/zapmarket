@@ -2,7 +2,6 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
-import { getToken } from "@/lib/auth";
 import { getSellerOrders, Order } from "@/lib/api";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { SkeletonTableCard } from "@/app/components/Skeleton";
@@ -21,10 +20,8 @@ export default function OrdersPage() {
   const [to, setTo]           = useState("");
 
   const load = useCallback(() => {
-    const token = getToken();
-    if (!token) return;
     setLoading(true);
-    getSellerOrders(token, {
+    getSellerOrders({
       status: status === "All" ? undefined : status,
       from:   from || undefined,
       to:     to   || undefined,
@@ -37,8 +34,8 @@ export default function OrdersPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const fmtMoney = (n: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
+  const fmtMoney = (amount: number, currency: string) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount / 100);
 
   const pages = Math.ceil(total / PAGE_SIZE);
   const page  = Math.floor(offset / PAGE_SIZE) + 1;
@@ -54,7 +51,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.25rem", alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.25rem", alignItems: "flex-end", flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: "2px", background: "var(--surface2)", borderRadius: 8, padding: 2 }}>
           {STATUSES.map((s) => (
             <button
@@ -66,8 +63,14 @@ export default function OrdersPage() {
             </button>
           ))}
         </div>
-        <input className="input" type="date" style={{ width: "10rem" }} value={from} onChange={(e) => { setFrom(e.target.value); setOffset(0); }} title="From date" />
-        <input className="input" type="date" style={{ width: "10rem" }} value={to}   onChange={(e) => { setTo(e.target.value);   setOffset(0); }} title="To date" />
+        <div>
+          <label htmlFor="orders-from" style={{ display: "block", fontSize: "0.6875rem", color: "var(--muted)", fontWeight: 500, marginBottom: "0.25rem" }}>From</label>
+          <input id="orders-from" className="input" type="date" style={{ width: "10rem" }} value={from} onChange={(e) => { setFrom(e.target.value); setOffset(0); }} />
+        </div>
+        <div>
+          <label htmlFor="orders-to" style={{ display: "block", fontSize: "0.6875rem", color: "var(--muted)", fontWeight: 500, marginBottom: "0.25rem" }}>To</label>
+          <input id="orders-to" className="input" type="date" style={{ width: "10rem" }} value={to} onChange={(e) => { setTo(e.target.value); setOffset(0); }} />
+        </div>
       </div>
 
       {error && <p style={{ color: "var(--danger)", fontSize: "0.8125rem", marginBottom: "1rem" }}>{error}</p>}
@@ -77,28 +80,28 @@ export default function OrdersPage() {
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table>
-            <thead>
-              <tr><th>Order ID</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr>
-            </thead>
-            <tbody>
-              {orders.length === 0 ? (
-                <tr><td colSpan={5} className="empty-state"><p className="empty-state-title">No orders found</p></td></tr>
-              ) : orders.map((o) => (
-                <tr key={o.id}>
-                  <td><span className="mono" style={{ color: "var(--muted)" }}>{o.id.slice(0, 12)}…</span></td>
-                  <td className="mono">{fmtMoney(o.total_amount)}</td>
-                  <td><StatusBadge status={o.status} /></td>
-                  <td style={{ color: "var(--muted)" }}>{new Date(o.created_at).toLocaleDateString()}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <Link href={`/dashboard/orders/${o.id}`} className="btn btn-ghost" style={{ fontSize: "0.8rem", padding: "0.3rem 0.625rem", textDecoration: "none" }}>
-                      View →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <table>
+              <thead>
+                <tr><th>Order ID</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr>
+              </thead>
+              <tbody>
+                {orders.length === 0 ? (
+                  <tr><td colSpan={5} className="empty-state"><p className="empty-state-title">No orders found</p></td></tr>
+                ) : orders.map((o) => (
+                  <tr key={o.id}>
+                    <td><span className="mono" style={{ color: "var(--muted)" }}>{o.id.slice(0, 12)}…</span></td>
+                    <td className="mono">{fmtMoney(o.total_amount, o.currency)}</td>
+                    <td><StatusBadge status={o.status} /></td>
+                    <td style={{ color: "var(--muted)" }}>{new Date(o.created_at).toLocaleDateString()}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <Link href={`/dashboard/orders/${o.id}`} className="btn btn-ghost" style={{ fontSize: "0.8rem", padding: "0.3rem 0.625rem", textDecoration: "none" }}>
+                        View →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {pages > 1 && (

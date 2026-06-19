@@ -2,7 +2,7 @@
 // @version		1.0
 // @description	Manages products, SKUs, categories, and images for ZapMarket.
 // @host			localhost:8081
-// @BasePath		/
+// @BasePath		/api/v1
 // @securityDefinitions.apikey	BearerAuth
 // @in							header
 // @name						Authorization

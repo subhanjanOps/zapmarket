@@ -2,8 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getToken, saveToken } from "@/lib/auth";
-import { login } from "@/lib/api";
+import { login, getMe } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,9 +12,10 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false);
 
   useEffect(() => {
-    if (getToken()) { router.replace("/dashboard"); return; }
     const saved = localStorage.getItem("zap-theme") ?? "vibrant";
     document.documentElement.setAttribute("data-theme", saved);
+    // Redirect if already authenticated
+    getMe().then(() => router.replace("/dashboard")).catch(() => {/* not logged in */});
   }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -23,8 +23,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const { token } = await login(email, password);
-      saveToken(token);
+      await login(email, password);
       router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -45,27 +44,15 @@ export default function LoginPage() {
         justifyContent: "space-between",
         position: "relative",
         overflow: "hidden",
-        // show on wider screens via media query below
       }} className="login-panel">
-        {/* Decorative circles */}
         <div style={{ position: "absolute", top: "-6rem", right: "-6rem", width: "22rem", height: "22rem", borderRadius: "50%", background: "rgba(255,255,255,0.08)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: "-4rem", left: "-4rem", width: "16rem", height: "16rem", borderRadius: "50%", background: "rgba(255,255,255,0.06)", pointerEvents: "none" }} />
 
-        {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-          <span style={{
-            width: 36, height: 36, borderRadius: 9,
-            background: "rgba(255,255,255,0.2)",
-            backdropFilter: "blur(8px)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14, fontWeight: 800, color: "#fff",
-            letterSpacing: "-0.04em",
-            border: "1px solid rgba(255,255,255,0.3)",
-          }}>ZM</span>
+          <span style={{ width: 36, height: 36, borderRadius: 9, background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: "#fff", letterSpacing: "-0.04em", border: "1px solid rgba(255,255,255,0.3)" }}>ZM</span>
           <span style={{ fontSize: "1.125rem", fontWeight: 700, color: "#fff", letterSpacing: "-0.02em" }}>ZapMarket</span>
         </div>
 
-        {/* Hero copy */}
         <div>
           <div style={{ fontSize: "2.25rem", fontWeight: 800, color: "#fff", lineHeight: 1.1, letterSpacing: "-0.03em", marginBottom: "1rem", textWrap: "balance" }}>
             Your seller dashboard, built for growth.
@@ -75,7 +62,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Footer stat */}
         <div style={{ display: "flex", gap: "2rem" }}>
           {[["10k+", "Active sellers"], ["99.4%", "Uptime"], ["24h", "Support"]].map(([num, label]) => (
             <div key={label}>
@@ -88,17 +74,9 @@ export default function LoginPage() {
 
       {/* Right panel — form */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: "2rem 1.5rem" }}>
-        {/* Mobile logo (only visible when left panel is hidden) */}
         <div className="login-mobile-logo" style={{ marginBottom: "2.5rem", textAlign: "center" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: "0.625rem", marginBottom: "0.5rem" }}>
-            <span style={{
-              width: 40, height: 40, borderRadius: 11,
-              background: "var(--accent)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 16, fontWeight: 800, color: "var(--accent-text)",
-              letterSpacing: "-0.04em",
-              boxShadow: "0 4px 16px color-mix(in srgb, var(--accent) 35%, transparent)",
-            }}>ZM</span>
+            <span style={{ width: 40, height: 40, borderRadius: 11, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, color: "var(--accent-text)", letterSpacing: "-0.04em", boxShadow: "0 4px 16px color-mix(in srgb, var(--accent) 35%, transparent)" }}>ZM</span>
             <span style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--text)", letterSpacing: "-0.025em" }}>ZapMarket</span>
           </div>
         </div>
