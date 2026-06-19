@@ -143,7 +143,7 @@ export default function EditProductPage() {
 
       {error && <div style={{ background: "color-mix(in srgb, var(--danger) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--danger) 25%, transparent)", borderRadius: 7, padding: "0.625rem 0.875rem", fontSize: "0.8125rem", color: "var(--danger)", marginBottom: "1rem" }}>{error}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 22rem", gap: "1.5rem", alignItems: "start" }}>
+      <div className="dash-overview-grid" style={{ display: "grid", gridTemplateColumns: "1fr 22rem", gap: "1.5rem", alignItems: "start" }}>
         {/* Left: form + SKUs */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           {/* Basic info */}
@@ -151,7 +151,7 @@ export default function EditProductPage() {
             <h3 style={{ margin: "0 0 1rem", fontSize: "0.875rem", fontWeight: 600 }}>Basic Information</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
               <div><label className="form-label">Product Name *</label><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></div>
-              <div><label className="form-label">Slug</label><input style={{ ...inputStyle, fontFamily: "\"Roboto Mono\", monospace" }} value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
+              <div><label className="form-label">Slug</label><input style={{ ...inputStyle, fontFamily: "\"DM Mono\", monospace" }} value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
               <div><label className="form-label">Description</label><textarea style={{ ...inputStyle, minHeight: "6rem", resize: "vertical" }} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
               <div>
                 <label className="form-label">Category</label>

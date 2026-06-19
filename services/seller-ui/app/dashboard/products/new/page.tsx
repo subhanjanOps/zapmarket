@@ -134,7 +134,7 @@ export default function NewProductPage() {
             </div>
             <div>
               <label className="form-label">Slug (URL path)</label>
-              <input style={{ ...inputStyle, fontFamily: "\"Roboto Mono\", monospace" }} value={slug} onChange={(e) => { setSlug(e.target.value); setSlugManual(true); }} placeholder="auto-generated from name" />
+              <input style={{ ...inputStyle, fontFamily: "\"DM Mono\", monospace" }} value={slug} onChange={(e) => { setSlug(e.target.value); setSlugManual(true); }} placeholder="auto-generated from name" />
             </div>
             <div>
               <label className="form-label">Description</label>

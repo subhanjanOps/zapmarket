@@ -17,7 +17,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (getToken()) { router.replace("/dashboard"); return; }
-    const saved = localStorage.getItem("zap-theme") ?? "walnut";
+    const saved = localStorage.getItem("zap-theme") ?? "vibrant";
     document.documentElement.setAttribute("data-theme", saved);
   }, [router]);
 

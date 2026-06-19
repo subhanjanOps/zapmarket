@@ -98,6 +98,7 @@ export default function ProductsPage() {
         <SkeletonTableCard cols={6} rows={8} />
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table>
             <thead>
               <tr><th>Name</th><th>Category</th><th>Status</th><th>Created</th><th style={{ textAlign: "right" }}>Actions</th></tr>
@@ -128,6 +129,7 @@ export default function ProductsPage() {
               ))}
             </tbody>
           </table>
+          </div>
 
           {pages > 1 && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1.125rem", borderTop: "1px solid var(--border)" }}>

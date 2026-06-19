@@ -136,12 +136,13 @@ func main() {
 
 	// ── Router builder (called on every route reload) ──────────────────────
 	adminUIOrigin := envOrDefault("ADMIN_UI_ORIGIN", "http://localhost:3001")
+	extraOrigins := strings.Split(envOrDefault("EXTRA_ALLOWED_ORIGINS", ""), ",")
 
 	buildRouter := func() http.Handler {
 		r := chi.NewRouter()
 		r.Use(chimw.Recoverer)
 		r.Use(gw.RequestID)
-		r.Use(corsMiddleware(adminUIOrigin, cfg.AppEnv))
+		r.Use(corsMiddleware(adminUIOrigin, cfg.AppEnv, extraOrigins))
 		r.Use(gw.Blocklist(rdb))
 		r.Use(rl.Limit)
 
@@ -301,11 +302,11 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
-func corsMiddleware(allowedOrigin, appEnv string) func(http.Handler) http.Handler {
+func corsMiddleware(allowedOrigin, appEnv string, extra []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if originAllowed(origin, allowedOrigin, appEnv) {
+			if originAllowed(origin, allowedOrigin, appEnv, extra) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, Idempotency-Key")
@@ -327,9 +328,14 @@ func corsMiddleware(allowedOrigin, appEnv string) func(http.Handler) http.Handle
 // In all other environments only the exact allowed origin is accepted —
 // the localhost wildcard would let any local process make credentialed
 // cross-origin requests through a victim's browser.
-func originAllowed(origin, allowed, appEnv string) bool {
+func originAllowed(origin, allowed, appEnv string, extra []string) bool {
 	if origin == allowed {
 		return true
+	}
+	for _, e := range extra {
+		if e = strings.TrimSpace(e); e != "" && origin == e {
+			return true
+		}
 	}
 	if appEnv == "development" {
 		return strings.HasPrefix(origin, "http://localhost:") ||

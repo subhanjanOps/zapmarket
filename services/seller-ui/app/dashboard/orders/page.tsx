@@ -76,6 +76,7 @@ export default function OrdersPage() {
         <SkeletonTableCard cols={5} rows={8} />
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table>
             <thead>
               <tr><th>Order ID</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr>
@@ -98,6 +99,7 @@ export default function OrdersPage() {
               ))}
             </tbody>
           </table>
+          </div>
 
           {pages > 1 && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1.125rem", borderTop: "1px solid var(--border)" }}>

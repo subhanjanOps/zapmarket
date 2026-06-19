@@ -80,11 +80,22 @@ func (ab *AutoBinder) Run(ctx context.Context) {
 
 func (ab *AutoBinder) reconcile(ctx context.Context) {
 	// Find all live registry keys: svc:registry:{service}:{instance}
-	keys, err := ab.rdb.Keys(ctx, registryKeyPrefix+"*").Result()
-	if err != nil {
-		ab.logger.Warn("auto-bind: redis scan failed", "error", err)
-		return
+	// Uses SCAN instead of KEYS to avoid blocking Redis on large key sets.
+	var allKeys []string
+	var cursor uint64
+	for {
+		keys, next, err := ab.rdb.Scan(ctx, cursor, registryKeyPrefix+"*", 100).Result()
+		if err != nil {
+			ab.logger.Warn("auto-bind: redis scan failed", "error", err)
+			return
+		}
+		allKeys = append(allKeys, keys...)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
 	}
+	keys := allKeys
 
 	// Group instances by service name. Use first healthy instance per service.
 	seen := make(map[string]string) // service → addr

@@ -79,13 +79,14 @@ export default function DashboardPage() {
         <StatCard label="Archived Products" value={archived} sub="not publicly listed" />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 22rem", gap: "1.25rem" }}>
+      <div className="dash-overview-grid" style={{ display: "grid", gridTemplateColumns: "1fr 22rem", gap: "1.25rem" }}>
         {/* Recent orders */}
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div className="card-header">
             <span className="card-title">Recent Orders</span>
             <Link href="/dashboard/orders" style={{ fontSize: "0.8rem", color: "var(--accent)", textDecoration: "none" }}>View all →</Link>
           </div>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table>
             <thead>
               <tr><th>Order ID</th><th>Total</th><th>Status</th><th>Date</th></tr>
@@ -103,6 +104,7 @@ export default function DashboardPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Product breakdown */}

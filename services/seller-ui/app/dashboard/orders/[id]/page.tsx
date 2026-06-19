@@ -77,7 +77,7 @@ export default function OrderDetailPage() {
             <ArrowLeft size={15} />
           </Link>
           <div>
-            <h1 className="page-title" style={{ fontFamily: "\"Roboto Mono\", monospace", fontSize: "0.9375rem" }}>
+            <h1 className="page-title" style={{ fontFamily: "\"DM Mono\", monospace", fontSize: "0.9375rem" }}>
               {order.id.slice(0, 18)}…
             </h1>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem" }}>
@@ -125,6 +125,7 @@ export default function OrderDetailPage() {
           <div className="card-header">
             <span className="card-title">Line Items</span>
           </div>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table>
             <thead>
               <tr><th>SKU</th><th>Product</th><th>Qty</th><th>Unit Price</th><th style={{ textAlign: "right" }}>Subtotal</th></tr>
@@ -143,6 +144,7 @@ export default function OrderDetailPage() {
               ))}
             </tbody>
           </table>
+          </div>
 
           {/* Totals footer */}
           <div style={{ padding: "0.875rem 1.125rem", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "0.375rem", alignItems: "flex-end" }}>
