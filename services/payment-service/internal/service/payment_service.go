@@ -66,8 +66,10 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "idempotency_key is required")
 	}
 
-	// Redis-first idempotency check (24h TTL).
+	// Redis-first idempotency check (24h TTL), then DB with a NX lock to
+	// prevent duplicate payment creation under concurrent requests.
 	cacheKey := paymentIdempKey(idempotencyKey)
+	lockKey := cacheKey + ":lock"
 	if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var p domain.Payment
 		if json.Unmarshal(cached, &p) == nil {
@@ -75,6 +77,33 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 			return &p, nil
 		}
 	}
+
+	const lockTTL = 10 * time.Second
+	acquired, lockErr := s.rdb.SetNX(ctx, lockKey, "1", lockTTL).Result()
+	if lockErr != nil {
+		s.logger.Warn("idempotency lock unavailable, proceeding without lock", "error", lockErr)
+	}
+	if !acquired && lockErr == nil {
+		deadline := time.Now().Add(lockTTL)
+		for time.Now().Before(deadline) {
+			time.Sleep(50 * time.Millisecond)
+			if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+				var p domain.Payment
+				if json.Unmarshal(cached, &p) == nil {
+					s.logger.Info("idempotent replay after lock wait", "payment_id", p.ID)
+					return &p, nil
+				}
+			}
+			if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
+				break
+			}
+		}
+	}
+	defer func() {
+		if acquired {
+			_ = s.rdb.Del(ctx, lockKey).Err()
+		}
+	}()
 
 	// DB fallback.
 	existing, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)

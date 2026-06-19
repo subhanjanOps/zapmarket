@@ -48,53 +48,63 @@ func NewRedisRegistry(rdb *goredis.Client, logger *slog.Logger) *RedisRegistry {
 
 func (r *RedisRegistry) Instances(ctx context.Context, name string) ([]Instance, error) {
 	pattern := registryKeyPrefix + name + ":*"
-	keys, err := r.rdb.Keys(ctx, pattern).Result()
-	if err != nil {
-		return nil, fmt.Errorf("registry scan %s: %w", name, err)
-	}
-	if len(keys) == 0 {
-		return nil, nil
-	}
-
 	var instances []Instance
-	for _, k := range keys {
-		raw, err := r.rdb.Get(ctx, k).Bytes()
+	var cursor uint64
+	for {
+		keys, next, err := r.rdb.Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
-			continue // key expired between KEYS and GET
+			return nil, fmt.Errorf("registry scan %s: %w", name, err)
 		}
-		var inst Instance
-		if err := json.Unmarshal(raw, &inst); err != nil {
-			r.logger.Warn("bad registry value", "key", k, "error", err)
-			continue
+		for _, k := range keys {
+			raw, err := r.rdb.Get(ctx, k).Bytes()
+			if err != nil {
+				continue // key expired between SCAN and GET
+			}
+			var inst Instance
+			if err := json.Unmarshal(raw, &inst); err != nil {
+				r.logger.Warn("bad registry value", "key", k, "error", err)
+				continue
+			}
+			instances = append(instances, inst)
 		}
-		instances = append(instances, inst)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
 	}
 	return instances, nil
 }
 
 // AllInstances returns every live instance grouped by service name.
 func (r *RedisRegistry) AllInstances(ctx context.Context) (map[string][]Instance, error) {
-	keys, err := r.rdb.Keys(ctx, registryKeyPrefix+"*").Result()
-	if err != nil {
-		return nil, fmt.Errorf("registry scan: %w", err)
-	}
 	result := make(map[string][]Instance)
-	for _, k := range keys {
-		// key: svc:registry:{service}:{instance}
-		parts := strings.SplitN(strings.TrimPrefix(k, registryKeyPrefix), ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		svc := parts[0]
-		raw, err := r.rdb.Get(ctx, k).Bytes()
+	var cursor uint64
+	for {
+		keys, next, err := r.rdb.Scan(ctx, cursor, registryKeyPrefix+"*", 100).Result()
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("registry scan: %w", err)
 		}
-		var inst Instance
-		if err := json.Unmarshal(raw, &inst); err != nil {
-			continue
+		for _, k := range keys {
+			// key: svc:registry:{service}:{instance}
+			parts := strings.SplitN(strings.TrimPrefix(k, registryKeyPrefix), ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			svc := parts[0]
+			raw, err := r.rdb.Get(ctx, k).Bytes()
+			if err != nil {
+				continue
+			}
+			var inst Instance
+			if err := json.Unmarshal(raw, &inst); err != nil {
+				continue
+			}
+			result[svc] = append(result[svc], inst)
 		}
-		result[svc] = append(result[svc], inst)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
 	}
 	return result, nil
 }

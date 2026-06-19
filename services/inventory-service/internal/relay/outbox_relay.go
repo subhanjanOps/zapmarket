@@ -39,6 +39,7 @@ func New(db *sql.DB, producer *pkgkafka.Producer, topic string, logger *slog.Log
 		producer: producer,
 		topic:    topic,
 		interval: 2 * time.Second,
+		logger:   logger,
 	}
 }
 
@@ -53,7 +54,7 @@ func (r *OutboxRelay) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := r.flush(ctx); err != nil && ctx.Err() == nil {
-				slog.Error("outbox relay flush error", "error", err)
+				r.logger.Error("outbox relay flush error", "error", err)
 			}
 		}
 	}
@@ -95,7 +96,7 @@ func (r *OutboxRelay) flush(ctx context.Context) error {
 			},
 		}
 		if err := r.producer.Publish(ctx, msg); err != nil {
-			slog.Error("outbox relay: failed to publish", "outbox_id", e.ID, "event_type", e.EventType, "error", err)
+			r.logger.Error("outbox relay: failed to publish", "outbox_id", e.ID, "event_type", e.EventType, "error", err)
 			// Continue — attempt the next event; this one will be retried next tick.
 			continue
 		}
@@ -103,10 +104,10 @@ func (r *OutboxRelay) flush(ctx context.Context) error {
 		if _, err := r.db.ExecContext(ctx,
 			`UPDATE outbox SET published_at = NOW() WHERE id = $1`, e.ID,
 		); err != nil {
-			slog.Error("outbox relay: failed to mark published", "outbox_id", e.ID, "error", err)
+			r.logger.Error("outbox relay: failed to mark published", "outbox_id", e.ID, "error", err)
 		}
 
-		slog.Info("outbox relay: published event", "event_type", e.EventType, "aggregate_id", e.AggregateID)
+		r.logger.Info("outbox relay: published event", "event_type", e.EventType, "aggregate_id", e.AggregateID)
 	}
 	return nil
 }

@@ -80,8 +80,11 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		currency = "INR"
 	}
 
-	// Idempotency: Redis-first cache check (24h TTL), DB fallback.
+	// Idempotency: Redis-first cache check (24h TTL), then DB with a NX lock
+	// to prevent duplicate order creation under concurrent requests sharing the
+	// same key. The lock is held only during the DB lookup + insert window.
 	cacheKey := idempCacheKey(idempotencyKey)
+	lockKey := cacheKey + ":lock"
 	if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var order domain.Order
 		if json.Unmarshal(cached, &order) == nil {
@@ -89,6 +92,38 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 			return &order, nil
 		}
 	}
+
+	// Acquire a short-lived NX lock so only one concurrent request proceeds to
+	// the DB check-then-insert path. Others spin-wait briefly then re-read the
+	// cache (the winner will have populated it).
+	const lockTTL = 10 * time.Second
+	acquired, err := s.rdb.SetNX(ctx, lockKey, "1", lockTTL).Result()
+	if err != nil {
+		s.logger.Warn("idempotency lock unavailable, proceeding without lock", "error", err)
+	}
+	if !acquired && err == nil {
+		// Another request holds the lock — wait for it to finish then re-read.
+		deadline := time.Now().Add(lockTTL)
+		for time.Now().Before(deadline) {
+			time.Sleep(50 * time.Millisecond)
+			if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+				var order domain.Order
+				if json.Unmarshal(cached, &order) == nil {
+					s.logger.Info("idempotent replay after lock wait", "order_id", order.ID)
+					return &order, nil
+				}
+			}
+			if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
+				break // lock released; fall through to DB check
+			}
+		}
+	}
+	defer func() {
+		if acquired {
+			_ = s.rdb.Del(ctx, lockKey).Err()
+		}
+	}()
+
 	existing, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)
 	if err == nil {
 		s.logger.Info("idempotent replay from db", "order_id", existing.ID, "status", existing.Status)
