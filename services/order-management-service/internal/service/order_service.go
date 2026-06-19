@@ -11,20 +11,32 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
-	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
 )
+
+// inventoryGateway is the subset of clients.InventoryClient the saga needs.
+// Keeping it here avoids importing the clients package in tests.
+type inventoryGateway interface {
+	ReserveStock(ctx context.Context, skuID, orderID uuid.UUID, qty int) (uuid.UUID, bool, error)
+	ReleaseStock(ctx context.Context, reservationID uuid.UUID) error
+	DeductStock(ctx context.Context, reservationID uuid.UUID) error
+}
+
+// paymentGateway is the subset of clients.PaymentClient the saga needs.
+type paymentGateway interface {
+	ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (uuid.UUID, string, error)
+}
 
 // OrderService defines the public interface for order operations.
 type OrderService interface {
 	Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency string) (*domain.Order, error)
 	GetOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
-	ListOrders(ctx context.Context, userID uuid.UUID) ([]*domain.Order, error)
+	ListOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.Order, int64, error)
 	CancelOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, error)
 
-	// ListSellerOrders returns all orders containing at least one item from the seller.
-	ListSellerOrders(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error)
+	// ListSellerOrders returns paginated orders containing at least one item from the seller.
+	ListSellerOrders(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]*domain.Order, int64, error)
 	// GetSellerOrder returns a single order + its items if it contains the seller's SKUs.
 	GetSellerOrder(ctx context.Context, orderID, sellerID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
 
@@ -46,16 +58,16 @@ const idempotencyTTL = 24 * time.Hour
 
 type orderService struct {
 	repo      contracts.OrderRepository
-	inventory *clients.InventoryClient
-	payment   *clients.PaymentClient
+	inventory inventoryGateway
+	payment   paymentGateway
 	rdb       *redis.Client
 	logger    *slog.Logger
 }
 
 func NewOrderService(
 	repo contracts.OrderRepository,
-	inventory *clients.InventoryClient,
-	payment *clients.PaymentClient,
+	inventory inventoryGateway,
+	payment paymentGateway,
 	rdb *redis.Client,
 	logger *slog.Logger,
 ) OrderService {
@@ -260,8 +272,8 @@ func (s *orderService) GetOrder(ctx context.Context, orderID, userID uuid.UUID) 
 	return order, items, nil
 }
 
-func (s *orderService) ListOrders(ctx context.Context, userID uuid.UUID) ([]*domain.Order, error) {
-	return s.repo.GetByUserID(ctx, userID)
+func (s *orderService) ListOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.Order, int64, error) {
+	return s.repo.GetByUserID(ctx, userID, contracts.OrderPageParams{Limit: limit, Offset: offset})
 }
 
 func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, error) {
@@ -297,8 +309,8 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUI
 	return order, nil
 }
 
-func (s *orderService) ListSellerOrders(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error) {
-	return s.repo.GetBySellerID(ctx, sellerID)
+func (s *orderService) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]*domain.Order, int64, error) {
+	return s.repo.GetBySellerID(ctx, sellerID, contracts.OrderPageParams{Limit: limit, Offset: offset})
 }
 
 func (s *orderService) GetSellerOrder(ctx context.Context, orderID, sellerID uuid.UUID) (*domain.Order, []*domain.OrderItem, error) {

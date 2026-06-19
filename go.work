@@ -35,6 +35,7 @@ use ./pkg/storage
 use ./pkg/swaggerx
 
 use ./pkg/kafka
+use ./pkg/relay
 
 use ./pkg/redis
 

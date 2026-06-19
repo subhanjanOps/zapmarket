@@ -32,23 +32,30 @@ func (r *OrderRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Or
 		orderSelectQuery+" WHERE id = $1 AND deleted_at IS NULL", id))
 }
 
-func (r *OrderRepository) GetByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.Order, error) {
+func (r *OrderRepository) GetByUserID(ctx context.Context, userID uuid.UUID, p contracts.OrderPageParams) ([]*domain.Order, int64, error) {
+	limit, offset := pageArgs(p)
+	var total int64
+	if err := r.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM orders WHERE user_id = $1 AND deleted_at IS NULL", userID,
+	).Scan(&total); err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to count orders", err)
+	}
 	rows, err := r.db.QueryContext(ctx,
-		orderSelectQuery+" WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC", userID)
+		orderSelectQuery+" WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+		userID, limit, offset)
 	if err != nil {
-		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to list orders", err)
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to list orders", err)
 	}
 	defer rows.Close()
-
 	var orders []*domain.Order
 	for rows.Next() {
 		o, err := scanOrderRow(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		orders = append(orders, o)
 	}
-	return orders, rows.Err()
+	return orders, total, rows.Err()
 }
 
 func (r *OrderRepository) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]*domain.OrderItem, error) {
@@ -74,25 +81,46 @@ func (r *OrderRepository) GetOrderItems(ctx context.Context, orderID uuid.UUID) 
 	return items, rows.Err()
 }
 
-func (r *OrderRepository) GetBySellerID(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error) {
+func (r *OrderRepository) GetBySellerID(ctx context.Context, sellerID uuid.UUID, p contracts.OrderPageParams) ([]*domain.Order, int64, error) {
+	limit, offset := pageArgs(p)
+	var total int64
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM orders
+		WHERE id IN (SELECT DISTINCT order_id FROM order_items WHERE seller_id = $1)
+		AND deleted_at IS NULL`, sellerID,
+	).Scan(&total); err != nil {
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to count seller orders", err)
+	}
 	rows, err := r.db.QueryContext(ctx,
 		orderSelectQuery+` WHERE id IN (
 			SELECT DISTINCT order_id FROM order_items WHERE seller_id = $1
-		) AND deleted_at IS NULL ORDER BY created_at DESC`, sellerID)
+		) AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+		sellerID, limit, offset)
 	if err != nil {
-		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to list seller orders", err)
+		return nil, 0, pkgerrors.NewInternal("DATABASE_ERROR", "failed to list seller orders", err)
 	}
 	defer rows.Close()
-
 	var orders []*domain.Order
 	for rows.Next() {
 		o, err := scanOrderRow(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		orders = append(orders, o)
 	}
-	return orders, rows.Err()
+	return orders, total, rows.Err()
+}
+
+func pageArgs(p contracts.OrderPageParams) (limit, offset int) {
+	limit = p.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	offset = p.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	return
 }
 
 func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error {

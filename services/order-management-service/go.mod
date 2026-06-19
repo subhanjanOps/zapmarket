@@ -3,6 +3,7 @@ module github.com/zapmarket/zapmarket/services/order-management-service
 go 1.25.0
 
 require (
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
@@ -19,6 +20,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
+	github.com/zapmarket/zapmarket/pkg/relay v0.0.0-00010101000000-000000000000
 	github.com/zapmarket/zapmarket/pkg/swaggerx v0.0.0
 	google.golang.org/grpc v1.81.1
 )
@@ -44,6 +46,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/segmentio/kafka-go v0.4.47 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.36.0 // indirect
@@ -68,3 +71,5 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/registry => ../../pkg/registry
 	github.com/zapmarket/zapmarket/pkg/swaggerx => ../../pkg/swaggerx
 )
+
+replace github.com/zapmarket/zapmarket/pkg/relay => ../../pkg/relay

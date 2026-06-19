@@ -18,6 +18,14 @@ type OrderListParams struct {
 	Offset int
 }
 
+// OrderPageParams is the minimal pagination input for buyer/seller order lists.
+// Keeping it separate from OrderListParams avoids leaking admin filter fields
+// into user-facing service contracts.
+type OrderPageParams struct {
+	Limit  int
+	Offset int
+}
+
 // OrderRepository defines all persistence operations for the order saga.
 // All mutations that transition order status also write an outbox row in the
 // same DB transaction so no status change is observable without its event.
@@ -35,12 +43,13 @@ type OrderRepository interface {
 	// GetOrderItems returns all items for an order.
 	GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]*domain.OrderItem, error)
 
-	// GetByUserID returns all non-deleted orders for a user, newest first.
-	GetByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.Order, error)
+	// GetByUserID returns a paginated page of non-deleted orders for a user,
+	// newest first, plus the total count for pagination metadata.
+	GetByUserID(ctx context.Context, userID uuid.UUID, p OrderPageParams) ([]*domain.Order, int64, error)
 
-	// GetBySellerID returns all non-deleted orders that contain at least one
-	// item with the given seller_id, newest first.
-	GetBySellerID(ctx context.Context, sellerID uuid.UUID) ([]*domain.Order, error)
+	// GetBySellerID returns a paginated page of non-deleted orders that contain
+	// at least one item with the given seller_id, newest first, plus total count.
+	GetBySellerID(ctx context.Context, sellerID uuid.UUID, p OrderPageParams) ([]*domain.Order, int64, error)
 
 	// MarkReserved sets order status → RESERVED and persists reservation IDs
 	// on each item, all in one DB transaction.

@@ -24,6 +24,7 @@ type AuthUser struct {
 // AuthMiddleware validates Bearer tokens via auth-service gRPC ValidateToken.
 type AuthMiddleware struct {
 	client authpb.AuthServiceClient
+	conn   *grpc.ClientConn
 }
 
 func NewAuthMiddleware(authAddr string) (*AuthMiddleware, error) {
@@ -31,7 +32,13 @@ func NewAuthMiddleware(authAddr string) (*AuthMiddleware, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &AuthMiddleware{client: authpb.NewAuthServiceClient(conn)}, nil
+	return &AuthMiddleware{client: authpb.NewAuthServiceClient(conn), conn: conn}, nil
+}
+
+// Close drains and closes the underlying gRPC connection. Call after the HTTP
+// server has shut down so in-flight auth RPCs finish before the channel closes.
+func (m *AuthMiddleware) Close() error {
+	return m.conn.Close()
 }
 
 // Authenticate is chi middleware. Public routes must be registered before

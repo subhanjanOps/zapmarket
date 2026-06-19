@@ -141,7 +141,7 @@ func main() {
 		r := chi.NewRouter()
 		r.Use(chimw.Recoverer)
 		r.Use(gw.RequestID)
-		r.Use(corsMiddleware(adminUIOrigin))
+		r.Use(corsMiddleware(adminUIOrigin, cfg.AppEnv))
 		r.Use(gw.Blocklist(rdb))
 		r.Use(rl.Limit)
 
@@ -286,6 +286,10 @@ func main() {
 	if err := srv.Shutdown(shutCtx); err != nil {
 		log.Error("gateway shutdown error", "error", err)
 	}
+	// Close gRPC connection after HTTP server drains so in-flight auth RPCs finish.
+	if err := authMW.Close(); err != nil {
+		log.Error("auth middleware close error", "error", err)
+	}
 	cancel() // stop background goroutines
 	log.Info("gateway stopped")
 }
@@ -297,11 +301,11 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
-func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+func corsMiddleware(allowedOrigin, appEnv string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if originAllowed(origin, allowedOrigin) {
+			if originAllowed(origin, allowedOrigin, appEnv) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, Idempotency-Key")
@@ -318,14 +322,18 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 }
 
 // originAllowed returns true when the request origin matches the configured
-// allowed origin, or when the origin is any localhost/127.0.0.1 port (useful
-// during local development where the port may vary).
-func originAllowed(origin, allowed string) bool {
+// allowed origin. In development the wildcard also covers any localhost or
+// 127.0.0.1 port so multiple local frontends work without config changes.
+// In all other environments only the exact allowed origin is accepted —
+// the localhost wildcard would let any local process make credentialed
+// cross-origin requests through a victim's browser.
+func originAllowed(origin, allowed, appEnv string) bool {
 	if origin == allowed {
 		return true
 	}
-	// Allow any localhost origin so http://localhost:3001 and
-	// http://127.0.0.1:3001 both work without exact-match fragility.
-	return strings.HasPrefix(origin, "http://localhost:") ||
-		strings.HasPrefix(origin, "http://127.0.0.1:")
+	if appEnv == "development" {
+		return strings.HasPrefix(origin, "http://localhost:") ||
+			strings.HasPrefix(origin, "http://127.0.0.1:")
+	}
+	return false
 }

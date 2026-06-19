@@ -3,6 +3,7 @@ module github.com/zapmarket/zapmarket/services/inventory-service
 go 1.25.0
 
 require (
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
@@ -16,6 +17,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
+	github.com/zapmarket/zapmarket/pkg/relay v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.81.1
 )
 
@@ -28,6 +30,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/segmentio/kafka-go v0.4.47 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
@@ -47,3 +50,5 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 	github.com/zapmarket/zapmarket/pkg/registry => ../../pkg/registry
 )
+
+replace github.com/zapmarket/zapmarket/pkg/relay => ../../pkg/relay

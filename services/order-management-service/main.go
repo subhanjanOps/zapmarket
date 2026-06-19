@@ -38,7 +38,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
 	httphandler "github.com/zapmarket/zapmarket/services/order-management-service/internal/handler/http"
 	authmw "github.com/zapmarket/zapmarket/services/order-management-service/internal/middleware"
-	"github.com/zapmarket/zapmarket/services/order-management-service/internal/relay"
+	"github.com/zapmarket/zapmarket/pkg/relay"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/service"
 )

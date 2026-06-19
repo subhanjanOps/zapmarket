@@ -1,10 +1,13 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/authctx"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/service"
@@ -79,7 +82,7 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	for i, it := range req.Items {
 		skuID, err := uuid.Parse(it.SKUID)
 		if err != nil {
-			ErrorResponse(w, http.StatusBadRequest, "INVALID_SKU_ID", "items["+string(rune('0'+i))+"]: sku_id must be a valid UUID")
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_SKU_ID", fmt.Sprintf("items[%d]: sku_id must be a valid UUID", i))
 			return
 		}
 		item := service.CheckoutItem{
@@ -90,7 +93,7 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		if it.SellerID != "" {
 			sid, err := uuid.Parse(it.SellerID)
 			if err != nil {
-				ErrorResponse(w, http.StatusBadRequest, "INVALID_SELLER_ID", "items["+string(rune('0'+i))+"]: seller_id must be a valid UUID")
+				ErrorResponse(w, http.StatusBadRequest, "INVALID_SELLER_ID", fmt.Sprintf("items[%d]: seller_id must be a valid UUID", i))
 				return
 			}
 			item.SellerID = &sid
@@ -153,8 +156,10 @@ func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 //	@Tags			orders
 //	@Produce		json
 //	@Security		BearerAuth
-//	@Success		200	{object}	Response{data=[]domain.Order}
-//	@Failure		401	{object}	Response
+//	@Param			limit	query		int	false	"Page size (default 20)"
+//	@Param			offset	query		int	false	"Page offset (default 0)"
+//	@Success		200		{object}	Response{data=[]domain.Order}
+//	@Failure		401		{object}	Response
 //	@Router			/v1/orders [get]
 func (h *OrderHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
 	user := authctx.UserFromContext(r.Context())
@@ -169,13 +174,15 @@ func (h *OrderHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orders, err := h.svc.ListOrders(r.Context(), userID)
+	limit, offset := parsePage(r)
+	orders, total, err := h.svc.ListOrders(r.Context(), userID, limit, offset)
 	if err != nil {
 		HandleError(w, err)
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, orders)
+	page := offset/limit + 1
+	httpx.Paginated(w, http.StatusOK, orders, total, page, limit)
 }
 
 // ListSellerOrders handles GET /v1/orders/seller.
@@ -184,8 +191,10 @@ func (h *OrderHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
 //	@Tags			orders
 //	@Produce		json
 //	@Security		BearerAuth
-//	@Success		200	{object}	Response{data=[]domain.Order}
-//	@Failure		401	{object}	Response
+//	@Param			limit	query		int	false	"Page size (default 20)"
+//	@Param			offset	query		int	false	"Page offset (default 0)"
+//	@Success		200		{object}	Response{data=[]domain.Order}
+//	@Failure		401		{object}	Response
 //	@Router			/v1/orders/seller [get]
 func (h *OrderHandler) ListSellerOrders(w http.ResponseWriter, r *http.Request) {
 	user := authctx.UserFromContext(r.Context())
@@ -200,13 +209,32 @@ func (h *OrderHandler) ListSellerOrders(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	orders, err := h.svc.ListSellerOrders(r.Context(), sellerID)
+	limit, offset := parsePage(r)
+	orders, total, err := h.svc.ListSellerOrders(r.Context(), sellerID, limit, offset)
 	if err != nil {
 		HandleError(w, err)
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, orders)
+	page := offset/limit + 1
+	httpx.Paginated(w, http.StatusOK, orders, total, page, limit)
+}
+
+// parsePage reads limit and offset from query params, with safe defaults.
+func parsePage(r *http.Request) (limit, offset int) {
+	limit = 20
+	offset = 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	return
 }
 
 // GetSellerOrder handles GET /v1/orders/seller/{id}.

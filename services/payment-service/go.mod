@@ -16,6 +16,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
+	github.com/zapmarket/zapmarket/pkg/relay v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.81.1
 )
 
@@ -46,3 +47,5 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 	github.com/zapmarket/zapmarket/pkg/registry => ../../pkg/registry
 )
+
+replace github.com/zapmarket/zapmarket/pkg/relay => ../../pkg/relay

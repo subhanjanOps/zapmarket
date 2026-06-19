@@ -28,7 +28,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/gateway"
 	grpchandler "github.com/zapmarket/zapmarket/services/payment-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/payment-service/internal/handler/http"
-	"github.com/zapmarket/zapmarket/services/payment-service/internal/relay"
+	"github.com/zapmarket/zapmarket/pkg/relay"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/service"
 )

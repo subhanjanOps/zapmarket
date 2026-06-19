@@ -178,7 +178,10 @@ func (s *paymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID,
 		return nil, pkgerrors.NewConflict("PAYMENT_NOT_CAPTURED", "only a captured payment can be refunded")
 	}
 
-	if amount <= 0 || amount > payment.Amount {
+	if amount <= 0 {
+		return nil, pkgerrors.NewValidation("INVALID_DATA", "refund amount must be greater than zero")
+	}
+	if amount > payment.Amount {
 		amount = payment.Amount
 	}
 

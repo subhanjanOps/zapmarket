@@ -27,7 +27,7 @@ import (
 	pb "github.com/zapmarket/zapmarket/pkg/proto/inventory"
 	grpchandler "github.com/zapmarket/zapmarket/services/inventory-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/inventory-service/internal/handler/http"
-	"github.com/zapmarket/zapmarket/services/inventory-service/internal/relay"
+	"github.com/zapmarket/zapmarket/pkg/relay"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/service"
 )
