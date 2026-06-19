@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
-import { saveToken, getToken } from "@/lib/auth";
+import { isAuthenticated } from "@/lib/auth";
 
 const BOOT_LINES = [
   "$ zapmarket gateway boot --env production",
@@ -26,7 +26,7 @@ export default function LoginPage() {
   const [lines, setLines] = useState<string[]>([]);
 
   useEffect(() => {
-    if (getToken()) { router.replace("/dashboard"); return; }
+    if (isAuthenticated()) { router.replace("/dashboard"); return; }
     const saved = localStorage.getItem("zap-theme") ?? "terminal";
     document.documentElement.setAttribute("data-theme", saved);
 
@@ -53,8 +53,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const token = await login(email, password);
-      saveToken(token);
+      await login(email, password);
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -69,7 +68,7 @@ export default function LoginPage() {
       {/* ── Left panel: terminal ───────────────────────────────────────────── */}
       <div style={{
         flex: "0 0 45%",
-        display: "none", /* hidden on mobile, shown via CSS */
+        display: "none",
         flexDirection: "column",
         justifyContent: "space-between",
         padding: "2.5rem",
@@ -80,7 +79,6 @@ export default function LoginPage() {
         overflow: "hidden",
       }} className="login-left-panel">
 
-        {/* Scanline overlay */}
         <div style={{
           position: "absolute",
           inset: 0,
@@ -88,7 +86,6 @@ export default function LoginPage() {
           pointerEvents: "none",
         }} />
 
-        {/* Top brand */}
         <div>
           <div style={{
             fontSize: "0.8125rem",
@@ -103,31 +100,13 @@ export default function LoginPage() {
             <span style={{ color: "var(--accent)", fontWeight: 700 }}>{">"}_</span>
             Zap<span style={{ color: "var(--accent)" }}>Market</span>
           </div>
-          <div style={{
-            fontSize: "0.5625rem",
-            color: "var(--muted)",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-          }}>
+          <div style={{ fontSize: "0.5625rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             API Gateway · v1.0
           </div>
         </div>
 
-        {/* Terminal output */}
-        <div style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "2rem 0",
-        }}>
-          <div style={{
-            fontSize: "0.625rem",
-            color: "var(--muted)",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            marginBottom: "0.875rem",
-          }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "2rem 0" }}>
+          <div style={{ fontSize: "0.625rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "0.875rem" }}>
             boot log
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3125rem" }}>
@@ -147,7 +126,7 @@ export default function LoginPage() {
                 letterSpacing: "0.01em",
                 animation: "fade-in-line 0.2s ease",
               }}>
-                {line || " "}
+                {line || " "}
               </div>
             ))}
             {lines.length > 0 && lines.length < BOOT_LINES.length && (
@@ -163,15 +142,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Bottom clock */}
-        <div style={{
-          fontSize: "0.6875rem",
-          color: "var(--muted)",
-          letterSpacing: "0.05em",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-        }}>
+        <div style={{ fontSize: "0.6875rem", color: "var(--muted)", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span className="status-dot status-dot-green status-dot-pulse" />
           <span>{time}</span>
           <span style={{ color: "var(--border)" }}>·</span>
@@ -190,7 +161,6 @@ export default function LoginPage() {
         overflowY: "auto",
       }}>
 
-        {/* Mobile brand (only on mobile) */}
         <div className="login-mobile-brand" style={{
           display: "none",
           marginBottom: "2rem",
@@ -308,20 +278,10 @@ export default function LoginPage() {
       </div>
 
       <style>{`
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-        @keyframes fade-in-line {
-          from { opacity: 0; transform: translateY(2px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @media (min-width: 768px) {
-          .login-left-panel { display: flex !important; }
-        }
-        @media (max-width: 767px) {
-          .login-mobile-brand { display: block !important; }
-        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes fade-in-line { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+        @media (min-width: 768px) { .login-left-panel { display: flex !important; } }
+        @media (max-width: 767px)  { .login-mobile-brand { display: block !important; } }
       `}</style>
     </div>
   );

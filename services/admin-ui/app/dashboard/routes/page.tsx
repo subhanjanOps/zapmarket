@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getToken } from "@/lib/auth";
+import { useState } from "react";
 import { getRoutes, createRoute, updateRoute, deleteRoute, probeRoute, Route, ProbeResult } from "@/lib/api";
+import { useDataFetch } from "@/lib/hooks";
 import { Plus, Pencil, Trash2, FlaskConical } from "lucide-react";
 import { SkeletonTableCard } from "@/app/components/Skeleton";
 
@@ -18,19 +18,17 @@ function ProbeModal({ route, onClose }: { route: Route; onClose: () => void }) {
   const [method, setMethod] = useState("GET");
   const [path, setPath] = useState(route.path_prefix);
   const [body, setBody] = useState("");
-  const [probeToken, setProbeToken] = useState(getToken() ?? "");
+  const [probeToken, setProbeToken] = useState("");
   const [result, setResult] = useState<ProbeResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
   async function run() {
-    const token = getToken();
-    if (!token) return;
     setLoading(true);
     setErr("");
     setResult(null);
     try {
-      const r = await probeRoute(token, { method, path, token: probeToken || undefined, body: body || undefined });
+      const r = await probeRoute({ method, path, token: probeToken || undefined, body: body || undefined });
       setResult(r);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -70,18 +68,12 @@ function ProbeModal({ route, onClose }: { route: Route; onClose: () => void }) {
               className="input mono"
               value={probeToken}
               onChange={(e) => setProbeToken(e.target.value)}
-              placeholder="Paste JWT or leave blank to use current session token"
+              placeholder="Paste JWT or leave blank to use current session"
             />
           </div>
           <div className="form-group">
             <label className="form-label">Request Body (optional)</label>
-            <textarea
-              className="input mono"
-              rows={3}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder='{"key": "value"}'
-            />
+            <textarea className="input mono" rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder='{"key": "value"}' />
           </div>
 
           <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -116,8 +108,7 @@ function ProbeModal({ route, onClose }: { route: Route; onClose: () => void }) {
               </div>
               <pre style={{
                 background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "4px",
-                padding: "0.875rem", fontSize: "0.75rem", overflowX: "auto", maxHeight: "14rem", color: "var(--text)",
-                margin: 0,
+                padding: "0.875rem", fontSize: "0.75rem", overflowX: "auto", maxHeight: "14rem", color: "var(--text)", margin: 0,
               }}>
                 {(() => { try { return JSON.stringify(JSON.parse(result.body), null, 2); } catch { return result.body; } })()}
               </pre>
@@ -186,62 +177,57 @@ function EditModal({ initial, onSave, onClose }: EditModalProps) {
 // ── Routes Page ───────────────────────────────────────────────────────────────
 
 export default function RoutesPage() {
-  const [routes, setRoutes] = useState<Route[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { data, loading, error: fetchError, refresh } = useDataFetch<Route[]>(getRoutes);
+  const routes = data ?? [];
+
+  const [actionError, setActionError] = useState("");
   const [editRoute, setEditRoute] = useState<Route | null>(null);
   const [creating, setCreating] = useState(false);
   const [probing, setProbing] = useState<Route | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const token = getToken();
-    if (!token) return;
-    getRoutes(token)
-      .then((r) => { if (!cancelled) { setRoutes(r); setError(""); setLoading(false); } })
-      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
-    return () => { cancelled = true; };
-  }, [refreshKey]);
-
-  const token = getToken()!;
+  const error = actionError || fetchError;
 
   async function handleCreate(data: Omit<Route, "id" | "created_at" | "updated_at" | "enabled">) {
     try {
-      await createRoute(token, data);
+      await createRoute(data);
       setCreating(false);
-      setRefreshKey((k) => k + 1);
+      setActionError("");
+      refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(e instanceof Error ? e.message : String(e));
     }
   }
 
   async function handleUpdate(id: string, data: Partial<Route>) {
     try {
-      await updateRoute(token, id, data);
+      await updateRoute(id, data);
       setEditRoute(null);
-      setRefreshKey((k) => k + 1);
+      setActionError("");
+      refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(e instanceof Error ? e.message : String(e));
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Disable this route?")) return;
     try {
-      await deleteRoute(token, id);
-      setRefreshKey((k) => k + 1);
+      await deleteRoute(id);
+      setConfirmingId(null);
+      setActionError("");
+      refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(e instanceof Error ? e.message : String(e));
     }
   }
 
   async function toggleEnabled(route: Route) {
     try {
-      await updateRoute(token, route.id, { enabled: !route.enabled });
-      setRefreshKey((k) => k + 1);
+      await updateRoute(route.id, { enabled: !route.enabled });
+      setActionError("");
+      refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -250,12 +236,10 @@ export default function RoutesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Routes</h1>
-          <p className="page-subtitle">
-            {routes.length} route{routes.length !== 1 ? "s" : ""} configured
-          </p>
+          <p className="page-subtitle">{routes.length} route{routes.length !== 1 ? "s" : ""} configured</p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button className="btn btn-ghost" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
+          <button className="btn btn-ghost" onClick={refresh}>Refresh</button>
           <button className="btn btn-primary" onClick={() => setCreating(true)}>
             <Plus size={14} /> New Route
           </button>
@@ -268,16 +252,16 @@ export default function RoutesPage() {
         <SkeletonTableCard cols={6} rows={5} />
       ) : null}
 
-      <div className="card" style={{ padding: 0, display: loading && routes.length === 0 ? "none" : undefined }}>
-        <table>
+      <div className="card" style={{ padding: 0, display: loading && routes.length === 0 ? "none" : undefined, overflowX: "auto" }}>
+        <table style={{ minWidth: "42rem" }}>
           <thead>
             <tr>
-              <th>Path Prefix</th>
-              <th>Upstream</th>
-              <th>Auth</th>
-              <th>Strip</th>
-              <th>Status</th>
-              <th style={{ width: "8rem" }}></th>
+              <th style={{ width: "22rem" }}>Path Prefix</th>
+              <th style={{ width: "14rem" }}>Upstream</th>
+              <th style={{ width: "9rem" }}>Auth</th>
+              <th style={{ width: "5rem" }}>Strip</th>
+              <th style={{ width: "7rem" }}>Status</th>
+              <th style={{ width: "11rem" }}></th>
             </tr>
           </thead>
           <tbody>
@@ -285,33 +269,35 @@ export default function RoutesPage() {
               <tr><td colSpan={6}><div className="empty-state"><p className="empty-state-title">No routes configured</p><p className="empty-state-body">Add a route to start proxying traffic</p></div></td></tr>
             ) : routes.map((rt) => (
               <tr key={rt.id} data-status={rt.enabled ? "ok" : "off"}>
-                <td className="mono">{rt.path_prefix}</td>
-                <td className="mono" style={{ color: "var(--muted)" }}>{rt.upstream}</td>
-                <td><span className="badge badge-gray">{rt.auth_mode}</span></td>
+                <td className="mono" style={{ whiteSpace: "nowrap" }}>{rt.path_prefix}</td>
+                <td className="mono" style={{ color: "var(--muted)", whiteSpace: "nowrap" }}>{rt.upstream}</td>
+                <td><span className="badge badge-gray" style={{ whiteSpace: "nowrap" }}>{rt.auth_mode}</span></td>
                 <td><span className={`badge ${rt.strip_prefix ? "badge-teal" : "badge-gray"}`}>{rt.strip_prefix ? "yes" : "no"}</span></td>
                 <td>
-                  <button
-                    onClick={() => toggleEnabled(rt)}
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                    title={rt.enabled ? "Click to disable" : "Click to enable"}
-                  >
-                    <span className={`badge ${rt.enabled ? "badge-green" : "badge-red"}`}>
-                      {rt.enabled ? "enabled" : "disabled"}
-                    </span>
+                  <button onClick={() => toggleEnabled(rt)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} title={rt.enabled ? "Click to disable" : "Click to enable"}>
+                    <span className={`badge ${rt.enabled ? "badge-green" : "badge-red"}`}>{rt.enabled ? "enabled" : "disabled"}</span>
                   </button>
                 </td>
                 <td>
-                  <div style={{ display: "flex", gap: "0.375rem" }}>
-                    <button className="btn btn-ghost" style={{ padding: "0.3rem 0.5rem" }} onClick={() => setProbing(rt)} title="Test route">
-                      <FlaskConical size={13} />
-                    </button>
-                    <button className="btn btn-ghost" style={{ padding: "0.3rem 0.5rem" }} onClick={() => setEditRoute(rt)} title="Edit">
-                      <Pencil size={13} />
-                    </button>
-                    <button className="btn btn-danger" style={{ padding: "0.3rem 0.5rem" }} onClick={() => handleDelete(rt.id)} title="Disable">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                  {confirmingId === rt.id ? (
+                    <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+                      <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>Disable?</span>
+                      <button className="btn btn-danger" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} onClick={() => handleDelete(rt.id)}>Yes</button>
+                      <button className="btn btn-ghost" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} onClick={() => setConfirmingId(null)}>No</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: "0.375rem" }}>
+                      <button className="btn btn-ghost" style={{ padding: "0.3rem 0.5rem" }} onClick={() => setProbing(rt)} title="Test route">
+                        <FlaskConical size={13} />
+                      </button>
+                      <button className="btn btn-ghost" style={{ padding: "0.3rem 0.5rem" }} onClick={() => setEditRoute(rt)} title="Edit">
+                        <Pencil size={13} />
+                      </button>
+                      <button className="btn btn-danger" style={{ padding: "0.3rem 0.5rem" }} onClick={() => setConfirmingId(rt.id)} title="Disable">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -319,9 +305,7 @@ export default function RoutesPage() {
         </table>
       </div>
 
-      {creating && (
-        <EditModal onSave={handleCreate} onClose={() => setCreating(false)} />
-      )}
+      {creating && <EditModal onSave={handleCreate} onClose={() => setCreating(false)} />}
       {editRoute && (
         <EditModal
           initial={editRoute}
@@ -329,9 +313,7 @@ export default function RoutesPage() {
           onClose={() => setEditRoute(null)}
         />
       )}
-      {probing && (
-        <ProbeModal route={probing} onClose={() => setProbing(null)} />
-      )}
+      {probing && <ProbeModal route={probing} onClose={() => setProbing(null)} />}
     </div>
   );
 }

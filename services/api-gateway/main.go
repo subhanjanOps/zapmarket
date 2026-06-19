@@ -145,6 +145,7 @@ func main() {
 		r.Use(corsMiddleware(adminUIOrigin, cfg.AppEnv, extraOrigins))
 		r.Use(gw.Blocklist(rdb))
 		r.Use(rl.Limit)
+		r.Use(auditMiddleware(auditWriter))
 
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -328,6 +329,64 @@ func corsMiddleware(allowedOrigin, appEnv string, extra []string) func(http.Hand
 // In all other environments only the exact allowed origin is accepted —
 // the localhost wildcard would let any local process make credentialed
 // cross-origin requests through a victim's browser.
+// statusRecorder wraps ResponseWriter to capture the written status code.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// auditMiddleware emits audit events for notable response status codes.
+func auditMiddleware(w *audit.Writer) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			// Skip health checks and OPTIONS pre-flight to keep audit log clean.
+			if r.URL.Path == "/health" || r.Method == http.MethodOptions {
+				next.ServeHTTP(rw, r)
+				return
+			}
+
+			rec := &statusRecorder{ResponseWriter: rw, status: http.StatusOK}
+			next.ServeHTTP(rec, r)
+
+			var event string
+			switch {
+			case rec.status == http.StatusUnauthorized:
+				event = audit.EventAuthRejected
+			case rec.status == http.StatusTooManyRequests:
+				event = audit.EventRateLimited
+			case rec.status >= 500:
+				event = audit.EventUpstream5xx
+			}
+			if event == "" {
+				return
+			}
+
+			userID := ""
+			if u := gw.UserFromContext(r.Context()); u != nil {
+				userID = u.ID
+			}
+			ip := r.Header.Get("X-Forwarded-For")
+			if ip == "" {
+				ip = r.RemoteAddr
+			}
+			w.Log(audit.Entry{
+				RequestID:  gw.GetRequestID(r.Context()),
+				UserID:     userID,
+				IP:         ip,
+				Method:     r.Method,
+				Path:       r.URL.Path,
+				StatusCode: rec.status,
+				Event:      event,
+			})
+		})
+	}
+}
+
 func originAllowed(origin, allowed, appEnv string, extra []string) bool {
 	if origin == allowed {
 		return true

@@ -1,0 +1,92 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e30]
+  - generic [ref=e31]:
+    - complementary [ref=e32]:
+      - generic [ref=e583]:
+        - generic [ref=e584]:
+          - generic [ref=e585]: ">_"
+          - generic [ref=e586]: ZapMarket
+        - generic [ref=e587]: API Gateway
+        - generic [ref=e590]: gateway · online
+      - navigation [ref=e591]:
+        - link "01 Overview" [ref=e592] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e593]: "01"
+          - img [ref=e594]
+          - text: Overview
+        - link "02 Routes" [ref=e599] [cursor=pointer]:
+          - /url: /dashboard/routes
+          - generic [ref=e600]: "02"
+          - img [ref=e601]
+          - text: Routes
+        - link "03 Registry" [ref=e605] [cursor=pointer]:
+          - /url: /dashboard/registry
+          - generic [ref=e606]: "03"
+          - img [ref=e607]
+          - text: Registry
+        - link "04 Metrics" [ref=e612] [cursor=pointer]:
+          - /url: /dashboard/metrics
+          - generic [ref=e613]: "04"
+          - img [ref=e614]
+          - text: Metrics
+        - link "05 Audit Log" [ref=e615] [cursor=pointer]:
+          - /url: /dashboard/audit
+          - generic [ref=e616]: "05"
+          - img [ref=e617]
+          - text: Audit Log
+        - link "06 Blocklist" [ref=e620] [cursor=pointer]:
+          - /url: /dashboard/blocklist
+          - generic [ref=e621]: "06"
+          - img [ref=e622]
+          - text: Blocklist
+      - generic [ref=e626]:
+        - generic [ref=e627]: 22:47:58
+        - generic [ref=e628]: Theme
+        - generic [ref=e629]:
+          - button "Terminal" [pressed] [ref=e630] [cursor=pointer]
+          - button "Phosphor" [ref=e631] [cursor=pointer]
+          - button "Walnut" [ref=e632] [cursor=pointer]
+          - button "Cream" [ref=e633] [cursor=pointer]
+          - button "Slate" [ref=e634] [cursor=pointer]
+          - button "Solarized Dark" [ref=e635] [cursor=pointer]
+          - button "Solarized Light" [ref=e636] [cursor=pointer]
+        - generic [ref=e637]: Terminal
+        - button "Sign out" [ref=e638] [cursor=pointer]:
+          - img [ref=e639]
+          - text: Sign out
+    - main [ref=e92]:
+      - generic [ref=e642]:
+        - generic [ref=e643]:
+          - generic [ref=e644]:
+            - heading "Metrics" [level=1] [ref=e645]
+            - paragraph [ref=e646]:
+              - text: Per-upstream request statistics · auto-refreshes every 10s
+              - generic [ref=e647]: · 22:47:57
+          - button "Refresh" [ref=e648] [cursor=pointer]
+        - generic [ref=e649]:
+          - generic [ref=e650]:
+            - generic [ref=e651]: Total Requests
+            - generic [ref=e652]: "0"
+          - generic [ref=e653]:
+            - generic [ref=e654]: Req / Min
+            - generic [ref=e655]: "0.0"
+          - generic [ref=e656]:
+            - generic [ref=e657]: 5xx Errors
+            - generic [ref=e658]: "0"
+          - generic [ref=e659]:
+            - generic [ref=e660]: Active Upstreams
+            - generic [ref=e661]: "0"
+        - table [ref=e663]:
+          - rowgroup [ref=e664]:
+            - row "Upstream Total Requests Req / Min 5xx Errors Error Rate" [ref=e665]:
+              - columnheader "Upstream" [ref=e666]
+              - columnheader "Total Requests" [ref=e667]
+              - columnheader "Req / Min" [ref=e668]
+              - columnheader "5xx Errors" [ref=e669]
+              - columnheader "Error Rate" [ref=e670]
+          - rowgroup [ref=e671]:
+            - row "No traffic yet Metrics appear as requests flow through the gateway" [ref=e672]:
+              - cell "No traffic yet Metrics appear as requests flow through the gateway" [ref=e673]:
+                - generic [ref=e674]:
+                  - paragraph [ref=e675]: No traffic yet
+                  - paragraph [ref=e676]: Metrics appear as requests flow through the gateway

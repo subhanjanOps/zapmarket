@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Splash } from "@/app/components/Skeleton";
-import { getToken, clearToken } from "@/lib/auth";
+import { ErrorBoundary } from "@/app/components/ErrorBoundary";
+import { clearToken } from "@/lib/auth";
 import {
   LayoutDashboard, Route, Network, ScrollText,
   BarChart2, ShieldOff, LogOut, Menu, X,
@@ -56,13 +57,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const prevPath = useRef(pathname);
   const clock = useClock();
 
+  // Middleware guards the /dashboard routes server-side; here we only restore theme.
   useEffect(() => {
-    if (!getToken()) { router.replace("/login"); return; }
     const saved = (localStorage.getItem("zap-theme") as ThemeId) ?? "terminal";
     setTheme(saved);
     document.documentElement.setAttribute("data-theme", saved);
     setReady(true);
-  }, [router]);
+  }, []);
 
   function applyTheme(id: ThemeId) {
     setTheme(id);
@@ -80,15 +81,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [pathname]);
 
+  async function handleSignOut() {
+    await clearToken();
+    router.push("/login");
+  }
+
   if (!ready) return <Splash />;
 
   const SidebarContent = () => (
     <>
       {/* Brand */}
-      <div style={{
-        padding: "1.375rem 1.25rem 1.125rem",
-        borderBottom: "1px solid var(--border)",
-      }}>
+      <div style={{ padding: "1.375rem 1.25rem 1.125rem", borderBottom: "1px solid var(--border)" }}>
         <div style={{
           fontFamily: '"JetBrains Mono", monospace',
           fontWeight: 600,
@@ -115,12 +118,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
           <span className="status-dot status-dot-green status-dot-pulse" />
-          <span style={{
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: "0.6875rem",
-            color: "var(--muted)",
-            letterSpacing: "0.02em",
-          }}>
+          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: "0.6875rem", color: "var(--muted)", letterSpacing: "0.02em" }}>
             gateway · online
           </span>
         </div>
@@ -128,12 +126,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: "0.75rem 0.625rem" }}>
-        {NAV.map(({ href, label, Icon, idx }) => {
+        {NAV.map(({ href, label, Icon, idx }, i) => {
           const active = isActive(href, pathname);
           return (
             <Link
               key={href}
               href={href}
+              className="animate-in"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -146,9 +145,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 color: active ? "var(--accent)" : "var(--text-2)",
                 background: active ? "var(--accent-bg)" : "transparent",
                 textDecoration: "none",
-                transition: "background 0.1s, color 0.1s",
-                borderLeft: active ? "3px solid var(--accent)" : "3px solid transparent",
-                position: "relative",
+                transition: "background 0.15s, color 0.15s, box-shadow 0.15s",
+                borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
+                boxShadow: active ? `inset 0 0 12px color-mix(in srgb, var(--accent) 8%, transparent)` : "none",
+                animationDelay: `${i * 0.03}s`,
               }}
               onMouseEnter={(e) => {
                 if (!active) {
@@ -165,70 +165,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               <span style={{
                 fontFamily: '"JetBrains Mono", monospace',
-                fontSize: "0.625rem",
+                fontSize: "0.5625rem",
                 color: active ? "var(--accent)" : "var(--muted)",
                 letterSpacing: "0.04em",
                 minWidth: "1.375rem",
                 flexShrink: 0,
                 lineHeight: 1,
+                opacity: active ? 1 : 0.6,
               }}>
                 {idx}
               </span>
               <Icon size={15} strokeWidth={active ? 2.2 : 1.8} style={{ flexShrink: 0 }} />
               {label}
+              {active && (
+                <span style={{
+                  marginLeft: "auto",
+                  width: "5px",
+                  height: "5px",
+                  borderRadius: "50%",
+                  background: "var(--accent)",
+                  boxShadow: "0 0 6px var(--accent)",
+                  flexShrink: 0,
+                }} />
+              )}
             </Link>
           );
         })}
       </nav>
 
       {/* Footer */}
-      <div style={{
-        borderTop: "1px solid var(--border)",
-        padding: "0.875rem 1.25rem 1.125rem",
-      }}>
-        {/* Clock */}
-        <div style={{
-          fontFamily: '"JetBrains Mono", monospace',
-          fontSize: "0.6875rem",
-          color: "var(--muted)",
-          marginBottom: "0.875rem",
-          letterSpacing: "0.04em",
-        }}>
+      <div style={{ borderTop: "1px solid var(--border)", padding: "0.875rem 1.25rem 1.125rem" }}>
+        <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: "0.6875rem", color: "var(--muted)", marginBottom: "0.875rem", letterSpacing: "0.04em" }}>
           {clock}
         </div>
-
-        {/* Theme select */}
-        <div style={{
-          fontSize: "0.6875rem",
-          color: "var(--muted)",
-          marginBottom: "0.4rem",
-          fontWeight: 500,
-        }}>
-          Theme
-        </div>
+        <div style={{ fontSize: "0.6875rem", color: "var(--muted)", marginBottom: "0.4rem", fontWeight: 500 }}>Theme</div>
         <div className="theme-picker" style={{ marginBottom: "0.625rem" }}>
           {THEMES.map((t) => (
-            <button
-              key={t.id}
-              aria-pressed={theme === t.id}
-              title={t.label}
-              onClick={() => applyTheme(t.id)}
-              className="theme-dot"
-              style={{ background: t.dot }}
-            />
+            <button key={t.id} aria-pressed={theme === t.id} title={t.label} onClick={() => applyTheme(t.id)} className="theme-dot" style={{ background: t.dot }} />
           ))}
         </div>
-        <div style={{
-          fontSize: "0.6875rem",
-          color: "var(--muted)",
-          marginBottom: "0.875rem",
-        }}>
+        <div style={{ fontSize: "0.6875rem", color: "var(--muted)", marginBottom: "0.875rem" }}>
           {THEMES.find((t) => t.id === theme)?.label}
         </div>
-
-        {/* Sign out */}
         <button
-          onClick={() => { clearToken(); router.push("/login"); }}
+          onClick={handleSignOut}
           style={{
             display: "flex",
             alignItems: "center",
@@ -245,14 +225,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             fontFamily: '"Space Grotesk", system-ui, sans-serif',
             textAlign: "left",
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--danger)";
-            e.currentTarget.style.background = "color-mix(in srgb, var(--danger) 8%, transparent)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--muted)";
-            e.currentTarget.style.background = "transparent";
-          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--danger)"; e.currentTarget.style.background = "color-mix(in srgb, var(--danger) 8%, transparent)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.background = "transparent"; }}
         >
           <LogOut size={14} strokeWidth={1.8} />
           Sign out
@@ -287,9 +261,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="dash-topbar" style={{
         display: "none",
         position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
+        top: 0, left: 0, right: 0,
         height: "3.25rem",
         background: "var(--surface)",
         borderBottom: "1px solid var(--border)",
@@ -301,103 +273,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }}>
         <button
           onClick={() => setDrawerOpen(true)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "2rem",
-            height: "2rem",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--text-2)",
-            borderRadius: "6px",
-            flexShrink: 0,
-          }}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "2rem", height: "2rem", background: "transparent", border: "none", cursor: "pointer", color: "var(--text-2)", borderRadius: "6px", flexShrink: 0 }}
           aria-label="Open navigation"
         >
           <Menu size={18} />
         </button>
-        <div style={{
-          fontFamily: '"JetBrains Mono", monospace',
-          fontWeight: 600,
-          fontSize: "0.875rem",
-          color: "var(--text)",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.375rem",
-        }}>
+        <div style={{ fontFamily: '"JetBrains Mono", monospace', fontWeight: 600, fontSize: "0.875rem", color: "var(--text)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
           <span style={{ color: "var(--accent)" }}>{">"}_</span>
           Zap<span style={{ color: "var(--accent)" }}>Market</span>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span className="status-dot status-dot-green status-dot-pulse" />
-          <span style={{
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: "0.625rem",
-            color: "var(--muted)",
-          }}>
-            {clock}
-          </span>
+          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: "0.625rem", color: "var(--muted)" }}>{clock}</span>
         </div>
       </div>
 
       {/* ── Mobile Drawer Overlay ─────────────────────────────────────────── */}
       {drawerOpen && (
-        <div
-          className="dash-overlay"
-          onClick={() => setDrawerOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            backdropFilter: "blur(2px)",
-            zIndex: 60,
-          }}
-        />
+        <div className="dash-overlay" onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", zIndex: 60 }} />
       )}
 
       {/* ── Mobile Slide-out Drawer ───────────────────────────────────────── */}
-      <div
-        className="dash-drawer"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          bottom: 0,
-          width: "16rem",
-          background: "var(--surface)",
-          borderRight: "1px solid var(--border)",
-          display: "flex",
-          flexDirection: "column",
-          zIndex: 70,
-          transform: drawerOpen ? "translateX(0)" : "translateX(-100%)",
-          transition: "transform 0.22s ease",
-          overflowY: "auto",
-        }}
-      >
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          padding: "0.75rem 0.875rem",
-          borderBottom: "1px solid var(--border)",
-        }}>
+      <div className="dash-drawer" style={{
+        position: "fixed",
+        top: 0, left: 0, bottom: 0,
+        width: "16rem",
+        background: "var(--surface)",
+        borderRight: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 70,
+        transform: drawerOpen ? "translateX(0)" : "translateX(-100%)",
+        transition: "transform 0.22s ease",
+        overflowY: "auto",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0.75rem 0.875rem", borderBottom: "1px solid var(--border)" }}>
           <button
             className="sidebar-close-btn"
             onClick={() => setDrawerOpen(false)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "2rem",
-              height: "2rem",
-              background: "var(--surface2)",
-              border: "1px solid var(--border)",
-              borderRadius: "6px",
-              cursor: "pointer",
-              color: "var(--text-2)",
-            }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "2rem", height: "2rem", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-2)" }}
             aria-label="Close navigation"
           >
             <X size={16} />
@@ -407,60 +321,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
-      <main style={{
-        flex: 1,
-        padding: "clamp(1rem, 4vw, 2rem)",
-        overflowY: "auto",
-        minHeight: "100dvh",
-        background: "var(--bg)",
-        paddingTop: "clamp(1rem, 4vw, 2rem)",
-      }}>
-        {children}
+      <main key={pathname} style={{ flex: 1, padding: "2rem 2.5rem", overflowY: "auto", minHeight: "100dvh", background: "var(--bg)", animation: "fade-in-up 0.22s cubic-bezier(0.22, 1, 0.36, 1) both" }}>
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </main>
 
       {/* ── Mobile Bottom Navigation ──────────────────────────────────────── */}
       <nav className="dash-bottom-nav" style={{
         display: "none",
         position: "fixed",
-        bottom: 0,
-        left: 0,
-        right: 0,
+        bottom: 0, left: 0, right: 0,
         background: "var(--surface)",
         borderTop: "1px solid var(--border)",
         zIndex: 50,
         padding: "0.25rem 0 0.5rem",
       }}>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(6, 1fr)",
-          gap: 0,
-        }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
           {NAV.map(({ href, label, Icon }) => {
             const active = isActive(href, pathname);
             return (
-              <Link
-                key={href}
-                href={href}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.2rem",
-                  padding: "0.5rem 0.25rem",
-                  color: active ? "var(--accent)" : "var(--muted)",
-                  textDecoration: "none",
-                  transition: "color 0.1s",
-                  minHeight: "3rem",
-                }}
-              >
+              <Link key={href} href={href} style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.2rem",
+                padding: "0.5rem 0.25rem",
+                color: active ? "var(--accent)" : "var(--muted)",
+                textDecoration: "none",
+                transition: "color 0.1s",
+                minHeight: "3rem",
+              }}>
                 <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
-                <span style={{
-                  fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: "0.5rem",
-                  letterSpacing: "0.03em",
-                  lineHeight: 1,
-                }}>
+                <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: "0.5rem", letterSpacing: "0.03em", lineHeight: 1 }}>
                   {label.split(" ")[0]}
                 </span>
               </Link>

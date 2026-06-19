@@ -1,94 +1,72 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getToken } from "@/lib/auth";
 import { getRegistry, RegistryInstance } from "@/lib/api";
-import { RefreshCw, Wifi } from "lucide-react";
+import { useDataFetch } from "@/lib/hooks";
+import { Wifi } from "lucide-react";
 import { SkeletonTableCard } from "@/app/components/Skeleton";
 
+/** Only allow http/https URLs to prevent javascript: protocol injection. */
+function safeAddr(addr: string): string | null {
+  try {
+    const url = new URL(addr);
+    return url.protocol === "http:" || url.protocol === "https:" ? addr : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function RegistryPage() {
-  const [instances, setInstances] = useState<RegistryInstance[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: instances, loading, error, refresh } = useDataFetch<RegistryInstance[]>(
+    getRegistry,
+    { pollMs: 15_000 },
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchData() {
-      const token = getToken();
-      if (!token) return;
-      try {
-        const data = await getRegistry(token);
-        if (!cancelled) {
-          setInstances(data);
-          setLastUpdated(new Date());
-          setError("");
-          setLoading(false);
-        }
-      } catch (e: unknown) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load registry");
-          setLoading(false);
-        }
-      }
-    }
-
-    fetchData();
-    const interval = setInterval(fetchData, 15_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [refreshKey]);
-
-  const grouped = instances.reduce<Record<string, RegistryInstance[]>>((acc, inst) => {
+  const rows = instances ?? [];
+  const grouped = rows.reduce<Record<string, RegistryInstance[]>>((acc, inst) => {
     (acc[inst.service] ??= []).push(inst);
     return acc;
   }, {});
-  const services = Object.keys(grouped).sort();
-
-  const totalHealthy = instances.filter((i) => i.healthy).length;
+  const services     = Object.keys(grouped).sort();
+  const totalHealthy = rows.filter((i) => i.healthy).length;
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--text)", margin: 0 }}>Service Registry</h1>
-          <p style={{ fontSize: "0.8125rem", color: "var(--muted)", margin: "0.25rem 0 0" }}>
-            {instances.length} instance{instances.length !== 1 ? "s" : ""} — {totalHealthy} healthy
-            {lastUpdated && <span> · {lastUpdated.toLocaleTimeString()}</span>}
+          <h1 className="page-title">Service Registry</h1>
+          <p className="page-subtitle">
+            {rows.length} instance{rows.length !== 1 ? "s" : ""} — {totalHealthy} healthy
           </p>
         </div>
-        <button className="btn btn-ghost" onClick={() => setRefreshKey((k) => k + 1)}>
-          <RefreshCw size={14} />
-        </button>
+        <button className="btn btn-ghost" onClick={refresh}>Refresh</button>
       </div>
 
       {error && <p style={{ color: "var(--danger)", fontSize: "0.8125rem", marginBottom: "1rem" }}>{error}</p>}
 
-      {loading && instances.length === 0 ? (
+      {loading && rows.length === 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <SkeletonTableCard cols={4} rows={3} />
           <SkeletonTableCard cols={4} rows={2} />
         </div>
       ) : services.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "3rem" }}>
-          <p style={{ color: "var(--muted)" }}>No live instances found.</p>
-          <p style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "0.5rem" }}>
-            Services must call registry.Heartbeat() to appear here.
-          </p>
+        <div className="card">
+          <div className="empty-state">
+            <p className="empty-state-title">No live instances</p>
+            <p className="empty-state-body">Services must call registry.Heartbeat() to appear here</p>
+          </div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {services.map((svc) => {
-            const insts = grouped[svc];
+            const insts        = grouped[svc];
             const healthyCount = insts.filter((i) => i.healthy).length;
             return (
               <div key={svc} className="card" style={{ padding: 0, overflow: "hidden" }}>
                 <div style={{
-                  display: "flex", alignItems: "center", gap: "0.5rem",
-                  padding: "0.75rem 1rem", borderBottom: "1px solid var(--border)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  padding: "0.75rem 1rem",
+                  borderBottom: "1px solid var(--border)",
                   background: "var(--surface2)",
                 }}>
                   <Wifi size={14} style={{ color: "var(--success)" }} />
@@ -103,41 +81,39 @@ export default function RegistryPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Health</th>
-                      <th>Instance ID</th>
-                      <th>Address</th>
-                      <th>Started</th>
+                      <th>Health</th><th>Instance ID</th><th>Address</th><th>Started</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {insts.map((inst) => (
-                      <tr key={inst.instance_id}>
-                        <td>
-                          <span className={`badge ${inst.healthy ? "badge-green" : "badge-red"}`}>
-                            {inst.healthy ? "up" : "down"}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="mono" style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>
-                            {inst.instance_id.slice(0, 12)}…
-                          </span>
-                        </td>
-                        <td>
-                          <a
-                            href={inst.addr}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mono"
-                            style={{ fontSize: "0.8125rem", color: "var(--accent)" }}
-                          >
-                            {inst.addr}
-                          </a>
-                        </td>
-                        <td style={{ color: "var(--muted)", fontSize: "0.75rem" }}>
-                          {new Date(inst.started_at).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
+                    {insts.map((inst) => {
+                      const href = safeAddr(inst.addr);
+                      return (
+                        <tr key={inst.instance_id}>
+                          <td>
+                            <span className={`badge ${inst.healthy ? "badge-green" : "badge-red"}`}>
+                              {inst.healthy ? "up" : "down"}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="mono" style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>
+                              {inst.instance_id.slice(0, 12)}…
+                            </span>
+                          </td>
+                          <td>
+                            {href ? (
+                              <a href={href} target="_blank" rel="noopener noreferrer" className="mono" style={{ fontSize: "0.8125rem", color: "var(--accent)" }}>
+                                {inst.addr}
+                              </a>
+                            ) : (
+                              <span className="mono" style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>{inst.addr}</span>
+                            )}
+                          </td>
+                          <td style={{ color: "var(--muted)", fontSize: "0.75rem" }}>
+                            {new Date(inst.started_at).toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

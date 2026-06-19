@@ -1,51 +1,55 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getToken } from "@/lib/auth";
+import { useState } from "react";
 import { getBlocklist, blockIP, unblockIP, BlocklistEntry } from "@/lib/api";
+import { useDataFetch } from "@/lib/hooks";
 import { ShieldOff, Plus, Trash2 } from "lucide-react";
 import { SkeletonTableCard } from "@/app/components/Skeleton";
 
+const IP_RE = /^(\d{1,3}\.){3}\d{1,3}$|^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+
+function validateIP(ip: string): string | null {
+  if (!ip.trim()) return "IP address is required";
+  if (!IP_RE.test(ip.trim())) return "Enter a valid IPv4 or IPv6 address";
+  return null;
+}
+
 export default function BlocklistPage() {
-  const [entries, setEntries] = useState<BlocklistEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { data, loading, error: fetchError, refresh } = useDataFetch<BlocklistEntry[]>(getBlocklist);
+  const entries = data ?? [];
+
+  const [actionError, setActionError] = useState("");
   const [newIP, setNewIP] = useState("");
+  const [ipError, setIPError] = useState("");
   const [reason, setReason] = useState("");
   const [adding, setAdding] = useState(false);
+  const [confirmingIP, setConfirmingIP] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const token = getToken();
-    if (!token) return;
-    getBlocklist(token)
-      .then((b) => { if (!cancelled) { setEntries(b); setError(""); setLoading(false); } })
-      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
-    return () => { cancelled = true; };
-  }, [refreshKey]);
-
-  const token = getToken()!;
+  const error = actionError || fetchError;
 
   async function handleBlock() {
-    if (!newIP.trim()) return;
+    const validationError = validateIP(newIP);
+    if (validationError) { setIPError(validationError); return; }
+    setIPError("");
     try {
-      await blockIP(token, newIP.trim(), reason.trim() || undefined);
+      await blockIP(newIP.trim(), reason.trim() || undefined);
       setNewIP("");
       setReason("");
       setAdding(false);
-      setRefreshKey((k) => k + 1);
+      setActionError("");
+      refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(e instanceof Error ? e.message : String(e));
     }
   }
 
   async function handleUnblock(ip: string) {
-    if (!confirm(`Unblock ${ip}?`)) return;
     try {
-      await unblockIP(token, ip);
-      setRefreshKey((k) => k + 1);
+      await unblockIP(ip);
+      setConfirmingIP(null);
+      setActionError("");
+      refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -57,7 +61,7 @@ export default function BlocklistPage() {
           <p className="page-subtitle">{entries.length} blocked IP{entries.length !== 1 ? "s" : ""}</p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button className="btn btn-ghost" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
+          <button className="btn btn-ghost" onClick={refresh}>Refresh</button>
           <button className="btn btn-primary" onClick={() => setAdding(true)}>
             <Plus size={14} /> Block IP
           </button>
@@ -74,10 +78,11 @@ export default function BlocklistPage() {
               <input
                 className="input mono"
                 value={newIP}
-                onChange={(e) => setNewIP(e.target.value)}
+                onChange={(e) => { setNewIP(e.target.value); setIPError(""); }}
                 placeholder="192.168.1.100"
                 onKeyDown={(e) => e.key === "Enter" && handleBlock()}
               />
+              {ipError && <p style={{ fontSize: "0.75rem", color: "var(--danger)", marginTop: "0.25rem", marginBottom: 0 }}>{ipError}</p>}
             </div>
             <div>
               <label style={{ display: "block", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "0.25rem" }}>Reason (optional)</label>
@@ -92,7 +97,7 @@ export default function BlocklistPage() {
               <button className="btn btn-danger" onClick={handleBlock}>
                 <ShieldOff size={13} /> Block
               </button>
-              <button className="btn btn-ghost" onClick={() => setAdding(false)}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => { setAdding(false); setIPError(""); }}>Cancel</button>
             </div>
           </div>
         </div>
@@ -108,7 +113,7 @@ export default function BlocklistPage() {
                 <th>IP Address</th>
                 <th>Reason</th>
                 <th>Blocked At</th>
-                <th style={{ width: "5rem" }}></th>
+                <th style={{ width: "9rem" }}></th>
               </tr>
             </thead>
             <tbody>
@@ -121,27 +126,37 @@ export default function BlocklistPage() {
                     </div>
                   </td>
                 </tr>
-              ) : (
-                entries.map((e) => (
-                  <tr key={e.ip}>
-                    <td className="mono">{e.ip}</td>
-                    <td style={{ color: "var(--muted)" }}>{e.reason || "—"}</td>
-                    <td className="mono" style={{ color: "var(--muted)", fontSize: "0.75rem" }}>
-                      {new Date(e.blocked_at).toLocaleString()}
-                    </td>
-                    <td>
+              ) : entries.map((e) => (
+                <tr key={e.ip}>
+                  <td className="mono">{e.ip}</td>
+                  <td style={{ color: "var(--muted)" }}>{e.reason || "—"}</td>
+                  <td className="mono" style={{ color: "var(--muted)", fontSize: "0.75rem" }}>
+                    {new Date(e.blocked_at).toLocaleString()}
+                  </td>
+                  <td>
+                    {confirmingIP === e.ip ? (
+                      <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>Sure?</span>
+                        <button className="btn btn-danger" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} onClick={() => handleUnblock(e.ip)}>
+                          Yes
+                        </button>
+                        <button className="btn btn-ghost" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} onClick={() => setConfirmingIP(null)}>
+                          No
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         className="btn btn-danger"
                         style={{ padding: "0.3rem 0.5rem" }}
-                        onClick={() => handleUnblock(e.ip)}
+                        onClick={() => setConfirmingIP(e.ip)}
                         title="Unblock"
                       >
                         <Trash2 size={13} />
                       </button>
-                    </td>
-                  </tr>
-                ))
-              )}
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

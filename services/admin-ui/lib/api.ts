@@ -1,4 +1,5 @@
-const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+// All requests go through the Next.js BFF proxy at /api/gateway/...
+// The proxy reads the httpOnly gw_token cookie and attaches Authorization header.
 
 export type Route = {
   id: string;
@@ -65,57 +66,68 @@ export type ProbeResult = {
   addr: string;
 };
 
-async function apiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${GATEWAY}${path}`, {
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`/api/gateway${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
       ...(init?.headers ?? {}),
     },
   });
+
+  if (!res.ok) {
+    const ct = res.headers.get("Content-Type") ?? "";
+    if (ct.includes("application/json")) {
+      const json = await res.json();
+      throw new Error(json.error?.message ?? json.error ?? `HTTP ${res.status}`);
+    }
+    throw new Error(`HTTP ${res.status}`);
+  }
+
   const json = await res.json();
-  if (!res.ok || !json.success) {
-    throw new Error(json.error?.message ?? `HTTP ${res.status}`);
+  if (!json.success) {
+    throw new Error(json.error?.message ?? "Unknown error");
   }
   return json.data as T;
 }
 
-export async function login(email: string, password: string): Promise<string> {
-  const res = await fetch(`${GATEWAY}/v1/auth/login`, {
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+/** Calls the BFF login route, which sets httpOnly cookies on success. */
+export async function login(email: string, password: string): Promise<void> {
+  const res = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.error?.message ?? "Login failed");
-  return json.access_token as string;
+  if (!res.ok) throw new Error(json.error ?? "Login failed");
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
-export const getStats = (token: string) =>
-  apiFetch<Stats>("/gateway/v1/stats", token);
+export const getStats = () =>
+  apiFetch<Stats>("/gateway/v1/stats");
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-export const getRoutes = (token: string) =>
-  apiFetch<{ routes: Route[] }>("/gateway/v1/routes", token).then((d) => d.routes ?? []);
+export const getRoutes = () =>
+  apiFetch<{ routes: Route[] }>("/gateway/v1/routes").then((d) => d.routes ?? []);
 
-export const createRoute = (token: string, body: Omit<Route, "id" | "created_at" | "updated_at" | "enabled">) =>
-  apiFetch<{ id: string }>("/gateway/v1/routes", token, {
+export const createRoute = (body: Omit<Route, "id" | "created_at" | "updated_at" | "enabled">) =>
+  apiFetch<{ id: string }>("/gateway/v1/routes", {
     method: "POST",
     body: JSON.stringify(body),
   });
 
-export const updateRoute = (token: string, id: string, body: Partial<Route>) =>
-  apiFetch<{ updated: boolean }>(`/gateway/v1/routes/${id}`, token, {
+export const updateRoute = (id: string, body: Partial<Route>) =>
+  apiFetch<{ updated: boolean }>(`/gateway/v1/routes/${id}`, {
     method: "PUT",
     body: JSON.stringify(body),
   });
 
-export const deleteRoute = (token: string, id: string) =>
-  apiFetch<{ disabled: boolean }>(`/gateway/v1/routes/${id}`, token, {
+export const deleteRoute = (id: string) =>
+  apiFetch<{ disabled: boolean }>(`/gateway/v1/routes/${id}`, {
     method: "DELETE",
   });
 
@@ -130,54 +142,52 @@ export type AuditParams = {
   after_id?: number;
 };
 
-export const getAudit = (token: string, params: AuditParams = {}) => {
+export const getAudit = (params: AuditParams = {}) => {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
   return apiFetch<{ entries: AuditEntry[]; count: number }>(
     `/gateway/v1/audit?${q}`,
-    token
   ).then((d) => d.entries ?? []);
 };
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
-export const getRegistry = (token: string) =>
-  apiFetch<{ instances: RegistryInstance[]; count: number }>("/gateway/v1/registry", token).then(
-    (d) => d.instances ?? []
+export const getRegistry = () =>
+  apiFetch<{ instances: RegistryInstance[]; count: number }>("/gateway/v1/registry").then(
+    (d) => d.instances ?? [],
   );
 
 // ── Metrics ───────────────────────────────────────────────────────────────────
 
-export const getMetrics = (token: string) =>
-  apiFetch<{ upstreams: UpstreamMetric[] }>("/gateway/v1/metrics", token).then(
-    (d) => d.upstreams ?? []
+export const getMetrics = () =>
+  apiFetch<{ upstreams: UpstreamMetric[] }>("/gateway/v1/metrics").then(
+    (d) => d.upstreams ?? [],
   );
 
 // ── Probe ─────────────────────────────────────────────────────────────────────
 
 export const probeRoute = (
-  token: string,
-  req: { method: string; path: string; token?: string; headers?: Record<string, string>; body?: string }
+  req: { method: string; path: string; token?: string; headers?: Record<string, string>; body?: string },
 ) =>
-  apiFetch<ProbeResult>("/gateway/v1/probe", token, {
+  apiFetch<ProbeResult>("/gateway/v1/probe", {
     method: "POST",
     body: JSON.stringify(req),
   });
 
 // ── Blocklist ─────────────────────────────────────────────────────────────────
 
-export const getBlocklist = (token: string) =>
-  apiFetch<{ blocked: BlocklistEntry[]; count: number }>("/gateway/v1/blocklist", token).then(
-    (d) => d.blocked ?? []
+export const getBlocklist = () =>
+  apiFetch<{ blocked: BlocklistEntry[]; count: number }>("/gateway/v1/blocklist").then(
+    (d) => d.blocked ?? [],
   );
 
-export const blockIP = (token: string, ip: string, reason?: string) =>
-  apiFetch<{ blocked: boolean }>("/gateway/v1/blocklist", token, {
+export const blockIP = (ip: string, reason?: string) =>
+  apiFetch<{ blocked: boolean }>("/gateway/v1/blocklist", {
     method: "POST",
     body: JSON.stringify({ ip, reason: reason ?? "" }),
   });
 
-export const unblockIP = (token: string, ip: string) =>
-  apiFetch<{ removed: boolean }>(`/gateway/v1/blocklist/${encodeURIComponent(ip)}`, token, {
+export const unblockIP = (ip: string) =>
+  apiFetch<{ removed: boolean }>(`/gateway/v1/blocklist/${encodeURIComponent(ip)}`, {
     method: "DELETE",
   });

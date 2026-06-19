@@ -1,19 +1,19 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getToken } from "@/lib/auth";
+import { useEffect, useRef, useState } from "react";
 import { getAudit, blockIP, AuditEntry } from "@/lib/api";
 import { RefreshCw, Search, Play, Square, ShieldOff } from "lucide-react";
 import { SkeletonTableRows } from "@/app/components/Skeleton";
 
 const EVENTS = ["", "AUTH_REJECTED", "RATE_LIMITED", "UPSTREAM_5XX", "CIRCUIT_OPEN", "ROUTE_CONFLICT"];
+const ENTRY_CAP = 500;
 
 function EventBadge({ event }: { event: string }) {
   const map: Record<string, string> = {
     AUTH_REJECTED: "badge badge-red",
-    RATE_LIMITED: "badge badge-yellow",
-    UPSTREAM_5XX: "badge badge-red",
-    CIRCUIT_OPEN: "badge badge-yellow",
-    ROUTE_CONFLICT: "badge badge-blue",
+    RATE_LIMITED:  "badge badge-yellow",
+    UPSTREAM_5XX:  "badge badge-red",
+    CIRCUIT_OPEN:  "badge badge-yellow",
+    ROUTE_CONFLICT:"badge badge-blue",
   };
   return <span className={map[event] ?? "badge badge-gray"}>{event}</span>;
 }
@@ -33,30 +33,26 @@ export default function AuditPage() {
   const [limit, setLimit] = useState(100);
 
   const [appliedFilters, setAppliedFilters] = useState({
-    event: "",
-    user_id: "",
-    from: "",
-    to: "",
-    limit: 100,
+    event: "", user_id: "", from: "", to: "", limit: 100,
   });
 
-  // Base fetch
+  // Track the top entry ID in a ref so the tail effect never has a stale closure
+  const topIdRef = useRef<number | undefined>(undefined);
+
   useEffect(() => {
     let cancelled = false;
-
     async function fetchData() {
-      const token = getToken();
-      if (!token) return;
       try {
-        const data = await getAudit(token, {
-          event: appliedFilters.event || undefined,
+        const data = await getAudit({
+          event:   appliedFilters.event   || undefined,
           user_id: appliedFilters.user_id || undefined,
-          from: appliedFilters.from || undefined,
-          to: appliedFilters.to || undefined,
-          limit: appliedFilters.limit,
+          from:    appliedFilters.from    || undefined,
+          to:      appliedFilters.to      || undefined,
+          limit:   appliedFilters.limit,
         });
         if (!cancelled) {
           setEntries(data);
+          topIdRef.current = data[0]?.id;
           setError("");
           setLoading(false);
         }
@@ -67,31 +63,25 @@ export default function AuditPage() {
         }
       }
     }
-
     fetchData();
     return () => { cancelled = true; };
   }, [searchKey, appliedFilters]);
 
-  // Real-time tail: poll every 5s for entries newer than the top-most id
+  // Live tail: polls every 5s; reads topIdRef to avoid stale closure
   useEffect(() => {
     if (!tailing) return;
     let cancelled = false;
     const id = setInterval(async () => {
-      const token = getToken();
-      if (!token) return;
-      const topId = entries[0]?.id;
       try {
-        const fresh = await getAudit(token, {
-          after_id: topId,
-          limit: 50,
-        });
+        const fresh = await getAudit({ after_id: topIdRef.current, limit: 50 });
         if (!cancelled && fresh.length > 0) {
-          setEntries((prev) => [...fresh, ...prev]);
+          topIdRef.current = fresh[0].id;
+          setEntries((prev) => [...fresh, ...prev].slice(0, ENTRY_CAP));
         }
-      } catch { /* silent */ }
+      } catch { /* silent during tail */ }
     }, 5_000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [tailing, entries]);
+  }, [tailing]); // intentionally excludes `entries` — topIdRef carries the latest value
 
   function handleSearch() {
     setAppliedFilters({ event: filterEvent, user_id: filterUser, from: filterFrom, to: filterTo, limit });
@@ -99,11 +89,9 @@ export default function AuditPage() {
   }
 
   async function handleBlockIP(ip: string) {
-    const token = getToken();
-    if (!token) return;
     setBlockingIP(ip);
     try {
-      await blockIP(token, ip, "Blocked from audit log");
+      await blockIP(ip, "Blocked from audit log");
       setError("");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -114,10 +102,10 @@ export default function AuditPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--text)", margin: 0 }}>Audit Log</h1>
-          <p style={{ fontSize: "0.8125rem", color: "var(--muted)", margin: "0.25rem 0 0" }}>
+          <h1 className="page-title">Audit Log</h1>
+          <p className="page-subtitle">
             {entries.length} event{entries.length !== 1 ? "s" : ""}
             {tailing && <span style={{ color: "var(--accent)", marginLeft: "0.5rem" }}>· live</span>}
           </p>
@@ -140,33 +128,26 @@ export default function AuditPage() {
       {/* Filters */}
       <div className="card" style={{ marginBottom: "1rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
         <div style={{ flex: "1 1 9rem" }}>
-          <label style={{ display: "block", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "0.25rem" }}>Event type</label>
+          <label className="form-label">Event type</label>
           <select className="input" value={filterEvent} onChange={(e) => setFilterEvent(e.target.value)}>
             {EVENTS.map((ev) => <option key={ev} value={ev}>{ev || "All events"}</option>)}
           </select>
         </div>
         <div style={{ flex: "1 1 9rem" }}>
-          <label style={{ display: "block", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "0.25rem" }}>User ID</label>
+          <label className="form-label">User ID</label>
           <input className="input" value={filterUser} onChange={(e) => setFilterUser(e.target.value)} placeholder="uuid" />
         </div>
         <div style={{ flex: "1 1 9rem" }}>
-          <label style={{ display: "block", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "0.25rem" }}>From</label>
+          <label className="form-label">From</label>
           <input className="input" type="datetime-local" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
         </div>
         <div style={{ flex: "1 1 9rem" }}>
-          <label style={{ display: "block", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "0.25rem" }}>To</label>
+          <label className="form-label">To</label>
           <input className="input" type="datetime-local" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
         </div>
         <div style={{ width: "5rem" }}>
-          <label style={{ display: "block", fontSize: "0.75rem", color: "var(--muted)", marginBottom: "0.25rem" }}>Limit</label>
-          <input
-            className="input"
-            type="number"
-            value={limit}
-            min={1}
-            max={1000}
-            onChange={(e) => setLimit(Number(e.target.value))}
-          />
+          <label className="form-label">Limit</label>
+          <input className="input" type="number" value={limit} min={1} max={1000} onChange={(e) => setLimit(Number(e.target.value))} />
         </div>
         <button className="btn btn-primary" onClick={handleSearch}>
           <Search size={14} /> Search
@@ -179,11 +160,7 @@ export default function AuditPage() {
         {loading ? (
           <table>
             <thead>
-              <tr>
-                {["Time","Event","Method","Path","Upstream","Status","IP","Detail",""].map((h, i) => (
-                  <th key={i}>{h}</th>
-                ))}
-              </tr>
+              <tr>{["Time","Event","Method","Path","Upstream","Status","IP","Detail",""].map((h, i) => <th key={i}>{h}</th>)}</tr>
             </thead>
             <tbody><SkeletonTableRows cols={9} rows={8} /></tbody>
           </table>
@@ -197,15 +174,8 @@ export default function AuditPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Event</th>
-                  <th>Method</th>
-                  <th>Path</th>
-                  <th>Upstream</th>
-                  <th>Status</th>
-                  <th>IP</th>
-                  <th>Detail</th>
-                  <th></th>
+                  <th>Time</th><th>Event</th><th>Method</th><th>Path</th>
+                  <th>Upstream</th><th>Status</th><th>IP</th><th>Detail</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -226,9 +196,7 @@ export default function AuditPage() {
                       )}
                     </td>
                     <td className="mono" style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{e.ip}</td>
-                    <td
-                      style={{ fontSize: "0.75rem", color: "var(--muted)", maxWidth: "16rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    >
+                    <td style={{ fontSize: "0.75rem", color: "var(--muted)", maxWidth: "16rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {e.detail}
                     </td>
                     <td>
