@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Memory
+
+Refer to ~/claude-memory/Index.md for accumulated patterns and decisions from previous sessions.
+
+Key context files for this project:
+- ~/claude-memory/Context/ — project-specific notes
+- ~/claude-memory/Decisions/ — past architectural choices
+- ~/claude-memory/Mistakes/ — known pitfalls to avoid
+
 ## Architecture
 
 ZapMarket is a Go monorepo of six microservices managed via `go.work`. Each service is an independent Go module under `services/`. Shared packages live in `pkg/`.

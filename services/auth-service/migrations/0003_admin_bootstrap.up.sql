@@ -22,7 +22,7 @@ INSERT INTO users (
 )
 SELECT
     gen_random_uuid(),
-    COALESCE(current_setting('app.admin_email', true), 'admin@zapmarket.local'),
+    COALESCE(current_setting('app.admin_email', true), 'admin@zapmarket.com'),
     crypt(
         COALESCE(current_setting('app.admin_password', true), 'Admin@zapmarket1!'),
         gen_salt('bf', 10)

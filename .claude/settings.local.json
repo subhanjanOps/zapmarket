@@ -187,7 +187,27 @@
       "Bash(ls reports/)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k, list\\(d['paths'][k].keys\\(\\)\\)\\) for k in d['paths']]\")",
       "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); Object.keys\\(d.paths\\).forEach\\(k=>console.log\\(k, Object.keys\\(d.paths[k]\\)\\)\\)\")",
-      "Bash(grep -o '\"\\\\/[^\"]*\"')"
+      "Bash(grep -o '\"\\\\/[^\"]*\"')",
+      "Bash(python -c \"import anthropic; print\\('anthropic ok'\\)\")",
+      "Bash(python ~/.claude/hooks/memory_extractor.py)",
+      "Bash(python3 *)",
+      "Bash(python *)",
+      "Read(//c/Users/subha/.claude/**)",
+      "Skill(update-config)",
+      "Read(//c/Users/subha/claude-memory/**)",
+      "Read(//c/Users/subha/claude-memory/Context/**)",
+      "Read(//c/Users/subha/claude-memory/Decisions/**)",
+      "Read(//c/Users/subha/claude-memory/Mistakes/**)",
+      "Bash(xargs grep -l \"obsidian\")",
+      "Bash(claude mcp *)",
+      "Read(//c/c/Users/subha/**)",
+      "Read(//c/Users/subha/AppData/**)",
+      "Bash(obsidian help *)",
+      "PowerShell(obsidian help *)",
+      "Bash(OBSIDIAN_API_KEY=\"205a569d728fab998adef3b0d0d12048467e8962e7bf4f7b33e4602af8c81da5\" obsidian help)",
+      "Bash(OBSIDIAN_API_KEY=\"205a569d728fab998adef3b0d0d12048467e8962e7bf4f7b33e4602af8c81da5\" OBSIDIAN_API_SECRET=\"\" obsidian help)",
+      "Bash(obsidian --help)",
+      "Bash(obsidian version *)"
     ]
   }
 }

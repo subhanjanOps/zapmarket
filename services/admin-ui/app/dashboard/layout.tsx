@@ -47,48 +47,16 @@ function isActive(href: string, pathname: string) {
   return pathname.startsWith(href);
 }
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const router   = useRouter();
-  const pathname = usePathname();
-  const [ready, setReady] = useState(false);
-  const [theme, setTheme] = useState<ThemeId>("terminal");
-  const [navigating, setNavigating] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const prevPath = useRef(pathname);
-  const clock = useClock();
+interface SidebarProps {
+  pathname: string;
+  clock: string;
+  theme: ThemeId;
+  applyTheme: (id: ThemeId) => void;
+  onSignOut: () => void;
+}
 
-  // Middleware guards the /dashboard routes server-side; here we only restore theme.
-  useEffect(() => {
-    const saved = (localStorage.getItem("zap-theme") as ThemeId) ?? "terminal";
-    setTheme(saved);
-    document.documentElement.setAttribute("data-theme", saved);
-    setReady(true);
-  }, []);
-
-  function applyTheme(id: ThemeId) {
-    setTheme(id);
-    localStorage.setItem("zap-theme", id);
-    document.documentElement.setAttribute("data-theme", id);
-  }
-
-  useEffect(() => {
-    if (prevPath.current !== pathname) {
-      prevPath.current = pathname;
-      setNavigating(true);
-      setDrawerOpen(false);
-      const t = setTimeout(() => setNavigating(false), 500);
-      return () => clearTimeout(t);
-    }
-  }, [pathname]);
-
-  async function handleSignOut() {
-    await clearToken();
-    router.push("/login");
-  }
-
-  if (!ready) return <Splash />;
-
-  const SidebarContent = () => (
+function SidebarContent({ pathname, clock, theme, applyTheme, onSignOut }: SidebarProps) {
+  return (
     <>
       {/* Brand */}
       <div style={{ padding: "1.375rem 1.25rem 1.125rem", borderBottom: "1px solid var(--border)" }}>
@@ -198,17 +166,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: "0.6875rem", color: "var(--muted)", marginBottom: "0.875rem", letterSpacing: "0.04em" }}>
           {clock}
         </div>
-        <div style={{ fontSize: "0.6875rem", color: "var(--muted)", marginBottom: "0.4rem", fontWeight: 500 }}>Theme</div>
-        <div className="theme-picker" style={{ marginBottom: "0.625rem" }}>
-          {THEMES.map((t) => (
-            <button key={t.id} aria-pressed={theme === t.id} title={t.label} onClick={() => applyTheme(t.id)} className="theme-dot" style={{ background: t.dot }} />
-          ))}
-        </div>
-        <div style={{ fontSize: "0.6875rem", color: "var(--muted)", marginBottom: "0.875rem" }}>
-          {THEMES.find((t) => t.id === theme)?.label}
+        <div style={{ marginBottom: "0.875rem" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.375rem", marginBottom: "0.4rem" }}>
+            <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: "0.5625rem", color: "var(--muted)", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.6 }}>
+              theme
+            </span>
+            <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: "0.5625rem", color: "var(--accent)", letterSpacing: "0.02em" }}>
+              {THEMES.find((t) => t.id === theme)?.label}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: "0.3125rem", flexWrap: "wrap" }}>
+            {THEMES.map((t) => {
+              const selected = theme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => applyTheme(t.id)}
+                  aria-pressed={selected}
+                  title={t.label}
+                  style={{
+                    width: "1rem",
+                    height: "1rem",
+                    borderRadius: "3px",
+                    background: t.dot,
+                    border: selected ? "2px solid var(--text)" : "2px solid transparent",
+                    cursor: "pointer",
+                    padding: 0,
+                    outline: "none",
+                    opacity: selected ? 1 : 0.4,
+                    transform: selected ? "scale(1.2)" : "scale(1)",
+                    transition: "transform 0.12s, opacity 0.12s, border-color 0.12s",
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => { if (!selected) e.currentTarget.style.opacity = "0.8"; }}
+                  onMouseLeave={(e) => { if (!selected) e.currentTarget.style.opacity = "0.4"; }}
+                />
+              );
+            })}
+          </div>
         </div>
         <button
-          onClick={handleSignOut}
+          onClick={onSignOut}
           style={{
             display: "flex",
             alignItems: "center",
@@ -234,6 +232,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     </>
   );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router   = useRouter();
+  const pathname = usePathname();
+  const [ready, setReady] = useState(false);
+  const [theme, setTheme] = useState<ThemeId>("terminal");
+  const [navigating, setNavigating] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const prevPath = useRef(pathname);
+  const clock = useClock();
+
+  useEffect(() => {
+    const saved = (localStorage.getItem("zap-theme") as ThemeId) ?? "terminal";
+    setTheme(saved);
+    document.documentElement.setAttribute("data-theme", saved);
+    setReady(true);
+  }, []);
+
+  function applyTheme(id: ThemeId) {
+    setTheme(id);
+    localStorage.setItem("zap-theme", id);
+    document.documentElement.setAttribute("data-theme", id);
+  }
+
+  useEffect(() => {
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      setNavigating(true);
+      setDrawerOpen(false);
+      const t = setTimeout(() => setNavigating(false), 500);
+      return () => clearTimeout(t);
+    }
+  }, [pathname]);
+
+  async function handleSignOut() {
+    await clearToken();
+    router.push("/login");
+  }
+
+  if (!ready) return <Splash />;
 
   return (
     <div style={{ display: "flex", minHeight: "100dvh" }}>
@@ -254,7 +293,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         overflowY: "auto",
         zIndex: 10,
       }}>
-        <SidebarContent />
+        <SidebarContent pathname={pathname} clock={clock} theme={theme} applyTheme={applyTheme} onSignOut={handleSignOut} />
       </aside>
 
       {/* ── Mobile Top Bar ────────────────────────────────────────────────── */}
@@ -317,7 +356,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <X size={16} />
           </button>
         </div>
-        <SidebarContent />
+        <SidebarContent pathname={pathname} clock={clock} theme={theme} applyTheme={applyTheme} onSignOut={handleSignOut} />
       </div>
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
