@@ -115,18 +115,24 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 	}
 	if !acquired && err == nil {
 		// Another request holds the lock — wait for it to finish then re-read.
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
 		deadline := time.Now().Add(lockTTL)
 		for time.Now().Before(deadline) {
-			time.Sleep(50 * time.Millisecond)
-			if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
-				var order domain.Order
-				if json.Unmarshal(cached, &order) == nil {
-					s.logger.Info("idempotent replay after lock wait", "order_id", order.ID)
-					return &order, nil
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-ticker.C:
+				if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+					var order domain.Order
+					if json.Unmarshal(cached, &order) == nil {
+						s.logger.Info("idempotent replay after lock wait", "order_id", order.ID)
+						return &order, nil
+					}
 				}
-			}
-			if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
-				break // lock released; fall through to DB check
+				if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
+					break // lock released; fall through to DB check
+				}
 			}
 		}
 	}
@@ -212,7 +218,9 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		s.logger.Error("payment ChargeCard error", "order_id", order.ID, "error", err)
 		s.compensate(ctx, order.ID, domainItems)
 		cancelPayload, _ := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_error"})
-		_ = s.repo.MarkCancelled(ctx, order.ID, cancelPayload)
+		if cancelErr := s.repo.MarkCancelled(ctx, order.ID, cancelPayload); cancelErr != nil {
+			s.logger.Error("failed to mark order cancelled after payment error", "order_id", order.ID, "error", cancelErr)
+		}
 		return nil, pkgerrors.NewInternal("PAYMENT_ERROR", "payment service error", err)
 	}
 
@@ -221,7 +229,9 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		s.logger.Info("payment not captured", "order_id", order.ID, "payment_status", paymentStatus)
 		s.compensate(ctx, order.ID, domainItems)
 		cancelPayload, _ := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_failed", "payment_status": paymentStatus})
-		_ = s.repo.MarkCancelled(ctx, order.ID, cancelPayload)
+		if cancelErr := s.repo.MarkCancelled(ctx, order.ID, cancelPayload); cancelErr != nil {
+			s.logger.Error("failed to mark order cancelled after payment failure", "order_id", order.ID, "error", cancelErr)
+		}
 		return nil, pkgerrors.NewConflict("PAYMENT_FAILED", "payment was not captured (status: "+paymentStatus+")")
 	}
 
@@ -288,13 +298,13 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUI
 		return nil, err
 	}
 
-	// Release any inventory reservations still held.
+	// Fetch items needed for inventory release (before persisting CANCELLED).
 	items, err := s.repo.GetOrderItems(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
-	s.compensate(ctx, orderID, items)
 
+	// Persist CANCELLED status first — if this fails we do nothing else.
 	cancelPayload, _ := json.Marshal(map[string]string{
 		"order_id": orderID.String(),
 		"user_id":  userID.String(),
@@ -303,6 +313,10 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUI
 	if err := s.repo.MarkCancelled(ctx, orderID, cancelPayload); err != nil {
 		return nil, err
 	}
+
+	// Release inventory after the order is durably cancelled.
+	// If this fails the order is still cancelled; log and move on.
+	s.compensate(ctx, orderID, items)
 
 	order.Status = domain.OrderCancelled
 	s.logger.Info("order cancelled by user", "order_id", orderID)
@@ -367,8 +381,8 @@ func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) 
 	if err != nil {
 		return nil, err
 	}
-	s.compensate(ctx, orderID, items)
 
+	// Persist CANCELLED status first, then release inventory.
 	cancelPayload, _ := json.Marshal(map[string]string{
 		"order_id": orderID.String(),
 		"reason":   "admin_cancelled",
@@ -376,6 +390,9 @@ func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) 
 	if err := s.repo.MarkCancelled(ctx, orderID, cancelPayload); err != nil {
 		return nil, err
 	}
+
+	// Release inventory after durable cancel; log failures but don't surface them.
+	s.compensate(ctx, orderID, items)
 
 	order.Status = domain.OrderCancelled
 	s.logger.Info("order admin-cancelled", "order_id", orderID)
@@ -387,11 +404,13 @@ func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) 
 // precedence. A failed release here means stock is temporarily stranded in
 // RESERVED state; it will be recovered by the TTL sweep job (Stage 12).
 func (s *orderService) compensate(ctx context.Context, orderID uuid.UUID, reserved []*domain.OrderItem) {
+	// Use a detached context so client disconnects don't abort compensation.
+	compensateCtx := context.WithoutCancel(ctx)
 	for _, item := range reserved {
 		if item.ReservationID == nil {
 			continue
 		}
-		if err := s.inventory.ReleaseStock(ctx, *item.ReservationID); err != nil {
+		if err := s.inventory.ReleaseStock(compensateCtx, *item.ReservationID); err != nil {
 			s.logger.Error("compensation: failed to release reservation",
 				"order_id", orderID,
 				"reservation_id", item.ReservationID,

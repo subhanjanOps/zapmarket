@@ -288,6 +288,10 @@ func (h *Handler) queryAudit(w http.ResponseWriter, r *http.Request) {
 		}
 		result = append(result, row)
 	}
+	if err := rows.Err(); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "ROWS_ERROR", err.Error())
+		return
+	}
 	jsonOK(w, map[string]any{"entries": result, "count": len(result)})
 }
 
@@ -384,6 +388,10 @@ func (h *Handler) getStats(w http.ResponseWriter, r *http.Request) {
 				&row.Method, &row.Path, &row.Upstream, &row.StatusCode, &row.Event, &row.Detail); err == nil {
 				recentAudit = append(recentAudit, row)
 			}
+		}
+		if rowsErr := rows.Err(); rowsErr != nil {
+			jsonErr(w, http.StatusInternalServerError, "ROWS_ERROR", rowsErr.Error())
+			return
 		}
 	}
 
@@ -570,6 +578,10 @@ func (h *Handler) addToBlocklist(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) removeFromBlocklist(w http.ResponseWriter, r *http.Request) {
 	ip := chi.URLParam(r, "ip")
+	if net.ParseIP(ip) == nil {
+		jsonErr(w, http.StatusBadRequest, "INVALID_IP", "not a valid IP address")
+		return
+	}
 	ctx := r.Context()
 	if err := h.rdb.SRem(ctx, gw.BlocklistKey, ip).Err(); err != nil {
 		jsonErr(w, http.StatusInternalServerError, "REDIS_ERROR", err.Error())

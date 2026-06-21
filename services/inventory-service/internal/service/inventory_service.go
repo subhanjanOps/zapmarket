@@ -164,18 +164,13 @@ func (s *inventoryService) ReleaseStock(ctx context.Context, reservationID uuid.
 
 	s.logger.Info("releasing stock", "reservation_id", reservationID)
 
-	// Fetch reservation details before releasing so we can update Redis.
-	skuID, qty, err := s.repo.GetReservationDetails(ctx, reservationID)
+	skuID, qty, err := s.repo.ReleaseStock(ctx, reservationID)
 	if err != nil {
 		return err
 	}
 
-	if err := s.repo.ReleaseStock(ctx, reservationID); err != nil {
-		return err
-	}
-
 	// Increment Redis counter: released units are available again.
-	if redisErr := s.rdb.IncrBy(ctx, stockKey(skuID), int64(qty)).Err(); redisErr != nil {
+	if redisErr := s.rdb.IncrBy(ctx, stockKey(skuID), qty).Err(); redisErr != nil {
 		s.logger.Warn("failed to increment redis stock after release", "reservation_id", reservationID, "error", redisErr)
 	}
 

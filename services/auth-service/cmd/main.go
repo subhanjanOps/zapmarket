@@ -100,11 +100,11 @@ func main() {
 		slog.Info("connected to Redis", "addr", cfg.RedisURL)
 	}
 
-	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, cfg)
+	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, authService, cfg)
 
 	// Initialize HTTP handlers
 	httpHandler := httphandler.NewHandler(authService, oauthService, cfg)
-	adminHandler := httphandler.NewAdminHandler(userRepo, cfg)
+	adminHandler := httphandler.NewAdminHandler(userRepo, authService, cfg)
 
 	// Setup HTTP server
 	mux := http.NewServeMux()

@@ -3,7 +3,6 @@ package middleware
 import (
 	"net"
 	"net/http"
-	"strings"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -11,12 +10,10 @@ import (
 const BlocklistKey     = "gw:blocklist"
 const BlocklistMetaKey = "gw:blocklist:meta"
 
-// ClientIP returns the originating IP, respecting X-Forwarded-For.
+// ClientIP returns the true originating IP from r.RemoteAddr.
+// This gateway is the edge — we never trust client-supplied X-Forwarded-For
+// because it can be spoofed to bypass the blocklist.
 func ClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.SplitN(xff, ",", 2)
-		return strings.TrimSpace(parts[0])
-	}
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

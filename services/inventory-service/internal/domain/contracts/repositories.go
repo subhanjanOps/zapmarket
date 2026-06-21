@@ -29,12 +29,13 @@ type InventoryRepository interface {
 	ReserveStock(ctx context.Context, skuID, orderID uuid.UUID, qty int) (*domain.Reservation, error)
 
 	// ReleaseStock transitions a `reserved` reservation to `released` and
-	// decrements qty_reserved by the same amount. Returns
-	// pkgerrors.NotFound if the reservation doesn't exist, and a
+	// decrements qty_reserved by the same amount. Returns the skuID and qty
+	// so the caller can update the Redis counter without a second round-trip.
+	// Returns pkgerrors.NotFound if the reservation doesn't exist, and a
 	// pkgerrors.Conflict-typed error if it's not in `reserved` state
 	// (already released or confirmed — releasing twice must not double
 	// free stock).
-	ReleaseStock(ctx context.Context, reservationID uuid.UUID) error
+	ReleaseStock(ctx context.Context, reservationID uuid.UUID) (skuID uuid.UUID, qty int64, err error)
 
 	// DeductStock transitions a `reserved` reservation to `confirmed` and
 	// permanently removes the quantity from qty_on_hand (qty_reserved also

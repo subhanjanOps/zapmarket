@@ -8,21 +8,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/config"
-	"github.com/zapmarket/zapmarket/pkg/crypto"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 )
 
 // AdminHandler provides admin-only endpoints: user management + seller verification.
 type AdminHandler struct {
 	userRepo contracts.UserRepository
+	authSvc  *service.AuthService
 	cfg      *config.Config
 }
 
-func NewAdminHandler(userRepo contracts.UserRepository, cfg *config.Config) *AdminHandler {
-	return &AdminHandler{userRepo: userRepo, cfg: cfg}
+func NewAdminHandler(userRepo contracts.UserRepository, authSvc *service.AuthService, cfg *config.Config) *AdminHandler {
+	return &AdminHandler{userRepo: userRepo, authSvc: authSvc, cfg: cfg}
 }
 
 // AdminAuthMiddleware validates the JWT and requires role == "admin".
@@ -38,12 +39,12 @@ func (h *AdminHandler) AdminAuthMiddleware(next http.Handler) http.Handler {
 			httpx.Error(w, http.StatusUnauthorized, "INVALID_TOKEN", "bearer token required")
 			return
 		}
-		claims, err := crypto.ValidateAccessToken(strings.TrimSpace(parts[1]), h.cfg.JWTSecretKey)
+		user, err := h.authSvc.ValidateAccessToken(r.Context(), strings.TrimSpace(parts[1]))
 		if err != nil {
 			httpx.Error(w, http.StatusUnauthorized, "INVALID_TOKEN", "invalid or expired token")
 			return
 		}
-		if claims.Role != string(domain.RoleAdmin) {
+		if user.Role != string(domain.RoleAdmin) {
 			httpx.Error(w, http.StatusForbidden, "FORBIDDEN", "admin role required")
 			return
 		}

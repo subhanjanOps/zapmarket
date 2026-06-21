@@ -221,6 +221,7 @@ func (h *OrderHandler) ListSellerOrders(w http.ResponseWriter, r *http.Request) 
 }
 
 // parsePage reads limit and offset from query params, with safe defaults.
+// limit is capped at 100 to prevent DoS via oversized queries.
 func parsePage(r *http.Request) (limit, offset int) {
 	limit = 20
 	offset = 0
@@ -228,6 +229,9 @@ func parsePage(r *http.Request) (limit, offset int) {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			limit = n
 		}
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 100
 	}
 	if v := r.URL.Query().Get("offset"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {

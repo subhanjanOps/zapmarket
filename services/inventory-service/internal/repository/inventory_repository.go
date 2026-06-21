@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -103,20 +104,23 @@ func (r *InventoryRepository) ReserveStock(ctx context.Context, skuID, orderID u
 			ExpiresAt:   expiresAt,
 		}
 
-		payload, _ := json.Marshal(map[string]interface{}{
+		payload, err := json.Marshal(map[string]interface{}{
 			"reservation_id": id.String(), "sku_id": skuID.String(),
 			"order_id": orderID.String(), "qty": qty, "status": "RESERVED",
 		})
+		if err != nil {
+			return fmt.Errorf("marshal outbox payload: %w", err)
+		}
 		return insertOutboxRow(ctx, tx, id, "inventory", "inventory.reserved", payload)
 	})
 
 	return reservation, err
 }
 
-func (r *InventoryRepository) ReleaseStock(ctx context.Context, reservationID uuid.UUID) error {
-	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
+func (r *InventoryRepository) ReleaseStock(ctx context.Context, reservationID uuid.UUID) (skuID uuid.UUID, qty int64, err error) {
+	txErr := database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
 		var inventoryID uuid.UUID
-		var qty int
+		var releaseQty int
 
 		err := tx.QueryRowContext(ctx, `
 			UPDATE inventory_reservations
@@ -125,8 +129,8 @@ func (r *InventoryRepository) ReleaseStock(ctx context.Context, reservationID uu
 			WHERE id = $1
 				AND status = 'RESERVED'
 				AND deleted_at IS NULL
-			RETURNING inventory_id, qty
-		`, reservationID).Scan(&inventoryID, &qty)
+			RETURNING inventory_id, sku_id, qty
+		`, reservationID).Scan(&inventoryID, &skuID, &releaseQty)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			return reservationNotFoundOrConflict(ctx, tx, reservationID)
@@ -135,6 +139,8 @@ func (r *InventoryRepository) ReleaseStock(ctx context.Context, reservationID uu
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to release reservation", err)
 		}
 
+		qty = int64(releaseQty)
+
 		var before, after int
 		err = tx.QueryRowContext(ctx, `
 			UPDATE inventory
@@ -142,20 +148,27 @@ func (r *InventoryRepository) ReleaseStock(ctx context.Context, reservationID uu
 				updated_at = NOW()
 			WHERE id = $1
 			RETURNING qty_reserved + $2, qty_reserved
-		`, inventoryID, qty).Scan(&before, &after)
+		`, inventoryID, releaseQty).Scan(&before, &after)
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to release stock", err)
 		}
 
-		if err := insertLedgerEntry(ctx, tx, inventoryID, nil, domain.MovementReservationRelease, -qty, before, after, ""); err != nil {
+		if err := insertLedgerEntry(ctx, tx, inventoryID, nil, domain.MovementReservationRelease, -releaseQty, before, after, ""); err != nil {
 			return err
 		}
 
-		payload, _ := json.Marshal(map[string]interface{}{
-			"reservation_id": reservationID.String(), "qty": qty, "status": "RELEASED",
+		payload, err := json.Marshal(map[string]interface{}{
+			"reservation_id": reservationID.String(), "qty": releaseQty, "status": "RELEASED",
 		})
+		if err != nil {
+			return fmt.Errorf("marshal outbox payload: %w", err)
+		}
 		return insertOutboxRow(ctx, tx, reservationID, "inventory", "inventory.released", payload)
 	})
+	if txErr != nil {
+		return uuid.Nil, 0, txErr
+	}
+	return skuID, qty, nil
 }
 
 func (r *InventoryRepository) DeductStock(ctx context.Context, reservationID uuid.UUID) error {

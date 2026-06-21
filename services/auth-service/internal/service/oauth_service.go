@@ -31,6 +31,7 @@ type OAuthService struct {
 	userRepo       contracts.UserRepository
 	oauthRepo      contracts.OAuthRepository
 	tokenRepo      contracts.RefreshTokenRepository
+	authSvc        *AuthService
 	googleConfig   *oauth2.Config
 	facebookConfig *oauth2.Config
 	cfg            *config.Config
@@ -41,12 +42,14 @@ func NewOAuthService(
 	userRepo contracts.UserRepository,
 	oauthRepo contracts.OAuthRepository,
 	tokenRepo contracts.RefreshTokenRepository,
+	authSvc *AuthService,
 	cfg *config.Config,
 ) *OAuthService {
 	svc := &OAuthService{
 		userRepo:  userRepo,
 		oauthRepo: oauthRepo,
 		tokenRepo: tokenRepo,
+		authSvc:   authSvc,
 		cfg:       cfg,
 	}
 
@@ -185,7 +188,13 @@ func (s *OAuthService) handleOAuthUser(ctx context.Context, userInfo *OAuthUserI
 }
 
 func (s *OAuthService) getGoogleUserInfo(token *oauth2.Token) (*OAuthUserInfo, error) {
-	resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.googleapis.com/oauth2/v2/userinfo?access_token="+token.AccessToken, nil)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to build request: %v", err), err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to get user info: %v", err), err)
 	}
@@ -243,6 +252,5 @@ func (s *OAuthService) getFacebookUserInfo(token *oauth2.Token) (*OAuthUserInfo,
 }
 
 func (s *OAuthService) generateRefreshTokenForUser(ctx context.Context, userID uuid.UUID) (*domain.RefreshToken, error) {
-	authSvc := NewAuthService(s.userRepo, s.oauthRepo, s.tokenRepo, s.cfg)
-	return authSvc.generateRefreshToken(ctx, userID)
+	return s.authSvc.generateRefreshToken(ctx, userID)
 }

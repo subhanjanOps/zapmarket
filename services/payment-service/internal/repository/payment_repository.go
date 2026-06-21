@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/database"
@@ -73,11 +74,14 @@ func (r *PaymentRepository) MarkCaptured(ctx context.Context, paymentID uuid.UUI
 		if err := tx.QueryRowContext(ctx, `SELECT order_id, user_id FROM payments WHERE id = $1`, paymentID).Scan(&orderID, &userID); err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch payment for outbox", err)
 		}
-		payload, _ := json.Marshal(map[string]string{
+		payload, err := json.Marshal(map[string]string{
 			"payment_id": paymentID.String(), "order_id": orderID.String(),
 			"user_id": userID.String(), "gateway_txn_id": gatewayTxnID,
 			"status": "CAPTURED",
 		})
+		if err != nil {
+			return fmt.Errorf("marshal outbox payload: %w", err)
+		}
 		return insertOutboxRow(ctx, tx, paymentID, "payment", "payment.processed", payload)
 	})
 }
@@ -103,10 +107,13 @@ func (r *PaymentRepository) MarkFailed(ctx context.Context, paymentID uuid.UUID,
 		if err := tx.QueryRowContext(ctx, `SELECT order_id, user_id FROM payments WHERE id = $1`, paymentID).Scan(&orderID, &userID); err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch payment for outbox", err)
 		}
-		payload, _ := json.Marshal(map[string]string{
+		payload, err := json.Marshal(map[string]string{
 			"payment_id": paymentID.String(), "order_id": orderID.String(),
 			"user_id": userID.String(), "reason": reason, "status": "FAILED",
 		})
+		if err != nil {
+			return fmt.Errorf("marshal outbox payload: %w", err)
+		}
 		return insertOutboxRow(ctx, tx, paymentID, "payment", "payment.failed", payload)
 	})
 }

@@ -50,8 +50,9 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+	healthSrv := &http.Server{Addr: ":8085", Handler: mux}
 	go func() {
-		if err := http.ListenAndServe(":8085", mux); err != nil {
+		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("health server error", "error", err)
 		}
 	}()
@@ -65,6 +66,11 @@ func main() {
 		<-quit
 		log.Info("shutting down notification service")
 		cancel()
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		if err := healthSrv.Shutdown(shutCtx); err != nil {
+			log.Error("health server shutdown error", "error", err)
+		}
 	}()
 
 	// ── Consume all three topics concurrently ─────────────────────────────────

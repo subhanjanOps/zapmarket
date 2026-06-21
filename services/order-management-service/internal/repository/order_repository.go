@@ -178,7 +178,9 @@ func (r *OrderRepository) MarkReserved(ctx context.Context, orderID uuid.UUID, i
 				return pkgerrors.NewInternal("DATABASE_ERROR", "failed to update order item reservation", err)
 			}
 		}
-		return nil
+
+		payload := []byte(fmt.Sprintf(`{"order_id":%q}`, orderID.String()))
+		return insertOutboxEvent(ctx, tx, orderID, "order", "order.reserved", payload)
 	})
 }
 

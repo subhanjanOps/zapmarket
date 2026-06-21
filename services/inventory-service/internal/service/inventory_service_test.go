@@ -19,7 +19,7 @@ import (
 type mockInventoryRepo struct {
 	addStockFn              func(ctx context.Context, skuID uuid.UUID, qty int) (int, error)
 	reserveStockFn          func(ctx context.Context, skuID, orderID uuid.UUID, qty int) (*domain.Reservation, error)
-	releaseStockFn          func(ctx context.Context, reservationID uuid.UUID) error
+	releaseStockFn          func(ctx context.Context, reservationID uuid.UUID) (uuid.UUID, int64, error)
 	deductStockFn           func(ctx context.Context, reservationID uuid.UUID) error
 	getStockFn              func(ctx context.Context, skuID uuid.UUID) (*domain.Inventory, error)
 	getReservationDetailsFn func(ctx context.Context, reservationID uuid.UUID) (uuid.UUID, int, error)
@@ -39,11 +39,11 @@ func (m *mockInventoryRepo) ReserveStock(ctx context.Context, skuID, orderID uui
 	return &domain.Reservation{ID: uuid.New(), SKUID: skuID, OrderID: orderID, Qty: qty}, nil
 }
 
-func (m *mockInventoryRepo) ReleaseStock(ctx context.Context, reservationID uuid.UUID) error {
+func (m *mockInventoryRepo) ReleaseStock(ctx context.Context, reservationID uuid.UUID) (uuid.UUID, int64, error) {
 	if m.releaseStockFn != nil {
 		return m.releaseStockFn(ctx, reservationID)
 	}
-	return nil
+	return uuid.New(), 1, nil
 }
 
 func (m *mockInventoryRepo) DeductStock(ctx context.Context, reservationID uuid.UUID) error {

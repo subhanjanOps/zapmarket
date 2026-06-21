@@ -29,13 +29,19 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 	eventType := msg.Headers["event_type"]
 	outboxID := msg.Headers["outbox_id"]
 
+	// HIGH-4: validate required headers before use.
+	if outboxID == "" || eventType == "" {
+		return fmt.Errorf("missing required headers: outbox_id=%q event_type=%q", outboxID, eventType)
+	}
+
 	// Dedup: skip if we already processed this outbox event.
 	dedupKey := fmt.Sprintf("notif:dedup:%s", outboxID)
 	set, err := h.redis.SetNX(ctx, dedupKey, 1, time.Hour).Result()
 	if err != nil {
-		h.logger.Error("redis dedup check failed", "outbox_id", outboxID, "error", err)
-		// Continue processing rather than blocking on Redis errors.
-	} else if !set {
+		// CRIT-2: return error so the consumer does not commit the offset.
+		return fmt.Errorf("dedup check: %w", err)
+	}
+	if !set {
 		h.logger.Info("duplicate event skipped", "outbox_id", outboxID, "event_type", eventType)
 		return nil
 	}

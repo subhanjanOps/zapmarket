@@ -11,6 +11,8 @@ import (
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 	"github.com/zapmarket/zapmarket/pkg/crypto"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
 )
@@ -50,10 +52,7 @@ func (s *AuthServer) ValidateToken(ctx context.Context, req *authpb.ValidateToke
 			"error", err.Error(),
 			"duration_ms", duration.Milliseconds(),
 		)
-		return &authpb.ValidateTokenResponse{
-			Valid:        false,
-			ErrorMessage: err.Error(),
-		}, nil
+		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
 
 	slog.Info("gRPC response",
@@ -84,10 +83,7 @@ func (s *AuthServer) GetUser(ctx context.Context, req *authpb.GetUserRequest) (*
 			"error", err.Error(),
 			"duration_ms", duration.Milliseconds(),
 		)
-		return &authpb.GetUserResponse{
-			User:         nil,
-			ErrorMessage: err.Error(),
-		}, nil
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	user, err := s.authSvc.GetUserByID(ctx, userID)
 	if err != nil {
@@ -98,10 +94,7 @@ func (s *AuthServer) GetUser(ctx context.Context, req *authpb.GetUserRequest) (*
 			"error", err.Error(),
 			"duration_ms", duration.Milliseconds(),
 		)
-		return &authpb.GetUserResponse{
-			User:         nil,
-			ErrorMessage: err.Error(),
-		}, nil
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	duration := time.Since(start)
 	slog.Info("gRPC response",
@@ -131,12 +124,7 @@ func (s *AuthServer) LoginPassword(ctx context.Context, req *authpb.LoginPasswor
 			"error", err.Error(),
 			"duration_ms", duration.Milliseconds(),
 		)
-		return &authpb.LoginPasswordResponse{
-			User:         nil,
-			AccessToken:  "",
-			RefreshToken: "",
-			ErrorMessage: err.Error(),
-		}, nil
+		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
 	accessToken, err := s.generateAccessToken(user)
 	if err != nil {
@@ -147,12 +135,7 @@ func (s *AuthServer) LoginPassword(ctx context.Context, req *authpb.LoginPasswor
 			"error", err.Error(),
 			"duration_ms", duration.Milliseconds(),
 		)
-		return &authpb.LoginPasswordResponse{
-			User:         nil,
-			AccessToken:  "",
-			RefreshToken: "",
-			ErrorMessage: err.Error(),
-		}, nil
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	duration := time.Since(start)
 	slog.Info("gRPC response",
@@ -184,12 +167,7 @@ func (s *AuthServer) RegisterUser(ctx context.Context, req *authpb.RegisterUserR
 			"error", err.Error(),
 			"duration_ms", duration.Milliseconds(),
 		)
-		return &authpb.RegisterUserResponse{
-			User:         nil,
-			AccessToken:  "",
-			RefreshToken: "",
-			ErrorMessage: err.Error(),
-		}, nil
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	accessToken, err := s.generateAccessToken(user)
 	if err != nil {
@@ -200,12 +178,7 @@ func (s *AuthServer) RegisterUser(ctx context.Context, req *authpb.RegisterUserR
 			"error", err.Error(),
 			"duration_ms", duration.Milliseconds(),
 		)
-		return &authpb.RegisterUserResponse{
-			User:         nil,
-			AccessToken:  "",
-			RefreshToken: "",
-			ErrorMessage: err.Error(),
-		}, nil
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	duration := time.Since(start)
 	slog.Info("gRPC response",
@@ -237,10 +210,7 @@ func (s *AuthServer) RefreshAccessToken(ctx context.Context, req *authpb.Refresh
 			"error", err.Error(),
 			"duration_ms", duration.Milliseconds(),
 		)
-		return &authpb.RefreshTokenResponse{
-			AccessToken:  "",
-			ErrorMessage: err.Error(),
-		}, nil
+		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
 	duration := time.Since(start)
 	slog.Info("gRPC response",

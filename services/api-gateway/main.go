@@ -161,6 +161,7 @@ func main() {
 		})
 
 		for _, route := range loader.Routes() {
+			route := route // avoid closure capture of loop variable
 			upstream := getUpstream(route.Upstream)
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -285,14 +286,18 @@ func main() {
 	log.Info("shutting down gateway")
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutCancel()
+	// 1. Stop accepting new HTTP requests and drain in-flight.
 	if err := srv.Shutdown(shutCtx); err != nil {
 		log.Error("gateway shutdown error", "error", err)
 	}
-	// Close gRPC connection after HTTP server drains so in-flight auth RPCs finish.
+	// 2. Cancel context to stop background goroutines (route watcher, audit writer, auto-bind).
+	cancel()
+	// 3. Close auth gRPC connection after HTTP drains so in-flight auth RPCs finish.
 	if err := authMW.Close(); err != nil {
 		log.Error("auth middleware close error", "error", err)
 	}
-	cancel() // stop background goroutines
+	// 4. Close Redis (defer in main() handles this, but explicit for clarity in order).
+	// 5. Close DB (defer in main() handles this).
 	log.Info("gateway stopped")
 }
 

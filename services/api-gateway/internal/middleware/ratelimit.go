@@ -2,8 +2,9 @@ package middleware
 
 import (
 	"fmt"
+	"log/slog"
+	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -78,8 +79,12 @@ func (rl *RateLimiter) Limit(next http.Handler) http.Handler {
 		w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 
 		if err != nil {
-			// Redis error — fail open: log implicitly via the error being non-nil
-			// and allow the request rather than blocking all traffic.
+			// Redis error — fail open to avoid blocking all traffic, but log a warning.
+			slog.Warn("rate limiter Redis error; failing open",
+				"error", err,
+				"key", key,
+				"path", r.URL.Path,
+			)
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -94,17 +99,12 @@ func (rl *RateLimiter) Limit(next http.Handler) http.Handler {
 }
 
 func ipKey(r *http.Request) string {
-	ip := r.Header.Get("X-Forwarded-For")
-	if ip == "" {
+	// This gateway IS the edge — trust only r.RemoteAddr, never client-supplied
+	// X-Forwarded-For which can be trivially spoofed to bypass rate limiting.
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
 		ip = r.RemoteAddr
-	}
-	// Take only the first IP from a possible comma-separated list.
-	if idx := strings.Index(ip, ","); idx != -1 {
-		ip = strings.TrimSpace(ip[:idx])
-	}
-	// Strip port from RemoteAddr if present.
-	if idx := strings.LastIndex(ip, ":"); idx != -1 && strings.Contains(ip, ":") && !strings.Contains(ip, "[") {
-		ip = ip[:idx]
 	}
 	return fmt.Sprintf("ratelimit:ip:%s", ip)
 }
+

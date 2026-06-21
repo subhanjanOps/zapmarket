@@ -84,18 +84,25 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		s.logger.Warn("idempotency lock unavailable, proceeding without lock", "error", lockErr)
 	}
 	if !acquired && lockErr == nil {
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
 		deadline := time.Now().Add(lockTTL)
+	lockWait:
 		for time.Now().Before(deadline) {
-			time.Sleep(50 * time.Millisecond)
-			if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
-				var p domain.Payment
-				if json.Unmarshal(cached, &p) == nil {
-					s.logger.Info("idempotent replay after lock wait", "payment_id", p.ID)
-					return &p, nil
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-ticker.C:
+				if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+					var p domain.Payment
+					if json.Unmarshal(cached, &p) == nil {
+						s.logger.Info("idempotent replay after lock wait", "payment_id", p.ID)
+						return &p, nil
+					}
 				}
-			}
-			if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
-				break
+				if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
+					break lockWait
+				}
 			}
 		}
 	}
@@ -182,7 +189,7 @@ func (s *paymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID,
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "refund amount must be greater than zero")
 	}
 	if amount > payment.Amount {
-		amount = payment.Amount
+		return nil, pkgerrors.NewValidation("INVALID_REFUND_AMOUNT", fmt.Sprintf("refund amount %d exceeds payment amount %d", amount, payment.Amount))
 	}
 
 	if payment.GatewayTxnID == nil {
