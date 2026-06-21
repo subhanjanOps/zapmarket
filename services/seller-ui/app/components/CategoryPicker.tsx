@@ -375,11 +375,21 @@ export default function CategoryPicker({ value, onChange }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
-  // fetchFn for root combobox: API search, filter to roots only
+  // fetchFn for root combobox: load all roots once, filter in memory.
+  // Roots are bounded (~10-50), so one fetch + client-side search is correct.
+  // API search can't be used here because it returns all levels — subcategories
+  // would be filtered out by !parent_id, giving misleading empty results.
+  const rootsCacheRef = useRef<Category[]>([]);
   const rootFetchFn: FetchFn = useCallback(async (query, _offset) => {
-    const r = await getCategories({ search: query || undefined, limit: 100, offset: 0 });
-    const roots = r.categories.filter((c) => !c.parent_id);
-    return { items: roots, total: roots.length };
+    if (rootsCacheRef.current.length === 0) {
+      const r = await getCategories({ limit: 300, offset: 0 });
+      rootsCacheRef.current = r.categories.filter((c) => !c.parent_id);
+    }
+    const q = query.toLowerCase();
+    const filtered = q
+      ? rootsCacheRef.current.filter((c) => c.name.toLowerCase().includes(q))
+      : rootsCacheRef.current;
+    return { items: filtered, total: filtered.length };
   }, []);
 
   // fetchFn for subcategory combobox: paginated under selected root
