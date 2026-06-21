@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getToken } from "@/lib/auth";
 import {
   adminListUsers, adminUpdateUserRole, adminDeactivateUser,
   type AdminUser,
@@ -26,10 +25,8 @@ export default function UsersPage() {
   const [roleErr, setRoleErr]   = useState("");
 
   const load = useCallback(() => {
-    const token = getToken();
-    if (!token) return;
     setLoading(true);
-    adminListUsers(token, { search: search || undefined, role: role || undefined, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+    adminListUsers({ search: search || undefined, role: role || undefined, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
       .then((r) => { setRows(r.data); setTotal(r.total); })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -44,12 +41,11 @@ export default function UsersPage() {
   }
 
   async function saveRole() {
-    const token = getToken();
-    if (!token || !editing) return;
+    if (!editing) return;
     setSaving(true);
     setRoleErr("");
     try {
-      await adminUpdateUserRole(token, editing.id, newRole);
+      await adminUpdateUserRole(editing.id, newRole);
       setEditing(null);
       load();
     } catch (e: unknown) {
@@ -61,9 +57,7 @@ export default function UsersPage() {
 
   async function deactivate(u: AdminUser) {
     if (!await showConfirm(`Deactivate ${u.email}? This will immediately revoke their access.`)) return;
-    const token = getToken();
-    if (!token) return;
-    try { await adminDeactivateUser(token, u.id); load(); }
+    try { await adminDeactivateUser(u.id); load(); }
     catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Failed"); }
   }
 

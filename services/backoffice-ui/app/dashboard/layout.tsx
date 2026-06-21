@@ -17,7 +17,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { getToken, clearToken } from "@/lib/auth";
+import { isAuthenticated, clearToken } from "@/lib/auth";
 import { CommandPalette } from "@/app/components/CommandPalette";
 
 const THEMES = [
@@ -72,56 +72,15 @@ const BOTTOM_NAV: NavItem[] = [
   { href: "/dashboard/moderation", icon: ShieldCheck,     label: "Moderate" },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const router   = useRouter();
-  const pathname = usePathname();
-  const [theme, setTheme] = useState("enterprise-dark");
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const prevPath = useRef(pathname);
+interface SidebarProps {
+  theme: string;
+  isActive: (href: string) => boolean;
+  applyTheme: (t: string) => void;
+  signOut: () => void;
+}
 
-  useEffect(() => {
-    const token = getToken();
-    if (!token) { router.replace("/login"); return; }
-    const saved = localStorage.getItem("bo_theme") ?? "enterprise-dark";
-    setTheme(saved);
-    document.documentElement.setAttribute("data-theme", saved);
-  }, [router]);
-
-  useEffect(() => {
-    if (prevPath.current !== pathname) {
-      prevPath.current = pathname;
-      setDrawerOpen(false);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawerOpen(false); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    document.body.style.overflow = drawerOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [drawerOpen]);
-
-  function applyTheme(t: string) {
-    setTheme(t);
-    localStorage.setItem("bo_theme", t);
-    document.documentElement.setAttribute("data-theme", t);
-  }
-
-  function signOut() {
-    clearToken();
-    router.push("/login");
-  }
-
-  function isActive(href: string) {
-    if (href === "/dashboard") return pathname === "/dashboard";
-    return pathname.startsWith(href);
-  }
-
-  const SidebarContent = () => (
+function SidebarContent({ theme, isActive, applyTheme, signOut }: SidebarProps) {
+  return (
     <>
       {/* Wordmark */}
       <div style={{
@@ -243,6 +202,57 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     </>
   );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router   = useRouter();
+  const pathname = usePathname();
+  const [theme, setTheme] = useState("enterprise-dark");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const prevPath = useRef(pathname);
+
+  useEffect(() => {
+    if (!isAuthenticated()) { router.replace("/login"); return; }
+    const saved = localStorage.getItem("bo_theme") ?? "enterprise-dark";
+    setTheme(saved);
+    document.documentElement.setAttribute("data-theme", saved);
+  }, [router]);
+
+  useEffect(() => {
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      setDrawerOpen(false);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawerOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = drawerOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [drawerOpen]);
+
+  function applyTheme(t: string) {
+    setTheme(t);
+    localStorage.setItem("bo_theme", t);
+    document.documentElement.setAttribute("data-theme", t);
+  }
+
+  async function signOut() {
+    await clearToken();
+    router.push("/login");
+  }
+
+  function isActive(href: string) {
+    if (href === "/dashboard") return pathname === "/dashboard";
+    return pathname.startsWith(href);
+  }
+
+  const sidebarProps: SidebarProps = { theme, isActive, applyTheme, signOut };
 
   return (
     <div style={{ display: "flex", minHeight: "100dvh" }}>
@@ -261,7 +271,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         overflowY: "auto",
         zIndex: 10,
       }}>
-        <SidebarContent />
+        <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* ── Mobile Top Bar ─────────────────────────────────────────────────── */}
@@ -355,7 +365,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <X size={16} />
           </button>
         </div>
-        <SidebarContent />
+        <SidebarContent {...sidebarProps} />
       </div>
 
       {/* ── Main ───────────────────────────────────────────────────────────── */}

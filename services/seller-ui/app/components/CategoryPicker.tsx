@@ -263,6 +263,7 @@ interface Props {
 export default function CategoryPicker({ value, onChange }: Props) {
   const [roots, setRoots]             = useState<Category[]>([]);
   const [rootsLoading, setRootsLoading] = useState(true);
+  const [rootsError, setRootsError]   = useState("");
   const [selectedRoot, setSelectedRoot] = useState<Category | null>(null);
 
   const [subs, setSubs]               = useState<Category[]>([]);
@@ -272,9 +273,10 @@ export default function CategoryPicker({ value, onChange }: Props) {
   // Load all root categories once
   useEffect(() => {
     setRootsLoading(true);
+    setRootsError("");
     getCategories({ limit: 300, offset: 0 })
       .then((r) => setRoots(r.categories.filter((c) => !c.parent_id)))
-      .catch(() => {})
+      .catch((e: unknown) => setRootsError(e instanceof Error ? e.message : "Failed to load categories"))
       .finally(() => setRootsLoading(false));
   }, []);
 
@@ -324,6 +326,11 @@ export default function CategoryPicker({ value, onChange }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+      {rootsError && (
+        <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--danger)" }}>
+          {rootsError}
+        </p>
+      )}
       {/* Level 1 — root/parent */}
       <Combobox
         label="Category"

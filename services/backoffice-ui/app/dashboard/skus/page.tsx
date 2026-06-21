@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
-import { getToken } from "@/lib/auth";
 import { getSkus, updateSku, deleteSku, type SKU } from "@/lib/api";
 import { TableSkeleton } from "@/app/components/Skeleton";
 import { showAlert, showConfirm } from "@/app/components/Dialog";
@@ -26,13 +25,12 @@ export default function SkusPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const token = getToken() ?? undefined;
     getSkus({
       product_id: productId || undefined,
       sku_code: skuCode || undefined,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
-    }, token)
+    })
       .then((r) => { setRows(r.data); setTotal(r.total); })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -41,11 +39,9 @@ export default function SkusPage() {
   useEffect(() => { load(); }, [load]);
 
   async function toggleActive(s: SKU) {
-    const token = getToken();
-    if (!token) return;
     setToggling(s.id);
     try {
-      await updateSku(token, s.id, { is_active: !s.is_active });
+      await updateSku(s.id, { is_active: !s.is_active });
       load();
     } catch (e: unknown) {
       await showAlert(e instanceof Error ? e.message : "Update failed");
@@ -56,10 +52,8 @@ export default function SkusPage() {
 
   async function handleDelete(id: string) {
     if (!await showConfirm("Delete this SKU?")) return;
-    const token = getToken();
-    if (!token) return;
     setDeleting(id);
-    try { await deleteSku(token, id); load(); }
+    try { await deleteSku(id); load(); }
     catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Delete failed"); }
     finally { setDeleting(null); }
   }

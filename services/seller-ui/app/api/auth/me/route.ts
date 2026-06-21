@@ -7,11 +7,21 @@ export async function GET(req: NextRequest) {
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const upstream = await fetch(`${GW}/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  const data = await upstream.json();
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${GW}/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return NextResponse.json({ error: "Gateway unavailable" }, { status: 502 });
+  }
+  let data: Record<string, unknown>;
+  try {
+    data = await upstream.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid upstream response" }, { status: 502 });
+  }
   if (!upstream.ok) {
     return NextResponse.json(
       { error: data.error ?? `HTTP ${upstream.status}` },

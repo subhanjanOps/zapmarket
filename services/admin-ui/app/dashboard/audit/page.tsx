@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { getAudit, blockIP, AuditEntry } from "@/lib/api";
 import { RefreshCw, Search, Play, Square, ShieldOff } from "lucide-react";
 import { SkeletonTableRows } from "@/app/components/Skeleton";
@@ -25,6 +25,7 @@ export default function AuditPage() {
   const [searchKey, setSearchKey] = useState(0);
   const [tailing, setTailing] = useState(false);
   const [blockingIP, setBlockingIP] = useState<string | null>(null);
+  const tailFailsRef = useRef(0);
 
   const [filterEvent, setFilterEvent] = useState("");
   const [filterUser, setFilterUser] = useState("");
@@ -67,21 +68,34 @@ export default function AuditPage() {
     return () => { cancelled = true; };
   }, [searchKey, appliedFilters]);
 
+  const stopTailing = useCallback(() => setTailing(false), []);
+
   // Live tail: polls every 5s; reads topIdRef to avoid stale closure
   useEffect(() => {
     if (!tailing) return;
+    tailFailsRef.current = 0;
     let cancelled = false;
     const id = setInterval(async () => {
       try {
         const fresh = await getAudit({ after_id: topIdRef.current, limit: 50 });
         if (!cancelled && fresh.length > 0) {
+          tailFailsRef.current = 0;
           topIdRef.current = fresh[0].id;
           setEntries((prev) => [...fresh, ...prev].slice(0, ENTRY_CAP));
         }
-      } catch { /* silent during tail */ }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          tailFailsRef.current += 1;
+          if (tailFailsRef.current >= 3) {
+            clearInterval(id);
+            stopTailing();
+            setError(e instanceof Error ? e.message : "Live tail failed — stopped after 3 errors");
+          }
+        }
+      }
     }, 5_000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [tailing]); // intentionally excludes `entries` — topIdRef carries the latest value
+  }, [tailing, stopTailing]); // intentionally excludes `entries` — topIdRef carries the latest value
 
   function handleSearch() {
     setAppliedFilters({ event: filterEvent, user_id: filterUser, from: filterFrom, to: filterTo, limit });
@@ -147,7 +161,7 @@ export default function AuditPage() {
         </div>
         <div style={{ width: "5rem" }}>
           <label className="form-label">Limit</label>
-          <input className="input" type="number" value={limit} min={1} max={1000} onChange={(e) => setLimit(Number(e.target.value))} />
+          <input className="input" type="number" value={limit} min={1} max={100} onChange={(e) => setLimit(Number(e.target.value))} />
         </div>
         <button className="btn btn-primary" onClick={handleSearch}>
           <Search size={14} /> Search

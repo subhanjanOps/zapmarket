@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getToken } from "@/lib/auth";
 import { adminListSellers, adminUpdateSellerStatus, type AdminUser } from "@/lib/api";
 import { TableSkeleton } from "@/app/components/Skeleton";
 import { showAlert } from "@/app/components/Dialog";
@@ -25,10 +24,8 @@ export default function SellersPage() {
   const [pendingCount, setPendingCount] = useState(0);
 
   const load = useCallback(() => {
-    const token = getToken();
-    if (!token) return;
     setLoading(true);
-    adminListSellers(token, filter || undefined, PAGE_SIZE, page * PAGE_SIZE)
+    adminListSellers(filter || undefined, PAGE_SIZE, page * PAGE_SIZE)
       .then((r) => { setRows(r.data); setTotal(r.total); })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -38,19 +35,15 @@ export default function SellersPage() {
 
   // separate count for pending badge
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-    adminListSellers(token, "PENDING", 1, 0)
+    adminListSellers("PENDING", 1, 0)
       .then((r) => setPendingCount(Number(r.total)))
       .catch(() => {});
   }, []);
 
   async function setStatus(u: AdminUser, status: string) {
-    const token = getToken();
-    if (!token) return;
     setUpdating(u.id);
     try {
-      await adminUpdateSellerStatus(token, u.id, status);
+      await adminUpdateSellerStatus(u.id, status);
       load();
       if (status === "APPROVED" || u.seller_status === "PENDING") {
         setPendingCount((n) => Math.max(0, n - 1));

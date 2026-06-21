@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Tag, Package, Layers, Users, Store, ClipboardList, ShieldCheck, ChevronRight } from "lucide-react";
-import { getToken } from "@/lib/auth";
 import { getProducts, getCategories, getSkus } from "@/lib/api";
 
 interface Stat { label: string; value: number | "—"; href: string; accent?: boolean }
@@ -30,12 +29,11 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const token = getToken() ?? undefined;
     Promise.allSettled([
       getCategories(),
-      getProducts({ limit: 1 }, token),
-      getProducts({ status: "ACTIVE", limit: 1 }, token),
-      getSkus({ limit: 1 }, token),
+      getProducts({ limit: 1 }),
+      getProducts({ status: "ACTIVE", limit: 1 }),
+      getSkus({ limit: 1 }),
     ]).then(([cats, all, active, skus]) => {
       setStats([
         {

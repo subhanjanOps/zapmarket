@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
-import { getToken } from "@/lib/auth";
 import { getProducts, getCategories, createProduct, updateProduct, deleteProduct, type Product, type Category } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
@@ -62,14 +61,13 @@ export default function ProductsPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const token = getToken() ?? undefined;
     getProducts({
       search: search || undefined,
       status: status || undefined,
       category_id: categoryId || undefined,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
-    }, token)
+    })
       .then((r) => { setRows(r.data); setTotal(r.total); })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -83,11 +81,9 @@ export default function ProductsPage() {
   }
 
   async function toggleStatus(p: Product) {
-    const token = getToken();
-    if (!token) return;
     const next = p.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE";
     try {
-      await updateProduct(token, p.id, { status: next });
+      await updateProduct(p.id, { status: next });
       load();
     } catch (e: unknown) {
       await showAlert(e instanceof Error ? e.message : "Update failed");
@@ -96,10 +92,8 @@ export default function ProductsPage() {
 
   async function handleDelete(id: string) {
     if (!await showConfirm("Delete this product?")) return;
-    const token = getToken();
-    if (!token) return;
     setDeleting(id);
-    try { await deleteProduct(token, id); load(); }
+    try { await deleteProduct(id); load(); }
     catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Delete failed"); }
     finally { setDeleting(null); }
   }
@@ -118,14 +112,13 @@ export default function ProductsPage() {
             filename="products.csv"
             headers={PROD_EXPORT_HEADERS}
             fetchAll={async () => {
-              const token = getToken() ?? undefined;
               const PAGE = 100;
-              const first = await getProducts({ limit: PAGE, offset: 0 }, token);
+              const first = await getProducts({ limit: PAGE, offset: 0 });
               const all: Product[] = [...first.data];
               const totalCount = first.total;
               let offset = PAGE;
               while (offset < totalCount) {
-                const r = await getProducts({ limit: PAGE, offset }, token);
+                const r = await getProducts({ limit: PAGE, offset });
                 all.push(...r.data);
                 offset += PAGE;
               }
@@ -137,9 +130,7 @@ export default function ProductsPage() {
             expectedHeaders={PROD_IMPORT_HEADERS}
             templateRow={PROD_TEMPLATE}
             importRow={async (row) => {
-              const token = getToken();
-              if (!token) throw new Error("Not authenticated");
-              await createProduct(token, {
+              await createProduct({
                 name: row.name,
                 slug: row.slug,
                 category_id: row.category_id,

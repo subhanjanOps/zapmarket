@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { getToken } from "@/lib/auth";
 import {
   getCategories, createCategory, updateCategory, deleteCategory,
   type Category,
@@ -227,12 +226,10 @@ export default function CategoriesPage() {
 
   async function handleSave() {
     setError(""); setSaving(true);
-    const token = getToken();
-    if (!token) { setError("Not authenticated"); setSaving(false); return; }
     const body = { name: form.name.trim(), slug: form.slug.trim(), parent_id: form.parent_id || undefined };
     try {
-      if (modal === "create") await createCategory(token, body);
-      else if (editing) await updateCategory(token, editing.id, body);
+      if (modal === "create") await createCategory(body);
+      else if (editing) await updateCategory(editing.id, body);
       setModal(null); load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -241,10 +238,8 @@ export default function CategoriesPage() {
 
   async function handleDelete(id: string) {
     if (!await showConfirm("Delete this category?")) return;
-    const token = getToken();
-    if (!token) return;
     setDeleting(id);
-    try { await deleteCategory(token, id); load(); }
+    try { await deleteCategory(id); load(); }
     catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Delete failed"); }
     finally { setDeleting(null); }
   }
@@ -259,12 +254,10 @@ export default function CategoriesPage() {
       : `Delete ${ids.length} selected categor${ids.length === 1 ? "y" : "ies"}?`;
     if (!await showConfirm(msg)) return;
 
-    const token = getToken();
-    if (!token) return;
     setBulkDeleting(true);
     const errors: string[] = [];
     for (const id of ids) {
-      try { await deleteCategory(token, id); }
+      try { await deleteCategory(id); }
       catch (e: unknown) {
         const name = rows.find((r) => r.id === id)?.name ?? id.slice(0, 8);
         errors.push(`${name}: ${e instanceof Error ? e.message : "failed"}`);

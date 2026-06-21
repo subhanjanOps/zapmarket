@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
-import { saveToken } from "@/lib/auth";
 
 const HIGHLIGHTS = [
   { label: "Products", value: "12,481" },
@@ -29,8 +28,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const token = await login(email, password);
-      saveToken(token);
+      await login(email, password);
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getToken } from "@/lib/auth";
 import {
   getProduct, getSkus, getImages, updateProduct, deleteImage,
   type Product, type SKU, type ProductImage,
@@ -23,27 +22,25 @@ export default function ProductDetailPage() {
   const [statusErr, setStatusErr]  = useState("");
 
   useEffect(() => {
-    const token = getToken() ?? undefined;
     Promise.all([
       getProduct(id),
-      getSkus({ product_id: id }, token),
+      getSkus({ product_id: id }),
       getImages(id),
     ]).then(([p, s, img]) => {
       setProduct(p);
       setStatusSel(p.status);
       setSkus(s.data);
       setImages(img.data);
-    }).catch(console.error)
+    }).catch((e: unknown) => { setStatusErr(e instanceof Error ? e.message : "Failed to load"); })
       .finally(() => setLoading(false));
   }, [id]);
 
   async function saveStatus() {
-    const token = getToken();
-    if (!token || !product) return;
+    if (!product) return;
     setSaving(true);
     setStatusErr("");
     try {
-      const updated = await updateProduct(token, id, { status: statusSel });
+      const updated = await updateProduct(id, { status: statusSel });
       setProduct(updated);
     } catch (e: unknown) {
       setStatusErr(e instanceof Error ? e.message : "Update failed");
@@ -54,10 +51,8 @@ export default function ProductDetailPage() {
 
   async function handleDeleteImage(imageId: string) {
     if (!await showConfirm("Remove this image?")) return;
-    const token = getToken();
-    if (!token) return;
     try {
-      await deleteImage(token, id, imageId);
+      await deleteImage(id, imageId);
       setImages((imgs) => imgs.filter((i) => i.id !== imageId));
     } catch (e: unknown) {
       await showAlert(e instanceof Error ? e.message : "Delete failed");

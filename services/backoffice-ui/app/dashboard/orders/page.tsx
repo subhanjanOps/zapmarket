@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { getToken } from "@/lib/auth";
 import { adminListOrders, adminCancelOrder, type AdminOrder } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
@@ -28,10 +27,8 @@ export default function OrdersPage() {
   const [cancelling, setCancelling] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    const token = getToken();
-    if (!token) return;
     setLoading(true);
-    adminListOrders(token, {
+    adminListOrders({
       status: status || undefined,
       user_id: userId || undefined,
       from: from || undefined,
@@ -48,10 +45,8 @@ export default function OrdersPage() {
 
   async function cancel(id: string) {
     if (!await showConfirm("Force-cancel this order?")) return;
-    const token = getToken();
-    if (!token) return;
     setCancelling(id);
-    try { await adminCancelOrder(token, id); load(); }
+    try { await adminCancelOrder(id); load(); }
     catch (e: unknown) { await showAlert(e instanceof Error ? e.message : "Failed"); }
     finally { setCancelling(null); }
   }

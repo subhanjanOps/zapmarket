@@ -1,12 +1,13 @@
 "use client";
 
-const KEY = "bo_token";
+// bo_auth_hint is a non-httpOnly cookie set by the login BFF alongside the
+// httpOnly bo_token. It lets client components check login state without
+// accessing the actual JWT (which is inaccessible to JS).
+export const isAuthenticated = (): boolean => {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split(";").some((c) => c.trim().startsWith("bo_auth_hint="));
+};
 
-export const saveToken = (t: string) => {
-  if (t && t !== "undefined" && t !== "null") localStorage.setItem(KEY, t);
+export const clearToken = async (): Promise<void> => {
+  await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
 };
-export const getToken = (): string | null => {
-  const t = localStorage.getItem(KEY);
-  return t && t !== "undefined" && t !== "null" ? t : null;
-};
-export const clearToken = () => localStorage.removeItem(KEY);

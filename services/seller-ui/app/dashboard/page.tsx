@@ -31,7 +31,6 @@ export default function DashboardPage() {
           setProductTotal(all.total);
           setActiveCount(active.total);
           setDraftCount(draft.total);
-          setProducts(or.orders ? [] : []);
           setOrders(or.orders ?? []);
           setLoading(false);
         }

@@ -1,7 +1,8 @@
-export const GW = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+// All authenticated requests proxy through /api/proxy/[...path] which reads
+// the httpOnly bo_token cookie and adds Authorization server-side.
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${GW}${path}`, {
+  const res = await fetch(`/api/proxy${path}`, {
     cache: "no-store",
     ...opts,
     headers: { "Content-Type": "application/json", ...opts.headers },
@@ -15,18 +16,20 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-function auth(token: string): Record<string, string> {
-  return { Authorization: `Bearer ${token}` };
-}
-
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
-export async function login(email: string, password: string): Promise<string> {
-  const r = await req<{ access_token: string }>("/v1/auth/login", {
+export async function login(email: string, password: string): Promise<void> {
+  const res = await fetch("/api/auth/login", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
+    cache: "no-store",
   });
-  return r.access_token;
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.error ?? j.message ?? msg; } catch { /* */ }
+    throw new Error(msg);
+  }
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -84,8 +87,8 @@ interface PageEnvelope<T> {
   page_size: number;
 }
 
-async function listReq<T>(path: string, token?: string): Promise<PageEnvelope<T>> {
-  const r = await req<PageEnvelope<T>>(path, token ? { headers: auth(token) } : {});
+async function listReq<T>(path: string): Promise<PageEnvelope<T>> {
+  const r = await req<PageEnvelope<T>>(path);
   return { ...r, data: r.data ?? [] };
 }
 
@@ -112,29 +115,26 @@ export const getCategory = (id: string) =>
   req<{ data: Category }>(`/api/v1/categories/${id}`).then((r) => r.data);
 
 export const createCategory = (
-  token: string,
   body: { name: string; slug: string; parent_id?: string },
 ) => req<{ data: Category }>("/api/v1/categories", {
-  method: "POST", body: JSON.stringify(body), headers: auth(token),
+  method: "POST", body: JSON.stringify(body),
 }).then((r) => r.data);
 
 export const bulkCreateCategories = (
-  token: string,
   categories: { name: string; slug: string; parent_name?: string }[],
 ) => req<{ data: Category[] }>("/api/v1/categories/bulk", {
-  method: "POST", body: JSON.stringify({ categories }), headers: auth(token),
+  method: "POST", body: JSON.stringify({ categories }),
 }).then((r) => r.data ?? []);
 
 export const updateCategory = (
-  token: string,
   id: string,
   body: { name: string; slug: string; parent_id?: string },
 ) => req<{ data: Category }>(`/api/v1/categories/${id}`, {
-  method: "PUT", body: JSON.stringify(body), headers: auth(token),
+  method: "PUT", body: JSON.stringify(body),
 }).then((r) => r.data);
 
-export const deleteCategory = (token: string, id: string) =>
-  req(`/api/v1/categories/${id}`, { method: "DELETE", headers: auth(token) });
+export const deleteCategory = (id: string) =>
+  req(`/api/v1/categories/${id}`, { method: "DELETE" });
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
@@ -149,33 +149,31 @@ export interface ProductParams {
   offset?: number;
 }
 
-export const getProducts = (params: ProductParams = {}, token?: string) => {
+export const getProducts = (params: ProductParams = {}) => {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
   const qs = q.toString() ? `?${q}` : "";
-  return listReq<Product>(`/api/v1/products${qs}`, token);
+  return listReq<Product>(`/api/v1/products${qs}`);
 };
 
 export const getProduct = (id: string) =>
   req<{ data: Product }>(`/api/v1/products/${id}`).then((r) => r.data);
 
 export const createProduct = (
-  token: string,
   body: { name: string; slug: string; category_id: string; seller_id: string; description?: string; status?: string },
 ) => req<{ data: Product }>("/api/v1/products", {
-  method: "POST", body: JSON.stringify(body), headers: auth(token),
+  method: "POST", body: JSON.stringify(body),
 }).then((r) => r.data);
 
 export const updateProduct = (
-  token: string,
   id: string,
   body: Partial<{ name: string; slug: string; description: string; category_id: string; status: string }>,
 ) => req<{ data: Product }>(`/api/v1/products/${id}`, {
-  method: "PUT", body: JSON.stringify(body), headers: auth(token),
+  method: "PUT", body: JSON.stringify(body),
 }).then((r) => r.data);
 
-export const deleteProduct = (token: string, id: string) =>
-  req(`/api/v1/products/${id}`, { method: "DELETE", headers: auth(token) });
+export const deleteProduct = (id: string) =>
+  req(`/api/v1/products/${id}`, { method: "DELETE" });
 
 // ── SKUs ──────────────────────────────────────────────────────────────────────
 
@@ -187,18 +185,17 @@ export interface SKUParams {
   offset?: number;
 }
 
-export const getSkus = (params: SKUParams = {}, token?: string) => {
+export const getSkus = (params: SKUParams = {}) => {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
   const qs = q.toString() ? `?${q}` : "";
-  return listReq<SKU>(`/api/v1/skus${qs}`, token);
+  return listReq<SKU>(`/api/v1/skus${qs}`);
 };
 
 export const getSku = (id: string) =>
   req<{ data: SKU }>(`/api/v1/skus/${id}`).then((r) => r.data);
 
 export const createSku = (
-  token: string,
   body: {
     product_id: string;
     sku_code: string;
@@ -210,11 +207,10 @@ export const createSku = (
     variant_attrs?: Record<string, unknown>;
   },
 ) => req<{ data: SKU }>("/api/v1/skus", {
-  method: "POST", body: JSON.stringify(body), headers: auth(token),
+  method: "POST", body: JSON.stringify(body),
 }).then((r) => r.data);
 
 export const updateSku = (
-  token: string,
   id: string,
   body: Partial<{
     sku_code: string;
@@ -226,11 +222,11 @@ export const updateSku = (
     variant_attrs: Record<string, unknown>;
   }>,
 ) => req<{ data: SKU }>(`/api/v1/skus/${id}`, {
-  method: "PUT", body: JSON.stringify(body), headers: auth(token),
+  method: "PUT", body: JSON.stringify(body),
 }).then((r) => r.data);
 
-export const deleteSku = (token: string, id: string) =>
-  req(`/api/v1/skus/${id}`, { method: "DELETE", headers: auth(token) });
+export const deleteSku = (id: string) =>
+  req(`/api/v1/skus/${id}`, { method: "DELETE" });
 
 // ── Admin: Users ─────────────────────────────────────────────────────────────
 
@@ -251,35 +247,35 @@ export interface UserParams {
   offset?: number;
 }
 
-export const adminListUsers = (token: string, params: UserParams = {}) => {
+export const adminListUsers = (params: UserParams = {}) => {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
   const qs = q.toString() ? `?${q}` : "";
-  return listReq<AdminUser>(`/v1/admin/users${qs}`, token);
+  return listReq<AdminUser>(`/v1/admin/users${qs}`);
 };
 
-export const adminGetUser = (token: string, id: string) =>
-  req<{ data: AdminUser }>(`/v1/admin/users/${id}`, { headers: auth(token) }).then((r) => r.data);
+export const adminGetUser = (id: string) =>
+  req<{ data: AdminUser }>(`/v1/admin/users/${id}`).then((r) => r.data);
 
-export const adminUpdateUserRole = (token: string, id: string, role: string) =>
+export const adminUpdateUserRole = (id: string, role: string) =>
   req<{ data: AdminUser }>(`/v1/admin/users/${id}/role`, {
-    method: "PUT", body: JSON.stringify({ role }), headers: auth(token),
+    method: "PUT", body: JSON.stringify({ role }),
   }).then((r) => r.data);
 
-export const adminDeactivateUser = (token: string, id: string) =>
-  req(`/v1/admin/users/${id}`, { method: "DELETE", headers: auth(token) });
+export const adminDeactivateUser = (id: string) =>
+  req(`/v1/admin/users/${id}`, { method: "DELETE" });
 
 // ── Admin: Sellers ────────────────────────────────────────────────────────────
 
-export const adminListSellers = (token: string, status?: string, limit = 20, offset = 0) => {
+export const adminListSellers = (status?: string, limit = 20, offset = 0) => {
   const q = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (status) q.set("status", status);
-  return listReq<AdminUser>(`/v1/admin/sellers?${q}`, token);
+  return listReq<AdminUser>(`/v1/admin/sellers?${q}`);
 };
 
-export const adminUpdateSellerStatus = (token: string, id: string, status: string) =>
+export const adminUpdateSellerStatus = (id: string, status: string) =>
   req(`/v1/admin/sellers/${id}/status`, {
-    method: "PATCH", body: JSON.stringify({ status }), headers: auth(token),
+    method: "PATCH", body: JSON.stringify({ status }),
   });
 
 // ── Admin: Orders ─────────────────────────────────────────────────────────────
@@ -316,27 +312,23 @@ export interface AdminOrderParams {
   offset?: number;
 }
 
-export const adminListOrders = (token: string, params: AdminOrderParams = {}) => {
+export const adminListOrders = (params: AdminOrderParams = {}) => {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
   const qs = q.toString() ? `?${q}` : "";
-  return listReq<AdminOrder>(`/v1/admin/orders${qs}`, token);
+  return listReq<AdminOrder>(`/v1/admin/orders${qs}`);
 };
 
-export const adminGetOrder = (token: string, id: string) =>
-  req<{ data: AdminOrder & { items: OrderItem[] } }>(`/v1/admin/orders/${id}`, {
-    headers: auth(token),
-  }).then((r) => r.data);
+export const adminGetOrder = (id: string) =>
+  req<{ data: AdminOrder & { items: OrderItem[] } }>(`/v1/admin/orders/${id}`).then((r) => r.data);
 
-export const adminCancelOrder = (token: string, id: string) =>
-  req(`/v1/admin/orders/${id}/cancel`, { method: "POST", headers: auth(token) });
+export const adminCancelOrder = (id: string) =>
+  req(`/v1/admin/orders/${id}/cancel`, { method: "POST" });
 
 // ── Images ────────────────────────────────────────────────────────────────────
 
 export const getImages = (productId: string) =>
   listReq<ProductImage>(`/api/v1/products/${productId}/images`);
 
-export const deleteImage = (token: string, productId: string, imageId: string) =>
-  req(`/api/v1/products/${productId}/images/${imageId}`, {
-    method: "DELETE", headers: auth(token),
-  });
+export const deleteImage = (productId: string, imageId: string) =>
+  req(`/api/v1/products/${productId}/images/${imageId}`, { method: "DELETE" });

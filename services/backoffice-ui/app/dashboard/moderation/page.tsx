@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { getToken } from "@/lib/auth";
 import { getProducts, updateProduct, type Product } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import { TableSkeleton } from "@/app/components/Skeleton";
@@ -19,8 +18,7 @@ export default function ModerationPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const token = getToken() ?? undefined;
-    getProducts({ status: "DRAFT", limit: PAGE_SIZE, offset: page * PAGE_SIZE }, token)
+    getProducts({ status: "DRAFT", limit: PAGE_SIZE, offset: page * PAGE_SIZE })
       .then((r) => { setRows(r.data); setTotal(r.total); })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -29,11 +27,9 @@ export default function ModerationPage() {
   useEffect(() => { load(); }, [load]);
 
   async function approve(p: Product) {
-    const token = getToken();
-    if (!token) return;
     setUpdating(p.id);
     try {
-      await updateProduct(token, p.id, { status: "ACTIVE" });
+      await updateProduct(p.id, { status: "ACTIVE" });
       load();
     } catch (e: unknown) {
       await showAlert(e instanceof Error ? e.message : "Failed");
@@ -43,11 +39,9 @@ export default function ModerationPage() {
   }
 
   async function reject(p: Product) {
-    const token = getToken();
-    if (!token) return;
     setUpdating(p.id);
     try {
-      await updateProduct(token, p.id, { status: "ARCHIVED" });
+      await updateProduct(p.id, { status: "ARCHIVED" });
       load();
     } catch (e: unknown) {
       await showAlert(e instanceof Error ? e.message : "Failed");

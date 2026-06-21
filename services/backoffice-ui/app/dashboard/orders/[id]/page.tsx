@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { getToken } from "@/lib/auth";
 import { adminGetOrder, adminCancelOrder, type AdminOrder, type OrderItem } from "@/lib/api";
 import StatusBadge from "@/app/components/StatusBadge";
 import Skeleton from "@/app/components/Skeleton";
@@ -23,10 +22,8 @@ export default function OrderDetailPage() {
   const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
     setLoading(true);
-    adminGetOrder(token, id)
+    adminGetOrder(id)
       .then(setOrder)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -34,13 +31,10 @@ export default function OrderDetailPage() {
 
   async function cancel() {
     if (!order || !await showConfirm("Force-cancel this order?")) return;
-    const token = getToken();
-    if (!token) return;
     setCancelling(true);
     try {
-      await adminCancelOrder(token, order.id);
-      const token2 = getToken()!;
-      const refreshed = await adminGetOrder(token2, id);
+      await adminCancelOrder(order.id);
+      const refreshed = await adminGetOrder(id);
       setOrder(refreshed);
     } catch (e: unknown) {
       await showAlert(e instanceof Error ? e.message : "Failed");
