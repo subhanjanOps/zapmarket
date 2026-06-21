@@ -35,9 +35,10 @@ type PaymentRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.Payment, error)
 
 	// CreateRefund inserts a refund row, updates the parent payment's
-	// status (`refunded` or `partially_refunded`), and writes the
-	// reversing ledger entries — all in one DB transaction.
-	CreateRefund(ctx context.Context, refund *domain.Refund, newPaymentStatus domain.PaymentStatus, entries []*domain.LedgerEntry) error
+	// status (`refunded` or `partially_refunded`), writes the reversing
+	// ledger entries, and publishes a `payment.refunded` outbox event —
+	// all in one DB transaction. userID is required for the outbox payload.
+	CreateRefund(ctx context.Context, refund *domain.Refund, userID uuid.UUID, newPaymentStatus domain.PaymentStatus, entries []*domain.LedgerEntry) error
 }
 
 // ChargeResult is what a PaymentGateway returns for a successful charge.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -365,8 +366,14 @@ func (h *Handler) getStats(w http.ResponseWriter, r *http.Request) {
 
 	// Active / total routes
 	var activeRoutes, totalRoutes int
-	_ = h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gateway_routes`).Scan(&totalRoutes)
-	_ = h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gateway_routes WHERE enabled = true`).Scan(&activeRoutes)
+	if err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gateway_routes`).Scan(&totalRoutes); err != nil {
+		slog.Warn("getStats: failed to count total routes", "error", err)
+		totalRoutes = -1
+	}
+	if err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gateway_routes WHERE enabled = true`).Scan(&activeRoutes); err != nil {
+		slog.Warn("getStats: failed to count active routes", "error", err)
+		activeRoutes = -1
+	}
 
 	// Live instances
 	services, _ := h.reg.AllInstances(ctx)

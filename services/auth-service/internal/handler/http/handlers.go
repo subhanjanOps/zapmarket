@@ -37,96 +37,52 @@ import (
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 )
 
-// LoggingMiddleware logs request and response details
+// statusOnlyWriter captures just the status code for logging — never the body,
+// which may contain tokens (engineering-standards: "Never log tokens").
+type statusOnlyWriter struct {
+	http.ResponseWriter
+	statusCode  int
+	wroteHeader bool
+}
+
+func (w *statusOnlyWriter) WriteHeader(code int) {
+	w.statusCode = code
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusOnlyWriter) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+// LoggingMiddleware logs method, path, status, and latency. Never logs the
+// response body — it may contain tokens or PII.
 func (h *Handler) LoggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Create a custom response writer to capture status code
-		lrw := &loggingResponseWriter{
-			ResponseWriter: w,
-			statusCode:     http.StatusOK,
-			body:           &strings.Builder{},
-		}
+		authenticated := r.Header.Get("Authorization") != ""
+		sw := &statusOnlyWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
-		// Log request
-		h.logRequest(r)
+		slog.Info("HTTP request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"authenticated", authenticated,
+			"remote_addr", r.RemoteAddr,
+		)
 
-		// Process request
-		next(lrw, r)
+		next(sw, r)
 
-		// Log response
-		h.logResponse(r, lrw.statusCode, time.Since(start), lrw.body.String())
+		slog.Info("HTTP response",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", sw.statusCode,
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
 	}
-}
-
-// loggingResponseWriter wraps http.ResponseWriter to capture status code and body
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	statusCode  int
-	body        *strings.Builder
-	wroteHeader bool
-}
-
-// WriteHeader captures the status code
-func (lrw *loggingResponseWriter) WriteHeader(code int) {
-	lrw.statusCode = code
-	lrw.wroteHeader = true
-	lrw.ResponseWriter.WriteHeader(code)
-}
-
-// Write captures the response body
-func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
-	if !lrw.wroteHeader {
-		lrw.WriteHeader(http.StatusOK)
-	}
-	lrw.body.Write(b)
-	return lrw.ResponseWriter.Write(b)
-}
-
-// logRequest logs incoming request details
-func (h *Handler) logRequest(r *http.Request) {
-	var userID string
-
-	// Try to extract user ID from JWT token if present
-	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
-		parts := strings.Split(authHeader, " ")
-		if len(parts) == 2 && parts[0] == "Bearer" {
-			// token := parts[1]
-			// We could validate the token here to get user ID, but for simplicity,
-			// we'll just note that auth is present. In a real implementation,
-			// you might want to extract claims without full validation for logging.
-			userID = "[authenticated]"
-		}
-	}
-
-	slog.Info("HTTP request",
-		"method", r.Method,
-		"path", r.URL.Path,
-		"query", r.URL.RawQuery,
-		"user_id", userID,
-		"remote_addr", r.RemoteAddr,
-		"user_agent", r.UserAgent(),
-		"referer", r.Referer(),
-	)
-}
-
-// logResponse logs response details
-func (h *Handler) logResponse(r *http.Request, status int, duration time.Duration, body string) {
-	// Truncate body if too long for logging
-	maxBodyLen := 500
-	loggedBody := body
-	if len(body) > maxBodyLen {
-		loggedBody = body[:maxBodyLen] + "... (truncated)"
-	}
-
-	slog.Info("HTTP response",
-		"method", r.Method,
-		"path", r.URL.Path,
-		"status", status,
-		"duration_ms", duration.Milliseconds(),
-		"response_body", loggedBody,
-	)
 }
 
 // Handler wraps all HTTP handlers
@@ -256,11 +212,6 @@ func userToResponse(user *domain.User) *UserResponse {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /register [post]
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
@@ -311,11 +262,6 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /login [post]
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
@@ -363,11 +309,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /refresh [post]
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	var req RefreshTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
@@ -402,11 +343,6 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /me [get]
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	// Extract JWT from Authorization header
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
@@ -439,11 +375,6 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 // Creates the first admin user. Protected by ADMIN_BOOTSTRAP_SECRET env var.
 // Returns 409 if an admin already exists (one-shot endpoint).
 func (h *Handler) AdminBootstrap(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	secret := os.Getenv("ADMIN_BOOTSTRAP_SECRET")
 	if secret == "" {
 		h.writeError(w, http.StatusForbidden, "bootstrap not enabled — set ADMIN_BOOTSTRAP_SECRET")
@@ -500,11 +431,6 @@ func (h *Handler) AdminBootstrap(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} AuthResponse "Missing or invalid token"
 // @Router /v1/auth/logout [post]
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	authHeader := r.Header.Get("Authorization")
 	parts := strings.Split(authHeader, " ")
 	if len(parts) != 2 || parts[0] != "Bearer" {
@@ -537,11 +463,6 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /oauth/google/url [get]
 func (h *Handler) GoogleOAuthURL(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	state := r.URL.Query().Get("state")
 	if state == "" {
 		// Generate a simple random state
@@ -571,11 +492,6 @@ func (h *Handler) GoogleOAuthURL(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /oauth/google/callback [get]
 func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		h.writeError(w, http.StatusBadRequest, "missing code parameter")
@@ -612,11 +528,6 @@ func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /oauth/facebook/url [get]
 func (h *Handler) FacebookOAuthURL(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	state := r.URL.Query().Get("state")
 	if state == "" {
 		// Generate a simple random state
@@ -646,11 +557,6 @@ func (h *Handler) FacebookOAuthURL(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /oauth/facebook/callback [get]
 func (h *Handler) FacebookOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		h.writeError(w, http.StatusBadRequest, "missing code parameter")

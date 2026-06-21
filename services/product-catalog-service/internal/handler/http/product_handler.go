@@ -274,6 +274,8 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Merge: start from existing, apply only the fields the caller provided.
+	// UpdatedAt is preserved so the repository can use it for optimistic
+	// locking (WHERE updated_at = $8).
 	product := &domain.Product{
 		ID:          id,
 		CategoryID:  existingProduct.CategoryID,
@@ -283,6 +285,7 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		Description: existingProduct.Description,
 		Attributes:  existingProduct.Attributes,
 		Status:      existingProduct.Status,
+		UpdatedAt:   existingProduct.UpdatedAt,
 	}
 	if req.CategoryID != uuid.Nil {
 		product.CategoryID = req.CategoryID

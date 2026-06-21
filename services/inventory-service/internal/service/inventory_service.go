@@ -38,6 +38,15 @@ if available < qty then return 0 end
 return redis.call('DECRBY', KEYS[1], qty)
 `)
 
+// luaIncrIfExists increments the key by ARGV[1] only when it already exists.
+// Returns the new value, or -1 if the key was absent.
+// This prevents AddStock from creating a stale counter seeded with only the
+// delta instead of the true qty_available.
+var luaIncrIfExists = goredis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
+return redis.call('INCRBY', KEYS[1], ARGV[1])
+`)
+
 type inventoryService struct {
 	repo   contracts.InventoryRepository
 	rdb    *goredis.Client
@@ -67,8 +76,9 @@ func (s *inventoryService) AddStock(ctx context.Context, skuID uuid.UUID, qty in
 		return 0, err
 	}
 
-	// Update Redis counter after the DB write succeeds.
-	if redisErr := s.rdb.IncrBy(ctx, stockKey(skuID), int64(qty)).Err(); redisErr != nil {
+	// Increment Redis only if the key already exists. If absent, the next
+	// ReserveStock cache-miss will warm it from DB with the correct value.
+	if _, redisErr := luaIncrIfExists.Run(ctx, s.rdb, []string{stockKey(skuID)}, qty).Int64(); redisErr != nil && !errors.Is(redisErr, goredis.Nil) {
 		s.logger.Warn("failed to increment redis stock counter", "sku_id", skuID, "error", redisErr)
 	}
 

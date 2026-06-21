@@ -102,14 +102,6 @@ func (h *Handler) buildNotification(eventType string, payload map[string]string)
 		}, true
 
 	// ── Payment events ────────────────────────────────────────────────────────
-	case "payment.processed":
-		return notifier.Notification{
-			UserID:    payload["user_id"],
-			EventType: eventType,
-			Subject:   "Payment successful",
-			Body:      fmt.Sprintf("Your payment of %s %s for order %s was successful.", payload["amount"], payload["currency"], payload["order_id"]),
-		}, true
-
 	case "payment.captured":
 		return notifier.Notification{
 			UserID:    payload["user_id"],
@@ -140,6 +132,9 @@ func (h *Handler) buildNotification(eventType string, payload map[string]string)
 		return notifier.Notification{}, false
 
 	case "inventory.depleted":
+		if payload["seller_id"] == "" {
+			return notifier.Notification{}, false
+		}
 		return notifier.Notification{
 			UserID:    payload["seller_id"],
 			EventType: eventType,

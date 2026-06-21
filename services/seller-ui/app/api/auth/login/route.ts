@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      cache: "no-store",
     });
   } catch {
     return NextResponse.json({ error: "Gateway unavailable" }, { status: 502 });
@@ -39,7 +38,15 @@ export async function POST(req: NextRequest) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: 60 * 60, // 1 hour — matches JWT_ACCESS_EXPIRY_HOURS
+  });
+  // Non-httpOnly hint so client JS can detect login state without reading the token
+  res.cookies.set("seller_auth_hint", "1", {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/",
+    maxAge: 60 * 60,
   });
   return res;
 }

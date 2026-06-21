@@ -293,6 +293,9 @@ func (pr *ProductRepository) GetProductList(ctx context.Context, filters *domain
 }
 
 func (pr *ProductRepository) UpdateProduct(ctx context.Context, product *domain.Product) error {
+	// UpdatedAt in the WHERE clause provides optimistic concurrency control:
+	// if another request updated the row between our read and this write,
+	// updated_at will no longer match and rows affected will be 0 → 409.
 	query := `
 		UPDATE products
 		SET
@@ -304,6 +307,7 @@ func (pr *ProductRepository) UpdateProduct(ctx context.Context, product *domain.
 			status = $6,
 			updated_at = NOW()
 		WHERE id = $7
+			AND updated_at = $8
 			AND deleted_at IS NULL;
 	`
 
@@ -317,6 +321,7 @@ func (pr *ProductRepository) UpdateProduct(ctx context.Context, product *domain.
 		product.Attributes,
 		product.Status,
 		product.ID,
+		product.UpdatedAt,
 	)
 
 	if err != nil {
@@ -338,7 +343,7 @@ func (pr *ProductRepository) UpdateProduct(ctx context.Context, product *domain.
 	}
 
 	if rowsAffected == 0 {
-		return pkgerrors.NewNotFound("PRODUCT_NOT_FOUND", "product not found")
+		return pkgerrors.NewConflict("PRODUCT_CONFLICT", "product was modified by another request; please retry")
 	}
 
 	return nil

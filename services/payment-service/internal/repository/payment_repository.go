@@ -48,19 +48,21 @@ func (r *PaymentRepository) CreatePayment(ctx context.Context, p *domain.Payment
 
 func (r *PaymentRepository) MarkCaptured(ctx context.Context, paymentID uuid.UUID, gatewayTxnID string, entries []*domain.LedgerEntry) error {
 	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `
+		var orderID, userID uuid.UUID
+		err := tx.QueryRowContext(ctx, `
 			UPDATE payments
 			SET status = 'CAPTURED',
 				gateway_txn_id = $2,
 				updated_at = NOW()
 			WHERE id = $1
 				AND deleted_at IS NULL
-		`, paymentID, gatewayTxnID)
+			RETURNING order_id, user_id
+		`, paymentID, gatewayTxnID).Scan(&orderID, &userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return pkgerrors.NewNotFound("PAYMENT_NOT_FOUND", "payment not found")
+		}
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to mark payment captured", err)
-		}
-		if n, _ := result.RowsAffected(); n == 0 {
-			return pkgerrors.NewNotFound("PAYMENT_NOT_FOUND", "payment not found")
 		}
 
 		for _, e := range entries {
@@ -69,11 +71,6 @@ func (r *PaymentRepository) MarkCaptured(ctx context.Context, paymentID uuid.UUI
 			}
 		}
 
-		// Fetch order_id for the outbox payload.
-		var orderID, userID uuid.UUID
-		if err := tx.QueryRowContext(ctx, `SELECT order_id, user_id FROM payments WHERE id = $1`, paymentID).Scan(&orderID, &userID); err != nil {
-			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch payment for outbox", err)
-		}
 		payload, err := json.Marshal(map[string]string{
 			"payment_id": paymentID.String(), "order_id": orderID.String(),
 			"user_id": userID.String(), "gateway_txn_id": gatewayTxnID,
@@ -82,31 +79,29 @@ func (r *PaymentRepository) MarkCaptured(ctx context.Context, paymentID uuid.UUI
 		if err != nil {
 			return fmt.Errorf("marshal outbox payload: %w", err)
 		}
-		return insertOutboxRow(ctx, tx, paymentID, "payment", "payment.processed", payload)
+		return insertOutboxRow(ctx, tx, paymentID, "payment", "payment.captured", payload)
 	})
 }
 
 func (r *PaymentRepository) MarkFailed(ctx context.Context, paymentID uuid.UUID, reason string) error {
 	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `
+		var orderID, userID uuid.UUID
+		err := tx.QueryRowContext(ctx, `
 			UPDATE payments
 			SET status = 'FAILED',
 				failure_reason = $2,
 				updated_at = NOW()
 			WHERE id = $1
 				AND deleted_at IS NULL
-		`, paymentID, reason)
+			RETURNING order_id, user_id
+		`, paymentID, reason).Scan(&orderID, &userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return pkgerrors.NewNotFound("PAYMENT_NOT_FOUND", "payment not found")
+		}
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to mark payment failed", err)
 		}
-		if n, _ := result.RowsAffected(); n == 0 {
-			return pkgerrors.NewNotFound("PAYMENT_NOT_FOUND", "payment not found")
-		}
 
-		var orderID, userID uuid.UUID
-		if err := tx.QueryRowContext(ctx, `SELECT order_id, user_id FROM payments WHERE id = $1`, paymentID).Scan(&orderID, &userID); err != nil {
-			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch payment for outbox", err)
-		}
 		payload, err := json.Marshal(map[string]string{
 			"payment_id": paymentID.String(), "order_id": orderID.String(),
 			"user_id": userID.String(), "reason": reason, "status": "FAILED",
@@ -118,7 +113,7 @@ func (r *PaymentRepository) MarkFailed(ctx context.Context, paymentID uuid.UUID,
 	})
 }
 
-func (r *PaymentRepository) CreateRefund(ctx context.Context, refund *domain.Refund, newPaymentStatus domain.PaymentStatus, entries []*domain.LedgerEntry) error {
+func (r *PaymentRepository) CreateRefund(ctx context.Context, refund *domain.Refund, userID uuid.UUID, newPaymentStatus domain.PaymentStatus, entries []*domain.LedgerEntry) error {
 	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
 		id := uuid.New()
 
@@ -148,7 +143,20 @@ func (r *PaymentRepository) CreateRefund(ctx context.Context, refund *domain.Ref
 				return err
 			}
 		}
-		return nil
+
+		payload, err := json.Marshal(map[string]string{
+			"payment_id": refund.PaymentID.String(),
+			"refund_id":  id.String(),
+			"order_id":   refund.OrderID.String(),
+			"user_id":    userID.String(),
+			"amount":     fmt.Sprintf("%d", refund.Amount),
+			"currency":   refund.Currency,
+			"status":     "REFUNDED",
+		})
+		if err != nil {
+			return fmt.Errorf("marshal refund outbox payload: %w", err)
+		}
+		return insertOutboxRow(ctx, tx, id, "payment", "payment.refunded", payload)
 	})
 }
 

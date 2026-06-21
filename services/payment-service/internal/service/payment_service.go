@@ -84,27 +84,10 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		s.logger.Warn("idempotency lock unavailable, proceeding without lock", "error", lockErr)
 	}
 	if !acquired && lockErr == nil {
-		ticker := time.NewTicker(50 * time.Millisecond)
-		defer ticker.Stop()
-		deadline := time.Now().Add(lockTTL)
-	lockWait:
-		for time.Now().Before(deadline) {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-ticker.C:
-				if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
-					var p domain.Payment
-					if json.Unmarshal(cached, &p) == nil {
-						s.logger.Info("idempotent replay after lock wait", "payment_id", p.ID)
-						return &p, nil
-					}
-				}
-				if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
-					break lockWait
-				}
-			}
-		}
+		// Another request is already creating a payment for this idempotency key.
+		// Return 409 immediately — the client should retry after a short delay
+		// rather than us spinning and burning Redis connections.
+		return nil, pkgerrors.NewConflict("IDEMPOTENCY_CONFLICT", "payment creation already in progress for this idempotency key; retry after a moment")
 	}
 	defer func() {
 		if acquired {
@@ -223,7 +206,7 @@ func (s *paymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID,
 
 	s.logger.Info("refunding payment", "payment_id", paymentID, "amount", amount, "new_status", newStatus)
 
-	if err := s.repo.CreateRefund(ctx, refund, newStatus, entries); err != nil {
+	if err := s.repo.CreateRefund(ctx, refund, payment.UserID, newStatus, entries); err != nil {
 		return nil, err
 	}
 
