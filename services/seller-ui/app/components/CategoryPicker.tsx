@@ -5,6 +5,10 @@ import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, Check, Layers, Tag, X } from "lucide-react";
 import { getCategories, type Category } from "@/lib/api";
 
+const PAGE_SIZE = 20;
+
+type FetchFn = (query: string, offset: number) => Promise<{ items: Category[]; total: number }>;
+
 // ── Dropdown portal — renders outside card/overflow containers ────────────────
 
 function DropdownPortal({ anchorRef, children, open }: {
@@ -51,37 +55,103 @@ function DropdownPortal({ anchorRef, children, open }: {
   );
 }
 
-// ── Single-level searchable combobox ──────────────────────────────────────────
+// ── Single-level searchable combobox with lazy + paginated API fetch ──────────
 
 interface ComboProps {
   placeholder: string;
-  items: Category[];
-  loading: boolean;
+  fetchFn: FetchFn;
   value: string;
+  selectedLabel?: string;
   onSelect: (cat: Category | null) => void;
   disabled?: boolean;
   icon?: React.ReactNode;
   label?: string;
 }
 
-function Combobox({ placeholder, items, loading, value, onSelect, disabled, icon, label }: ComboProps) {
-  const [open, setOpen]   = useState(false);
-  const [query, setQuery] = useState("");
-  const wrapRef           = useRef<HTMLDivElement>(null);
-  const inputRef          = useRef<HTMLInputElement>(null);
-  const selected          = items.find((c) => c.id === value);
-  const displayText       = open ? query : (selected?.name ?? "");
+function Combobox({ placeholder, fetchFn, value, selectedLabel, onSelect, disabled, icon, label }: ComboProps) {
+  const [open, setOpen]             = useState(false);
+  const [query, setQuery]           = useState("");
+  const [items, setItems]           = useState<Category[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [loading, setLoading]       = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const wrapRef                     = useRef<HTMLDivElement>(null);
+  const inputRef                    = useRef<HTMLInputElement>(null);
+  const sentinelRef                 = useRef<HTMLDivElement>(null);
+  const fetchSeqRef                 = useRef(0);
+  const activeQueryRef              = useRef("");
 
-  const filtered = query.trim()
-    ? items.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
-    : items;
+  const load = useCallback(async (q: string, offset: number) => {
+    const seq = ++fetchSeqRef.current;
+    const isAppend = offset > 0;
+    if (isAppend) setLoadingMore(true); else setLoading(true);
+
+    try {
+      const result = await fetchFn(q, offset);
+      if (seq !== fetchSeqRef.current) return; // stale
+      setTotal(result.total);
+      if (isAppend) {
+        setItems((prev) => [...prev, ...result.items]);
+      } else {
+        setItems(result.items);
+      }
+    } catch {
+      if (seq === fetchSeqRef.current) {
+        if (!isAppend) setItems([]);
+      }
+    } finally {
+      if (seq === fetchSeqRef.current) {
+        if (isAppend) setLoadingMore(false); else setLoading(false);
+      }
+    }
+  }, [fetchFn]);
+
+  // Fetch on open
+  useEffect(() => {
+    if (!open) return;
+    activeQueryRef.current = "";
+    setQuery("");
+    setItems([]);
+    setTotal(0);
+    load("", 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Debounced search
+  useEffect(() => {
+    if (!open) return;
+    const trimmed = query.trim();
+    if (trimmed === activeQueryRef.current) return;
+    const t = setTimeout(() => {
+      activeQueryRef.current = trimmed;
+      setItems([]);
+      setTotal(0);
+      load(trimmed, 0);
+    }, 300);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, open]);
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loading && !loadingMore && items.length < total) {
+          load(activeQueryRef.current, items.length);
+        }
+      },
+      { threshold: 0.1 },
+    );
+    obs.observe(sentinelRef.current);
+    return () => obs.disconnect();
+  }, [items.length, total, loading, loadingMore, load]);
 
   // Close on outside click
   useEffect(() => {
     if (!open) return;
     function onOut(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        // also check if click is inside the portal
         const inPortal = (e.target as Element)?.closest("[data-picker-portal]");
         if (!inPortal) { setOpen(false); setQuery(""); }
       }
@@ -104,7 +174,8 @@ function Combobox({ placeholder, items, loading, value, onSelect, disabled, icon
     setOpen(false);
   }
 
-  const hasValue = Boolean(value && selected);
+  const hasValue = Boolean(value);
+  const displayText = open ? query : (selectedLabel ?? "");
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
@@ -132,18 +203,16 @@ function Combobox({ placeholder, items, loading, value, onSelect, disabled, icon
         }}
         onMouseDown={(e) => {
           if (disabled) return;
-          e.preventDefault(); // prevent focus-then-click double-fire
+          e.preventDefault();
           if (open) {
             setOpen(false);
             setQuery("");
           } else {
             setOpen(true);
-            // schedule focus so input is ready after state update
             setTimeout(() => inputRef.current?.focus(), 0);
           }
         }}
       >
-        {/* Search icon / category icon */}
         <span style={{ color: hasValue ? "var(--accent)" : "var(--muted)", flexShrink: 0, display: "flex" }}>
           {hasValue ? <Check size={13} strokeWidth={2.5} /> : <Tag size={13} strokeWidth={1.75} />}
         </span>
@@ -170,7 +239,6 @@ function Combobox({ placeholder, items, loading, value, onSelect, disabled, icon
           }}
         />
 
-        {/* Clear / chevron */}
         {hasValue ? (
           <button
             onMouseDown={handleClear}
@@ -188,7 +256,7 @@ function Combobox({ placeholder, items, loading, value, onSelect, disabled, icon
         )}
       </div>
 
-      {/* Dropdown via portal to escape overflow:hidden */}
+      {/* Dropdown via portal */}
       <DropdownPortal anchorRef={wrapRef} open={open}>
         <div
           data-picker-portal
@@ -207,12 +275,12 @@ function Combobox({ placeholder, items, loading, value, onSelect, disabled, icon
                 Loading…
               </div>
             )}
-            {!loading && filtered.length === 0 && (
+            {!loading && items.length === 0 && (
               <div style={{ padding: "0.875rem 1rem", color: "var(--muted)", fontSize: "0.8125rem", fontStyle: "italic" }}>
                 {query ? `No matches for "${query}"` : "Nothing here"}
               </div>
             )}
-            {!loading && filtered.map((cat, i) => {
+            {!loading && items.map((cat, i) => {
               const sel = cat.id === value;
               return (
                 <div
@@ -226,7 +294,7 @@ function Combobox({ placeholder, items, loading, value, onSelect, disabled, icon
                     color: sel ? "var(--accent)" : "var(--text)",
                     fontWeight: sel ? 500 : 400,
                     fontSize: "0.8125rem",
-                    borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none",
+                    borderBottom: i < items.length - 1 ? "1px solid var(--border)" : "none",
                     transition: "background 0.08s",
                     animation: `item-in 0.1s ease ${Math.min(i * 0.02, 0.12)}s both`,
                   }}
@@ -240,11 +308,23 @@ function Combobox({ placeholder, items, loading, value, onSelect, disabled, icon
                 </div>
               );
             })}
+
+            {/* Sentinel for infinite scroll */}
+            <div ref={sentinelRef} style={{ height: 1 }} />
+
+            {loadingMore && (
+              <div style={{ padding: "0.5rem 1rem", color: "var(--muted)", fontSize: "0.75rem", textAlign: "center" }}>
+                <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: "inline-block", verticalAlign: "middle", marginRight: 6 }} />
+                Loading more…
+              </div>
+            )}
           </div>
 
           {!loading && items.length > 0 && (
             <div style={{ padding: "0.3rem 0.875rem", borderTop: "1px solid var(--border)", fontSize: "0.7rem", color: "var(--muted)" }}>
-              {filtered.length} of {items.length}
+              {items.length < total
+                ? `${items.length} of ${total} — scroll for more`
+                : `${items.length} result${items.length !== 1 ? "s" : ""}`}
             </div>
           )}
         </div>
@@ -261,58 +341,65 @@ interface Props {
 }
 
 export default function CategoryPicker({ value, onChange }: Props) {
-  const [roots, setRoots]             = useState<Category[]>([]);
-  const [rootsLoading, setRootsLoading] = useState(true);
-  const [rootsError, setRootsError]   = useState("");
   const [selectedRoot, setSelectedRoot] = useState<Category | null>(null);
+  const [selectedSub,  setSelectedSub]  = useState<Category | null>(null);
+  const [subsExist,    setSubsExist]    = useState(false);
+  const prefillDoneRef                  = useRef(false);
 
-  const [subs, setSubs]               = useState<Category[]>([]);
-  const [subsLoading, setSubsLoading] = useState(false);
-  const [selectedSub, setSelectedSub] = useState<Category | null>(null);
-
-  // Load all root categories once
+  // Resolve pre-filled value (only runs when value is set on mount)
   useEffect(() => {
-    setRootsLoading(true);
-    setRootsError("");
-    getCategories({ limit: 300, offset: 0 })
-      .then((r) => setRoots(r.categories.filter((c) => !c.parent_id)))
-      .catch((e: unknown) => setRootsError(e instanceof Error ? e.message : "Failed to load categories"))
-      .finally(() => setRootsLoading(false));
-  }, []);
-
-  // Resolve pre-filled value (e.g. when editing an existing product)
-  useEffect(() => {
-    if (!value || !roots.length) return;
-    const asRoot = roots.find((r) => r.id === value);
-    if (asRoot) { setSelectedRoot(asRoot); setSelectedSub(null); return; }
-    // Could be a subcategory — fetch its parent
-    getCategories({ limit: 200, offset: 0 }).then(async (allRes) => {
-      const sub = allRes.categories.find((c) => c.id === value);
+    if (!value || prefillDoneRef.current) return;
+    prefillDoneRef.current = true;
+    getCategories({ limit: 200, offset: 0 }).then((allRes) => {
+      const cats = allRes.categories;
+      const roots = cats.filter((c) => !c.parent_id);
+      const asRoot = roots.find((r) => r.id === value);
+      if (asRoot) {
+        setSelectedRoot(asRoot);
+        // Check if it has subcategories
+        getCategories({ parent_id: asRoot.id, limit: 1 }).then((r) => {
+          setSubsExist(r.total > 0);
+        }).catch(() => {});
+        return;
+      }
+      const sub = cats.find((c) => c.id === value);
       if (sub?.parent_id) {
         const parent = roots.find((r) => r.id === sub.parent_id);
         if (parent) {
           setSelectedRoot(parent);
-          const subsRes = await getCategories({ parent_id: parent.id, limit: 200 });
-          setSubs(subsRes.categories);
           setSelectedSub(sub);
+          setSubsExist(true);
         }
       }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, roots.length]);
+  }, [value]);
+
+  // fetchFn for root combobox: API search, filter to roots only
+  const rootFetchFn: FetchFn = useCallback(async (query, _offset) => {
+    const r = await getCategories({ search: query || undefined, limit: 100, offset: 0 });
+    const roots = r.categories.filter((c) => !c.parent_id);
+    return { items: roots, total: roots.length };
+  }, []);
+
+  // fetchFn for subcategory combobox: paginated under selected root
+  const subFetchFn: FetchFn = useCallback(async (query, offset) => {
+    if (!selectedRoot) return { items: [], total: 0 };
+    const r = await getCategories({ parent_id: selectedRoot.id, search: query || undefined, limit: PAGE_SIZE, offset });
+    return { items: r.categories, total: r.total };
+  }, [selectedRoot]);
 
   const handleRootSelect = useCallback(async (cat: Category | null) => {
     setSelectedRoot(cat);
     setSelectedSub(null);
-    setSubs([]);
+    setSubsExist(false);
     if (!cat) { onChange(""); return; }
     onChange(cat.id);
-    setSubsLoading(true);
+    // Peek if subcategories exist
     try {
-      const r = await getCategories({ parent_id: cat.id, limit: 200 });
-      setSubs(r.categories);
+      const r = await getCategories({ parent_id: cat.id, limit: 1 });
+      setSubsExist(r.total > 0);
     } catch { /* ignore */ }
-    finally { setSubsLoading(false); }
   }, [onChange]);
 
   const handleSubSelect = useCallback((cat: Category | null) => {
@@ -322,28 +409,21 @@ export default function CategoryPicker({ value, onChange }: Props) {
     else onChange("");
   }, [onChange, selectedRoot]);
 
-  const hasSubs = subs.length > 0 || subsLoading;
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-      {rootsError && (
-        <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--danger)" }}>
-          {rootsError}
-        </p>
-      )}
       {/* Level 1 — root/parent */}
       <Combobox
         label="Category"
         icon={<Layers size={11} />}
         placeholder="Search category…"
-        items={roots}
-        loading={rootsLoading}
+        fetchFn={rootFetchFn}
         value={selectedRoot?.id ?? ""}
+        selectedLabel={selectedRoot?.name}
         onSelect={handleRootSelect}
       />
 
       {/* Connector line */}
-      {selectedRoot && hasSubs && (
+      {selectedRoot && subsExist && (
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0 0.25rem", animation: "sub-slide 0.2s ease" }}>
           <div style={{ width: 1, height: 16, background: "var(--border)", marginLeft: 18 }} />
           <ChevronRight size={11} style={{ color: "var(--muted)" }} />
@@ -352,25 +432,25 @@ export default function CategoryPicker({ value, onChange }: Props) {
       )}
 
       {/* Level 2 — subcategory */}
-      {selectedRoot && hasSubs && (
+      {selectedRoot && subsExist && (
         <div style={{ paddingLeft: "1.25rem", borderLeft: "2px solid var(--accent-bg)", animation: "sub-slide 0.22s cubic-bezier(0.16,1,0.3,1) both" }}>
           <Combobox
             label="Subcategory"
             icon={<Tag size={11} />}
             placeholder="Search subcategory (optional)…"
-            items={subs}
-            loading={subsLoading}
+            fetchFn={subFetchFn}
             value={selectedSub?.id ?? ""}
+            selectedLabel={selectedSub?.name}
             onSelect={handleSubSelect}
           />
         </div>
       )}
 
       {/* No-subs hint */}
-      {selectedRoot && !subsLoading && subs.length === 0 && (
+      {selectedRoot && !subsExist && (
         <p style={{ margin: "0.125rem 0 0", fontSize: "0.75rem", color: "var(--muted)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
           <Check size={11} style={{ color: "var(--success)" }} />
-          Using "{selectedRoot.name}" directly — no subcategories.
+          Using &ldquo;{selectedRoot.name}&rdquo; directly — no subcategories.
         </p>
       )}
     </div>
