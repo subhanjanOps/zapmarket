@@ -189,7 +189,7 @@ export async function getImages(productId: string): Promise<{ images: ProductIma
 
 export async function uploadImage(productId: string, file: File, skuId?: string): Promise<ProductImage> {
   const fd = new FormData();
-  fd.append("image", file);
+  fd.append("file", file);
   if (skuId) fd.append("sku_id", skuId);
   // No Content-Type — browser sets multipart/form-data with boundary automatically.
   const res = await fetch(`/api/proxy/api/v1/products/${productId}/images`, { method: "POST", body: fd, cache: "no-store" });

@@ -9,24 +9,30 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  let body: ArrayBuffer | undefined;
-  const ct = req.headers.get("content-type");
-  if (ct) {
-    headers["Content-Type"] = ct;
-    body = await req.arrayBuffer();
+  const ct = req.headers.get("content-type") ?? "";
+  const hasBody = req.method !== "GET" && req.method !== "HEAD";
+
+  let body: BodyInit | undefined;
+
+  if (hasBody) {
+    if (ct.includes("multipart/form-data")) {
+      // Parse via formData() so Next.js correctly handles the multipart stream.
+      // Do NOT set Content-Type — Node.js fetch will set it (with the new boundary)
+      // when it serialises the FormData object for the upstream.
+      body = await req.formData();
+    } else {
+      headers["Content-Type"] = ct;
+      const buf = await req.arrayBuffer();
+      if (buf.byteLength > 0) body = buf;
+    }
   }
 
-  const options: RequestInit = {
+  const upstream = await fetch(upstreamUrl, {
     method: req.method,
     headers,
+    ...(body !== undefined ? { body } : {}),
     cache: "no-store",
-  };
-
-  if (body != undefined && body?.byteLength > 0) {
-    options.body = body;
-  }
-
-  const upstream = await fetch(upstreamUrl, options);
+  });
 
   if (upstream.status === 204) {
     return new NextResponse(null, { status: 204 });
