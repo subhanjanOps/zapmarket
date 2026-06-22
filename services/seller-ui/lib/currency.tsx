@@ -105,6 +105,29 @@ async function fetchCurrencyList(): Promise<CurrencyMeta[]> {
   }
 }
 
+async function fetchServerPreference(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/proxy/v1/users/me/preferences");
+    if (!res.ok) return null;
+    const data = await res.json() as { display_currency?: string };
+    return data.display_currency ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveServerPreference(code: string): Promise<void> {
+  try {
+    await fetch("/api/proxy/v1/users/me/preferences", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ display_currency: code }),
+    });
+  } catch {
+    // Silently ignore — localStorage is the source of truth on failure
+  }
+}
+
 // ── Context ───────────────────────────────────────────────────────────────────
 
 interface CurrencyContextValue {
@@ -143,27 +166,36 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const saved = localStorage.getItem("zap-currency");
-    setCurrencyState(saved ?? detectCurrency());
+    const initial = saved ?? detectCurrency();
+    setCurrencyState(initial);
 
-    // Fetch rates and currency list in parallel
-    Promise.all([fetchRates(), fetchCurrencyList()]).then(([ratesResult, list]) => {
-      setRates(ratesResult.rates);
-      setStale(ratesResult.stale);
-      setRatesLoading(false);
-      if (ratesResult.asOf) {
-        try {
-          setRatesDate(new Date(ratesResult.asOf).toLocaleDateString(undefined, {
-            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-          }));
-        } catch { /* */ }
+    // Fetch rates, currency list, and server preference in parallel
+    Promise.all([fetchRates(), fetchCurrencyList(), fetchServerPreference()]).then(
+      ([ratesResult, list, serverCurrency]) => {
+        setRates(ratesResult.rates);
+        setStale(ratesResult.stale);
+        setRatesLoading(false);
+        if (ratesResult.asOf) {
+          try {
+            setRatesDate(new Date(ratesResult.asOf).toLocaleDateString(undefined, {
+              month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+            }));
+          } catch { /* */ }
+        }
+        if (list.length > 0) setCurrencies(list);
+        // Server preference wins over localStorage/locale detection
+        if (serverCurrency) {
+          setCurrencyState(serverCurrency);
+          localStorage.setItem("zap-currency", serverCurrency);
+        }
       }
-      if (list.length > 0) setCurrencies(list);
-    });
+    );
   }, []);
 
   const setCurrency = useCallback((c: string) => {
     setCurrencyState(c);
     localStorage.setItem("zap-currency", c);
+    saveServerPreference(c); // fire-and-forget
   }, []);
 
   const getDecimals = useCallback((cur: string): number => {

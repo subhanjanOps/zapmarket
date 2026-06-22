@@ -42,6 +42,12 @@ type OAuthRepository interface {
 	DeleteOAuthAccount(ctx context.Context, accountID uuid.UUID) error
 }
 
+// PreferencesRepository stores per-user key-value preferences.
+type PreferencesRepository interface {
+	Get(ctx context.Context, userID uuid.UUID, key string) (string, bool, error)
+	Set(ctx context.Context, userID uuid.UUID, key, value string) error
+}
+
 // RefreshTokenRepository defines the interface for refresh token persistence.
 type RefreshTokenRepository interface {
 	CreateRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) (*domain.RefreshToken, error)

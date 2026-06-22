@@ -86,6 +86,7 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	oauthRepo := repository.NewOAuthRepository(db)
 	tokenRepo := repository.NewRefreshTokenRepository(db)
+	prefsRepo := repository.NewPreferencesRepository(db)
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, cfg)
@@ -105,6 +106,7 @@ func main() {
 	// Initialize HTTP handlers
 	httpHandler := httphandler.NewHandler(authService, oauthService, cfg)
 	adminHandler := httphandler.NewAdminHandler(userRepo, authService, cfg)
+	prefsHandler := httphandler.NewPreferencesHandler(prefsRepo, authService)
 
 	// Setup HTTP server
 	mux := http.NewServeMux()
@@ -136,6 +138,10 @@ func main() {
 	adminMux.HandleFunc("GET /v1/admin/sellers", adminHandler.ListSellers)
 	adminMux.HandleFunc("PATCH /v1/admin/sellers/{id}/status", adminHandler.UpdateSellerStatus)
 	mux.Handle("/v1/admin/", adminHandler.AdminAuthMiddleware(adminMux))
+
+	// User preferences routes — auth validated inline by the handler
+	mux.HandleFunc("GET /v1/users/me/preferences", httpHandler.LoggingMiddleware(prefsHandler.GetPreferences))
+	mux.HandleFunc("PUT /v1/users/me/preferences", httpHandler.LoggingMiddleware(prefsHandler.SetPreferences))
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
