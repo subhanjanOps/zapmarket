@@ -6,12 +6,68 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/services/notification-service/internal/notifier"
 )
+
+var zeroDecimalCurrencies = map[string]bool{
+	"JPY": true, "KRW": true, "IDR": true,
+}
+
+var currencySymbols = map[string]string{
+	"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "KRW": "₩",
+	"INR": "₹", "CNY": "¥", "AUD": "A$", "CAD": "C$", "CHF": "Fr",
+}
+
+func formatAmount(amountCents string, currency string) string {
+	cents, err := strconv.ParseInt(amountCents, 10, 64)
+	if err != nil {
+		return amountCents + " " + currency
+	}
+	sym := currencySymbols[currency]
+	if sym == "" {
+		sym = currency + " "
+	}
+	if zeroDecimalCurrencies[currency] {
+		return sym + formatWithCommas(cents/100)
+	}
+	whole := cents / 100
+	frac := cents % 100
+	if frac < 0 {
+		frac = -frac
+	}
+	return fmt.Sprintf("%s%s.%02d", sym, formatWithCommas(whole), frac)
+}
+
+func formatWithCommas(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	if len(s) <= 3 {
+		return s
+	}
+	var b strings.Builder
+	rem := len(s) % 3
+	if rem > 0 {
+		b.WriteString(s[:rem])
+	}
+	for i := rem; i < len(s); i += 3 {
+		if i > 0 || rem > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(s[i : i+3])
+	}
+	return b.String()
+}
+
+// FormatAmountForTest exposes formatAmount for unit tests.
+// Only used in tests — not called from production code.
+func FormatAmountForTest(amountCents, currency string) string {
+	return formatAmount(amountCents, currency)
+}
 
 // Handler processes order events from Kafka and dispatches notifications.
 type Handler struct {
@@ -107,7 +163,7 @@ func (h *Handler) buildNotification(eventType string, payload map[string]string)
 			UserID:    payload["user_id"],
 			EventType: eventType,
 			Subject:   "Payment successful",
-			Body:      fmt.Sprintf("Your payment of %s %s for order %s was successful.", payload["amount"], payload["currency"], payload["order_id"]),
+			Body:      fmt.Sprintf("Your payment of %s for order %s was successful.", formatAmount(payload["amount"], payload["currency"]), payload["order_id"]),
 		}, true
 
 	case "payment.failed":
@@ -123,7 +179,7 @@ func (h *Handler) buildNotification(eventType string, payload map[string]string)
 			UserID:    payload["user_id"],
 			EventType: eventType,
 			Subject:   "Refund processed",
-			Body:      fmt.Sprintf("A refund of %s %s for order %s has been processed and will appear within 3-5 business days.", payload["amount"], payload["currency"], payload["order_id"]),
+			Body:      fmt.Sprintf("A refund of %s for order %s has been processed and will appear within 3-5 business days.", formatAmount(payload["amount"], payload["currency"]), payload["order_id"]),
 		}, true
 
 	// ── Inventory events ──────────────────────────────────────────────────────
