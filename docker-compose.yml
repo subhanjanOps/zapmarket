@@ -214,6 +214,7 @@ services:
       - RATE_PROVIDER_URL=https://api.frankfurter.app
       - RATE_REFRESH_INTERVAL=1h
       - MAX_RATE_AGE=24h
+      - KAFKA_BROKERS=kafka:9092
     ports:
       - "8086:8086"
       - "50056:50056"
@@ -431,6 +432,20 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
 
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: zapmarket-redisinsight
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5540:5540"
+    networks:
+      - zapnet
+    volumes:
+      - redisinsight-data:/data
+    restart: unless-stopped
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: zapmarket-pgadmin
@@ -490,5 +505,6 @@ volumes:
   redis-data:
   minio-data:
   postgres-data:
+  redisinsight-data:
   pgadmin-data:
   elasticsearch-data:

@@ -16,6 +16,7 @@ message CurrencyProto {
   string name     = 2;
   string flag     = 3;
   int32  decimals = 4;
+  bool   enabled  = 5;
 }
 
 message ListCurrenciesResponse {

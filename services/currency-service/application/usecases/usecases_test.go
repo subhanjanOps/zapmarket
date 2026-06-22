@@ -71,6 +71,10 @@ func (f *fakeRatesRepo) UpsertLatest(_ context.Context, rates []entities.Exchang
 	return nil
 }
 
+func (f *fakeRatesRepo) HistoryByBase(_ context.Context, base string, date time.Time) ([]entities.ExchangeRate, error) {
+	return nil, nil
+}
+
 type fakeCache struct {
 	data map[string]ports.CachedRates
 }
@@ -179,7 +183,7 @@ func TestIngestRates_StoresAndCachesRates(t *testing.T) {
 	}}
 	repo := &fakeRatesRepo{}
 	cache := newFakeCache()
-	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopLogger())
+	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopLogger(), &noopPublisher{})
 
 	if err := uc.Execute(context.Background(), "USD"); err != nil {
 		t.Fatal(err)
@@ -189,6 +193,39 @@ func TestIngestRates_StoresAndCachesRates(t *testing.T) {
 	}
 	if _, ok, _ := cache.Get(context.Background(), "USD"); !ok {
 		t.Error("expected cache to be populated after ingest")
+	}
+}
+
+// ── IngestRates Kafka publish tests ──────────────────────────────────────────
+
+func TestIngestRates_PublishesEventOnSuccess(t *testing.T) {
+	provider := &fakeProvider{rateSet: ports.RateSet{Base: "USD", Rates: map[string]float64{"EUR": 0.9}}}
+	repo := &fakeRatesRepo{}
+	cache := newFakeCache()
+	publisher := &capturePublisher{}
+
+	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopLogger(), publisher)
+	if err := uc.Execute(context.Background(), "USD"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if publisher.event != "currency.rates.updated" {
+		t.Errorf("expected event currency.rates.updated, got %q", publisher.event)
+	}
+	if len(publisher.payload) == 0 {
+		t.Error("expected non-empty payload")
+	}
+}
+
+func TestIngestRates_DoesNotPublishOnProviderError(t *testing.T) {
+	provider := &fakeProvider{err: errors.New("provider down")}
+	repo := &fakeRatesRepo{}
+	cache := newFakeCache()
+	publisher := &capturePublisher{}
+
+	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopLogger(), publisher)
+	_ = uc.Execute(context.Background(), "USD")
+	if publisher.event != "" {
+		t.Errorf("expected no event published on provider error, got %q", publisher.event)
 	}
 }
 

@@ -13,6 +13,7 @@ func NewRouter(h *Handler, m *metrics.Metrics) http.Handler {
 
 	// Public endpoints — no auth (gateway enforces auth_mode=none for these paths)
 	mux.HandleFunc("GET /v1/currencies", h.ListCurrencies)
+	mux.HandleFunc("GET /v1/currencies/rates/history", h.GetRatesHistory)
 	mux.HandleFunc("GET /v1/currencies/rates", h.GetRates)
 
 	// Admin endpoint — gateway enforces JWT role=admin before forwarding here

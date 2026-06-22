@@ -10,6 +10,7 @@ import (
 	nethhttp "net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,8 +25,10 @@ import (
 
 	svcconfig "github.com/zapmarket/zapmarket/services/currency-service/pkg/config"
 
+	"github.com/zapmarket/zapmarket/services/currency-service/application/ports"
 	"github.com/zapmarket/zapmarket/services/currency-service/application/usecases"
 	"github.com/zapmarket/zapmarket/services/currency-service/infrastructure/external"
+	kafkainfra "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/kafka"
 	infraredis "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/redis"
 	infrapostgres "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/postgres"
 	grpcserver "github.com/zapmarket/zapmarket/services/currency-service/interfaces/grpc"
@@ -85,16 +88,27 @@ func main() {
 	ratesCache := infraredis.NewRatesCache(rdb)
 
 	// ── FX Provider ───────────────────────────────────────────────────────────
-	provider := external.NewFrankfurterProvider(cfg.RateProviderURL)
+	primaryProvider := external.NewFrankfurterProvider(cfg.RateProviderURL)
+	secondaryProvider := external.NewOpenExchangeRatesProvider("https://open.er-api.com")
+	provider := external.NewFallbackProvider(primaryProvider, secondaryProvider)
+
+	// ── Kafka publisher (optional — no-op when KAFKA_BROKERS not set) ─────────
+	var publisher ports.EventPublisher = &kafkainfra.NoopPublisher{}
+	if brokers := os.Getenv("KAFKA_BROKERS"); brokers != "" {
+		kp := kafkainfra.NewKafkaPublisher(strings.Split(brokers, ","), "currency.rates.updated")
+		defer kp.Close()
+		publisher = kp
+	}
 
 	// ── Use cases ─────────────────────────────────────────────────────────────
 	listCurrenciesUC := usecases.NewListCurrenciesUseCase(currencyRepo)
 	getRatesUC := usecases.NewGetRatesUseCase(ratesRepo, ratesCache, cfg.RateRefreshInterval, cfg.MaxRateAge)
-	ingestRatesUC := usecases.NewIngestRatesUseCase(provider, ratesRepo, ratesCache, cfg.RateRefreshInterval, log)
+	ingestRatesUC := usecases.NewIngestRatesUseCase(provider, ratesRepo, ratesCache, cfg.RateRefreshInterval, log, publisher)
 	toggleCurrencyUC := usecases.NewToggleCurrencyUseCase(currencyRepo)
+	getRatesHistoryUC := usecases.NewGetRatesHistoryUseCase(ratesRepo)
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
-	httpHandler := httphandler.NewHandler(listCurrenciesUC, getRatesUC, toggleCurrencyUC, log)
+	httpHandler := httphandler.NewHandler(listCurrenciesUC, getRatesUC, toggleCurrencyUC, getRatesHistoryUC, log)
 	router := httphandler.NewRouter(httpHandler, m)
 
 	httpServer := &nethhttp.Server{

@@ -13,8 +13,9 @@ import (
 	"github.com/zapmarket/zapmarket/services/currency-service/proto/currencypb"
 )
 
-// CurrencyServer implements the CurrencyService gRPC methods.
+// CurrencyServer implements the generated CurrencyServiceServer interface.
 type CurrencyServer struct {
+	currencypb.UnimplementedCurrencyServiceServer
 	listCurrencies *usecases.ListCurrenciesUseCase
 	getRates       *usecases.GetRatesUseCase
 	log            *slog.Logger
@@ -32,62 +33,12 @@ func NewCurrencyServer(
 	}
 }
 
-// Register registers the CurrencyService with the given gRPC server using ServiceDesc.
-// This approach does not require protoc-generated registration code.
+// Register registers the CurrencyService with the given gRPC server using the generated descriptor.
 func (s *CurrencyServer) Register(srv *grpc.Server) {
-	srv.RegisterService(&CurrencyServiceDesc, s)
+	currencypb.RegisterCurrencyServiceServer(srv, s)
 }
 
-// CurrencyServiceDesc is the gRPC service descriptor for CurrencyService.
-// Matches the currency.proto definition.
-var CurrencyServiceDesc = grpc.ServiceDesc{
-	ServiceName: "currency.CurrencyService",
-	HandlerType: (*CurrencyServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "ListCurrencies",
-			Handler:    listCurrenciesHandler,
-		},
-		{
-			MethodName: "GetRates",
-			Handler:    getRatesHandler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/currency.proto",
-}
-
-func listCurrenciesHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	req := new(currencypb.ListCurrenciesRequest)
-	if err := dec(req); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(*CurrencyServer).handleListCurrencies(ctx, req)
-	}
-	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: "/currency.CurrencyService/ListCurrencies"}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(*CurrencyServer).handleListCurrencies(ctx, req.(*currencypb.ListCurrenciesRequest))
-	}
-	return interceptor(ctx, req, info, handler)
-}
-
-func getRatesHandler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	req := new(currencypb.GetRatesRequest)
-	if err := dec(req); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(*CurrencyServer).handleGetRates(ctx, req)
-	}
-	info := &grpc.UnaryServerInfo{Server: srv, FullMethod: "/currency.CurrencyService/GetRates"}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(*CurrencyServer).handleGetRates(ctx, req.(*currencypb.GetRatesRequest))
-	}
-	return interceptor(ctx, req, info, handler)
-}
-
-func (s *CurrencyServer) handleListCurrencies(ctx context.Context, _ *currencypb.ListCurrenciesRequest) (*currencypb.ListCurrenciesResponse, error) {
+func (s *CurrencyServer) ListCurrencies(ctx context.Context, _ *currencypb.ListCurrenciesRequest) (*currencypb.ListCurrenciesResponse, error) {
 	currencies, err := s.listCurrencies.Execute(ctx)
 	if err != nil {
 		s.log.Error("grpc ListCurrencies", "error", err)
@@ -107,7 +58,7 @@ func (s *CurrencyServer) handleListCurrencies(ctx context.Context, _ *currencypb
 	return resp, nil
 }
 
-func (s *CurrencyServer) handleGetRates(ctx context.Context, req *currencypb.GetRatesRequest) (*currencypb.GetRatesResponse, error) {
+func (s *CurrencyServer) GetRates(ctx context.Context, req *currencypb.GetRatesRequest) (*currencypb.GetRatesResponse, error) {
 	base := req.Base
 	if base == "" {
 		base = "USD"

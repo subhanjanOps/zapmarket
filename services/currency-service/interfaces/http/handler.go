@@ -5,29 +5,33 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/zapmarket/zapmarket/services/currency-service/application/usecases"
 )
 
 // Handler holds all HTTP handlers for the currency service.
 type Handler struct {
-	listCurrencies *usecases.ListCurrenciesUseCase
-	getRates       *usecases.GetRatesUseCase
-	toggleCurrency *usecases.ToggleCurrencyUseCase
-	log            *slog.Logger
+	listCurrencies  *usecases.ListCurrenciesUseCase
+	getRates        *usecases.GetRatesUseCase
+	toggleCurrency  *usecases.ToggleCurrencyUseCase
+	getRatesHistory *usecases.GetRatesHistoryUseCase
+	log             *slog.Logger
 }
 
 func NewHandler(
 	listCurrencies *usecases.ListCurrenciesUseCase,
 	getRates *usecases.GetRatesUseCase,
 	toggleCurrency *usecases.ToggleCurrencyUseCase,
+	getRatesHistory *usecases.GetRatesHistoryUseCase,
 	log *slog.Logger,
 ) *Handler {
 	return &Handler{
-		listCurrencies: listCurrencies,
-		getRates:       getRates,
-		toggleCurrency: toggleCurrency,
-		log:            log,
+		listCurrencies:  listCurrencies,
+		getRates:        getRates,
+		toggleCurrency:  toggleCurrency,
+		getRatesHistory: getRatesHistory,
+		log:             log,
 	}
 }
 
@@ -91,6 +95,28 @@ func (h *Handler) ToggleCurrency(w http.ResponseWriter, r *http.Request) {
 		"code":    code,
 		"enabled": body.Enabled,
 	})
+}
+
+// GetRatesHistory handles GET /v1/currencies/rates/history?date=YYYY-MM-DD
+func (h *Handler) GetRatesHistory(w http.ResponseWriter, r *http.Request) {
+	dateStr := r.URL.Query().Get("date")
+	if dateStr == "" {
+		h.writeError(w, http.StatusBadRequest, "date query parameter is required (YYYY-MM-DD)")
+		return
+	}
+	date, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "date must be in YYYY-MM-DD format")
+		return
+	}
+	dto, err := h.getRatesHistory.Execute(r.Context(), "USD", date)
+	if err != nil {
+		h.log.Error("get rates history", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	h.writeJSON(w, http.StatusOK, dto)
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, v interface{}) {

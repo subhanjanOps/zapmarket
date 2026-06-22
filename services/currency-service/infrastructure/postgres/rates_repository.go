@@ -60,5 +60,41 @@ func (r *RatesRepository) UpsertLatest(ctx context.Context, rates []entities.Exc
 			return fmt.Errorf("upsert rate %s/%s: %w", rate.Base, rate.Quote, err)
 		}
 	}
+
+	// Also record history (idempotent via ON CONFLICT DO NOTHING).
+	for _, rate := range rates {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO exchange_rates_history (base, quote, rate, as_of, fetched_at)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (base, quote, as_of) DO NOTHING`,
+			rate.Base, rate.Quote, rate.Rate, asOf, now)
+		if err != nil {
+			return fmt.Errorf("history insert %s/%s: %w", rate.Base, rate.Quote, err)
+		}
+	}
+
 	return tx.Commit()
+}
+
+func (r *RatesRepository) HistoryByBase(ctx context.Context, base string, date time.Time) ([]entities.ExchangeRate, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT base, quote, rate, as_of, fetched_at
+		 FROM exchange_rates_history
+		 WHERE base = $1 AND as_of = $2::date
+		 ORDER BY quote`,
+		base, date.Format("2006-01-02"))
+	if err != nil {
+		return nil, fmt.Errorf("history rates: %w", err)
+	}
+	defer rows.Close()
+
+	var out []entities.ExchangeRate
+	for rows.Next() {
+		var e entities.ExchangeRate
+		if err := rows.Scan(&e.Base, &e.Quote, &e.Rate, &e.AsOf, &e.FetchedAt); err != nil {
+			return nil, fmt.Errorf("history rates scan: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }

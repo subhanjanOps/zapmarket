@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -11,12 +12,14 @@ import (
 	"github.com/zapmarket/zapmarket/services/currency-service/domain/repositories"
 )
 
-// IngestRatesUseCase fetches rates from the provider, persists them, and warms the cache.
+// IngestRatesUseCase fetches rates from the provider, persists them, warms the cache,
+// and publishes a currency.rates.updated event.
 type IngestRatesUseCase struct {
 	provider  ports.RatesProvider
 	ratesRepo repositories.RatesRepository
 	cache     ports.RatesCache
 	cacheTTL  time.Duration
+	publisher ports.EventPublisher
 	log       *slog.Logger
 }
 
@@ -26,12 +29,14 @@ func NewIngestRatesUseCase(
 	cache ports.RatesCache,
 	cacheTTL time.Duration,
 	log *slog.Logger,
+	publisher ports.EventPublisher,
 ) *IngestRatesUseCase {
 	return &IngestRatesUseCase{
 		provider:  provider,
 		ratesRepo: ratesRepo,
 		cache:     cache,
 		cacheTTL:  cacheTTL,
+		publisher: publisher,
 		log:       log,
 	}
 }
@@ -73,5 +78,16 @@ func (uc *IngestRatesUseCase) Execute(ctx context.Context, base string) error {
 	}
 
 	uc.log.Debug("rates ingested", "base", base, "count", len(rows), "as_of", rateSet.AsOf)
+
+	// Publish event after successful persistence.
+	payload, _ := json.Marshal(map[string]interface{}{
+		"base":       base,
+		"as_of":      rateSet.AsOf.Format("2006-01-02"),
+		"rate_count": len(rows),
+	})
+	if err := uc.publisher.Publish(ctx, "currency.rates.updated", payload); err != nil {
+		uc.log.Warn("ingest rates: publish event failed", "error", err)
+	}
+
 	return nil
 }
