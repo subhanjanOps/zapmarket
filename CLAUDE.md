@@ -36,6 +36,7 @@ These documents are the source of truth for all engineering decisions.
 | `inventory-service` | — | — | — |
 | `payment-service` | — | — | — |
 | `notification-service` | — | — | — |
+| `currency-service` | 8086 | 50056 | `currency` |
 
 **Communication:**
 - **gRPC** for synchronous inter-service calls (e.g., product-catalog-service calls auth-service to validate tokens)

@@ -42,3 +42,5 @@ use ./pkg/redis
 use ./pkg/registry
 
 use ./services/api-gateway
+
+use ./services/currency-service

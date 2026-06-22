@@ -1,6 +1,6 @@
 # Plan — Dynamic Currency Management (`currency-service`)
 
-**Status:** DRAFT — awaiting approval
+**Status:** APPROVED — ready for implementation
 **Author:** Principal Engineer (Claude)
 **Date:** 2026-06-21
 **Scope decision:** Dedicated `currency-service` microservice (gRPC + REST), display/quote-oriented (no settlement changes).
@@ -52,10 +52,11 @@ Let ZapMarket present prices in a buyer's local currency across all UIs, with an
 | **seller-ui** (and other UIs later) | `lib/currency.tsx` fetches the supported-currency list + rates from the gateway instead of the hardcoded array. |
 
 ### APIs impacted
-- **NEW gRPC** (`currency-service`): `ListCurrencies`, `GetRates(base)`, `Convert(amountMinor, from, to)`.
-- **REST via gateway** (unchanged path, enriched body):
-  - `GET /api/v1/currencies` → `[{code,name,flag,enabled,decimals}]`
-  - `GET /api/v1/currencies/rates` → `{base,as_of,stale,rates:{...}}` (superset of today's `{base,date,rates}`).
+- **NEW gRPC** (`currency-service`): `ListCurrencies`, `GetRates(base)`. (`Convert` deferred — no caller yet, YAGNI.)
+- **REST via gateway** (straight passthrough — service owns the contract):
+  - `GET /api/v1/currencies` → `[{code,name,flag,decimals}]` (enabled only, filtered server-side; `auth_mode=none`)
+  - `GET /api/v1/currencies/rates` → `{base,as_of,date,stale,rates:{...}}` (`date` kept as alias for `as_of` for backward compat; `auth_mode=none`)
+  - `PUT /api/v1/admin/currencies/:code` → `{enabled:bool}` — **NEW** admin endpoint; JWT-protected (`role=admin`), accessible from backoffice UI
 
 ### Events impacted
 None for this scope. (Future: `currency.rates.updated.v1` for cache invalidation fan-out — noted in Future Improvements.)
@@ -136,52 +137,57 @@ External provider → `IngestRatesUseCase` → (PostgreSQL durable + Redis cache
 ### Files to create (`services/currency-service/`)
 - `go.mod`, `.env.example`, `README.md`
 - `cmd/main.go` — wiring, DI, health, graceful shutdown, worker start (mirrors `auth-service/cmd/main.go`).
-- `pkg/config/config.go` — service config + validation (`HTTP_PORT=8086`, `GRPC_PORT=50056`, `DB_NAME=currency`, `RATE_PROVIDER_URL`, `RATE_REFRESH_INTERVAL`, `REDIS_URL`).
+- `pkg/config/config.go` — config + validation. Env vars: `HTTP_PORT=8086`, `GRPC_PORT=50056`, `DB_NAME=currency`, `RATE_PROVIDER_URL=https://api.frankfurter.app`, `RATE_REFRESH_INTERVAL=1h`, `MAX_RATE_AGE=24h`, `REDIS_URL`, `LOG_LEVEL=info`.
 - `domain/entities/currency.go`
 - `domain/valueobjects/money.go`, `rate.go`, `currency_code.go`
-- `domain/services/conversion_service.go` (+ `_test.go`)
+- `domain/services/conversion_service.go` (+ `_test.go`) — handles zero-decimal currencies (JPY, KRW, IDR from seed)
 - `domain/repositories/currency_repository.go`, `rates_repository.go` (interfaces — segregated)
 - `application/ports/rates_provider.go`, `rates_cache.go`
 - `application/dto/currency_dto.go`, `rates_dto.go`
-- `application/usecases/list_currencies.go`, `get_rates.go`, `convert.go`, `ingest_rates.go` (+ `_test.go` each)
+- `application/usecases/list_currencies.go` — returns only `enabled=true` rows
+- `application/usecases/get_rates.go` — staleness = `now() − as_of > RATE_REFRESH_INTERVAL × 2`; returns 503 if `now() − as_of > MAX_RATE_AGE`
+- `application/usecases/ingest_rates.go` — triggered by worker tick (no immediate fetch on startup)
+- `application/usecases/toggle_currency.go` — **NEW** enable/disable a currency (admin use case)
+- (+ `_test.go` for each use case)
 - `infrastructure/postgres/currency_repository.go`, `rates_repository.go`
-- `infrastructure/redis/rates_cache.go`
+- `infrastructure/redis/rates_cache.go` — key `currency:rates:USD` (new namespace; shared Redis instance)
 - `infrastructure/external/frankfurter_provider.go`
-- `interfaces/http/handler.go`, `interfaces/http/router.go`
-- `interfaces/grpc/server.go`
+- `interfaces/http/handler.go` — public handlers (`ListCurrencies`, `GetRates`) + **NEW** admin handler (`ToggleCurrency`, JWT `role=admin`)
+- `interfaces/http/router.go`
+- `interfaces/grpc/server.go` — `ListCurrencies`, `GetRates` RPCs (`Convert` deferred)
 - `interfaces/worker/rate_ingestor.go`
-- `proto/currency.proto` + generated `proto/currencypb/*.go`
-- `migrations/0001_currencies.sql`, `migrations/0002_exchange_rates.sql`, `migrations/0003_seed_currencies.sql` (seed the 25 currencies from the prototype list)
-- `docs/` — swagger output via `pkg/swaggerx`
-- `tests/unit/`, `tests/integration/`
+- `proto/currency.proto` + generated `proto/currencypb/*.go` — flat `currency` proto package (consistent with existing protos)
+- `migrations/0001_currencies.sql`, `migrations/0002_exchange_rates.sql`
+- `migrations/0003_seed_currencies.sql` — seed all 25 currencies from `seller-ui/lib/currency.tsx` with `decimals` values: JPY=0, KRW=0, IDR=0, all others=2
+- `docs/` — swagger output via `pkg/swaggerx` at `/v1/docs/swagger.json`
+- `tests/unit/`, `tests/integration/` — use existing `docker-compose.yml` for integration test infra; coverage targets advisory (domain ≥90%, use cases ≥85%)
 
 ### Files to modify
 - `go.work` — add `use ./services/currency-service`.
-- `services/api-gateway/main.go` — remove the inline `/api/v1/currencies/rates` closure that calls `internal/currency`; route `/api/v1/currencies*` to `currency-service` (static registry entry `currency-service` + DB route row). Delete `services/api-gateway/internal/currency/rates.go`.
-- `services/seller-ui/lib/currency.tsx` — replace hardcoded `CURRENCIES` with a fetch of `GET /api/proxy/api/v1/currencies`; consume `as_of`/`stale` from the rates endpoint; keep localStorage cache + `detectCurrency`/`ZERO_DECIMAL` fallbacks.
-- `services/seller-ui/app/api/fx-rates/route.ts` — point at gateway (or remove in favour of the existing `/api/proxy` path) so there is a single source of truth.
-- `docker-compose.yml` / deployment config — register the `currency` DB and the new service (note: most infra is commented out today; add commented stanza consistent with repo style).
-- `CLAUDE.md` — add `currency-service` to the services/ports table.
+- `services/api-gateway/main.go` — remove inline `/api/v1/currencies/rates` closure; add straight-passthrough routes for `GET /api/v1/currencies`, `GET /api/v1/currencies/rates` (`auth_mode=none`) and `PUT /api/v1/admin/currencies/:code` (`auth_mode=admin`) pointing to `currency-service`. Delete `services/api-gateway/internal/currency/rates.go`.
+- `services/seller-ui/lib/currency.tsx` — extend `CurrencyProvider` to also fetch `GET /api/proxy/api/v1/currencies` for the dynamic list (replaces hardcoded `CURRENCIES`); update `fetchRates` to consume `as_of`/`stale`; keep `ratesDate` as "rates as of …" footnote (subtitle, not banner); keep existing localStorage 1h cache + `detectCurrency`/`ZERO_DECIMAL` fallbacks.
+- `services/seller-ui/app/api/fx-rates/route.ts` — **delete** (consumers already use `/api/proxy/api/v1/currencies/rates`; single source of truth through gateway).
+- `docker-compose.yml` — add **live (uncommented)** `currency-service` container + `currency` PostgreSQL DB stanza.
+- `CLAUDE.md` — add `currency-service | 8086 | 50056 | currency` to the services/ports table.
 
 ### New interfaces
 - `RatesProvider` (`FetchLatest(ctx, base) (RateSet, error)`) — external FX abstraction (DIP; allows multi-provider later).
-- `RatesRepository` (`UpsertLatest`, `LatestByBase`) and `CurrencyRepository` (`ListEnabled`, `Get`, `Upsert`) — segregated reader/writer where useful.
-- `RatesCache` (`Get`, `Set`) — Redis abstraction.
+- `RatesRepository` (`UpsertLatest`, `LatestByBase`) and `CurrencyRepository` (`ListEnabled`, `Get`, `Toggle`) — segregated.
+- `RatesCache` (`Get`, `Set`) — Redis abstraction; key `currency:rates:USD`.
 
 ### New DTOs
-- `CurrencyDTO{Code,Name,Flag,Decimals,Enabled}`
-- `RatesDTO{Base,AsOf,Stale,Rates map[string]float64}`
-- `ConvertResultDTO{AmountMinor,Currency,RateUsed,AsOf}`
+- `CurrencyDTO{Code,Name,Flag,Decimals}` — no `Enabled` field (server filters; public callers only see enabled)
+- `RatesDTO{Base,AsOf,Date,Stale,Rates map[string]float64}` — `Date` is alias for `AsOf` (backward compat)
 
 ### New repositories
 - `infrastructure/postgres.CurrencyRepository`, `infrastructure/postgres.RatesRepository` (raw `database/sql` + `lib/pq`, no ORM).
 - `infrastructure/redis.RatesCache`.
 
 ### New use cases
-- `ListCurrenciesUseCase` — enabled catalogue.
-- `GetRatesUseCase` — cache→DB read, computes `stale` from `as_of` vs refresh interval.
-- `ConvertUseCase` — pure conversion via `ConversionService`.
-- `IngestRatesUseCase` — provider→DB→cache, called by the worker.
+- `ListCurrenciesUseCase` — returns only `enabled=true` rows.
+- `GetRatesUseCase` — Redis→DB read; `stale = now()−as_of > interval×2`; HTTP 503 if `now()−as_of > MAX_RATE_AGE`.
+- `IngestRatesUseCase` — provider→DB→cache, called by the worker tick.
+- `ToggleCurrencyUseCase` — **NEW** enable/disable a currency by code; requires `admin` role (enforced at handler, not use case).
 
 ---
 
@@ -191,13 +197,14 @@ External provider → `IngestRatesUseCase` → (PostgreSQL durable + Redis cache
 - **Dependency rule:** domain imports nothing infra; use cases depend on ports/interfaces; infra implements them.
 - **Pure domain:** `ConversionService` + value objects are framework-free and fully unit-testable (table-driven tests incl. zero-decimal currencies, missing rate, identity conversion).
 - **Build order (TDD per `test-driven-development`):**
-  1. Domain value objects + `ConversionService` (+ tests).
-  2. Ports + use cases with fakes (+ tests).
+  1. Domain value objects + `ConversionService` (+ tests; covers zero-decimal JPY/KRW/IDR).
+  2. Ports + use cases (`ListCurrencies`, `GetRates`, `IngestRates`, `ToggleCurrency`) with fakes (+ tests).
   3. Infra adapters (postgres/redis/external).
-  4. proto + gRPC server; HTTP handlers + swagger.
-  5. Worker scheduler + `main.go` wiring + health/shutdown.
-  6. Gateway rewire + delete `internal/currency`.
-  7. UI consumption of dynamic list.
+  4. proto (`currency` package) + gRPC server (`ListCurrencies`, `GetRates`); HTTP handlers (public + admin) + swagger.
+  5. Prometheus metrics (`/metrics`): ingestion count, fetch latency histogram, cache hit counter.
+  6. Worker scheduler + `main.go` wiring + health/shutdown + auto-migrations.
+  7. Gateway rewire (straight passthrough; admin route JWT `role=admin`) + delete `internal/currency` + update `docker-compose.yml`.
+  8. seller-ui: dynamic list in `CurrencyProvider` + delete `fx-rates/route.ts` + stale footnote.
 
 ---
 
@@ -229,8 +236,59 @@ Provider outage (mitigated by durable last-good + `stale` flag), new ops surface
 
 ---
 
-## Open decisions for you
-1. **Port/DB name:** proposed HTTP `8086`, gRPC `50056`, DB `currency` — OK?
-2. **Gateway → service for `/rates`:** route REST straight through (simplest) vs. gateway calls gRPC and re-serializes (preserves exact body control). Proposed: straight route, service owns the contract.
-3. **Provider:** keep frankfurter.app as the only shipped provider for now? (interface allows adding more later.)
-4. **Other UIs** (admin-ui, backoffice-ui) — rewire now or only seller-ui in this pass?
+## Resolved Decisions
+
+All decisions are locked. Items marked *(chosen)* were selected by the engineering lead; items marked *(default)* were resolved by the plan author where the preference was deferred.
+
+### A — Infrastructure & Ports
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Port/DB assignment | HTTP `8086`, gRPC `50056`, DB `currency` ✓ |
+| 2 | Docker Compose stanza | **Live (uncommented)** — `currency-service` + `currency` DB added as active services |
+| 3 | Redis | *(default)* **Shared** Redis instance with gateway. New key namespace `currency:rates:USD` avoids collision with gateway's existing `fx:rates:USD` key |
+| 4 | Migrations | **Auto-run at startup** (same as auth-service) |
+
+### B — Rate Ingestion & Staleness
+| # | Decision | Resolution |
+|---|---|---|
+| 5 | Startup fetch | **Wait for first tick** — no immediate fetch on startup |
+| 6 | Staleness threshold | *(default)* `stale = now() − as_of > RATE_REFRESH_INTERVAL × 2` — no separate env var |
+| 7 | Provider error behaviour | **(b)** — serve last-good with `stale: true`; return **HTTP 503** if `now() − as_of > MAX_RATE_AGE` (env var, default `24h`) |
+| 8 | Provider URL | *(default)* `RATE_PROVIDER_URL=https://api.frankfurter.app`; no separate provider-name config (YAGNI) |
+
+### C — Gateway Routing
+| # | Decision | Resolution |
+|---|---|---|
+| 9 | Routing strategy | **Straight passthrough** — service owns the response contract |
+| 10 | Auth mode | `auth_mode=none` for GET currency routes ✓ |
+| 11 | Backward compat | *(default)* **Keep `date` as alias** for `as_of` in JSON response — both fields returned, zero cost, no consumer breakage |
+
+### D — Currency Catalogue
+| # | Decision | Resolution |
+|---|---|---|
+| 12 | Seed source | **Seed migration is authoritative** — 25 currencies from `seller-ui/lib/currency.tsx` with `decimals` added |
+| 13 | Zero-decimal currencies | **JPY=0, KRW=0, IDR=0** (the three present in the seed list); `ZERO_DECIMAL` set in seller-ui expanded to match |
+| 14 | Admin catalogue | **Admin endpoint included in scope**: `PUT /api/v1/admin/currencies/:code` `{enabled:bool}`, JWT `role=admin`, accessible from backoffice UI |
+
+### E — API & Contracts
+| # | Decision | Resolution |
+|---|---|---|
+| 15 | Proto package | *(default)* **Flat `currency` package** (`proto/currency.proto`) — consistent with existing protos |
+| 16 | `Convert` RPC | *(default)* **Deferred** — no internal caller exists (YAGNI); interface is designed for it but not implemented |
+| 17 | REST response shape | *(default)* **Filter server-side** — `GET /api/v1/currencies` returns only `enabled=true` rows; no `enabled` field in response |
+
+### F — Testing & Observability
+| # | Decision | Resolution |
+|---|---|---|
+| 18 | Integration test infra | *(default)* **Existing `docker-compose.yml`** — no dedicated test compose yet |
+| 19 | Coverage floor | *(default)* **Advisory only** — domain ≥90%, use cases ≥85%, not CI-enforced |
+| 20 | Prometheus metrics | **Yes — all three**: ingestion success/failure count, rate fetch latency (histogram), cache hit rate (counter) |
+| 21 | Log level | *(default)* `LOG_LEVEL=info` prod / `debug` dev; ingestor logs individual rate values at DEBUG |
+
+### G — UI & Seller-UI
+| # | Decision | Resolution |
+|---|---|---|
+| 22 | Currency list fetch strategy | *(default)* **React context/provider** — extend existing `CurrencyProvider` to also fetch dynamic list; 24h localStorage cache |
+| 23 | `fx-rates/route.ts` fate | *(default)* **Delete** — consumers already use `/api/proxy/api/v1/currencies/rates`; single source of truth |
+| 24 | Other UIs scope | *(default)* **seller-ui only** in this pass |
+| 25 | Stale indicator | *(default)* **Subtle timestamp footnote** ("rates as of [date/time]") — uses existing `ratesDate` state already in `CurrencyProvider` |

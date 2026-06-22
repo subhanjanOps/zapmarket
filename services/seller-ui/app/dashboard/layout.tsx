@@ -6,7 +6,7 @@ import { Splash } from "@/app/components/Skeleton";
 import { getMe } from "@/lib/api";
 import { logout } from "@/lib/auth";
 import { LayoutDashboard, Package, ShoppingBag, LogOut, Clock, Menu, X } from "lucide-react";
-import { CURRENCIES, useCurrency } from "@/lib/currency";
+import { useCurrency } from "@/lib/currency";
 
 type ThemeId = "vibrant" | "night" | "walnut" | "cream" | "slate" | "solarized-dark" | "solarized-light";
 
@@ -48,7 +48,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [drawerOpen, setDrawerOpen] = useState(false);
   const prevPath = useRef(pathname);
   const clock    = useClock();
-  const { currency, setCurrency, ratesLoading, ratesDate } = useCurrency();
+  const { currency, setCurrency, currencies, ratesLoading, ratesDate, stale } = useCurrency();
 
   useEffect(() => {
     const saved = (localStorage.getItem("zap-theme") as ThemeId) ?? "vibrant";
@@ -187,7 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <label style={{ display: "block", fontSize: "0.625rem", fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.25rem" }}>Currency</label>
           <div style={{ position: "relative" }}>
             <div style={{ position: "absolute", left: "0.5rem", top: "50%", transform: "translateY(-50%)", fontSize: "0.75rem", pointerEvents: "none", lineHeight: 1 }}>
-              {CURRENCIES.find((c) => c.code === currency)?.flag ?? "🌐"}
+              {currencies.find((c) => c.code === currency)?.flag ?? "🌐"}
             </div>
             <select
               className="input"
@@ -196,13 +196,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               style={{ paddingLeft: "1.75rem", fontSize: "0.75rem", height: 30, paddingTop: 0, paddingBottom: 0, cursor: "pointer" }}
               aria-label="Select display currency"
             >
-              {CURRENCIES.map((c) => (
+              {currencies.map((c) => (
                 <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
               ))}
             </select>
           </div>
-          <div style={{ fontSize: "0.6rem", color: "var(--muted)", marginTop: "0.2rem", fontFamily: '"DM Mono", monospace' }}>
-            {ratesLoading ? "Fetching live rates…" : `Rates · ${ratesDate}`}
+          <div style={{ fontSize: "0.6rem", color: stale ? "var(--warning, #d97706)" : "var(--muted)", marginTop: "0.2rem", fontFamily: '"DM Mono", monospace' }}>
+            {ratesLoading ? "Fetching live rates…" : stale ? `Rates as of ${ratesDate} (stale)` : `Rates · ${ratesDate}`}
           </div>
         </div>
 

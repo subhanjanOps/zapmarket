@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package currency;
+
+option go_package = "github.com/zapmarket/zapmarket/services/currency-service/proto/currencypb";
+
+service CurrencyService {
+  rpc ListCurrencies (ListCurrenciesRequest) returns (ListCurrenciesResponse);
+  rpc GetRates       (GetRatesRequest)       returns (GetRatesResponse);
+}
+
+message ListCurrenciesRequest {}
+
+message CurrencyProto {
+  string code     = 1;
+  string name     = 2;
+  string flag     = 3;
+  int32  decimals = 4;
+}
+
+message ListCurrenciesResponse {
+  repeated CurrencyProto currencies = 1;
+}
+
+message GetRatesRequest {
+  string base = 1;
+}
+
+message GetRatesResponse {
+  string base            = 1;
+  string as_of           = 2; // RFC3339
+  string date            = 3; // ISO date alias for backward compat
+  bool   stale           = 4;
+  map<string, double> rates = 5;
+}
