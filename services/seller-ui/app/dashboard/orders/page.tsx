@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { getSellerOrders, Order } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { SkeletonTableCard } from "@/app/components/Skeleton";
 
@@ -34,8 +35,8 @@ export default function OrdersPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const fmtMoney = (amount: number, currency: string) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount / 100);
+  const { formatFrom } = useCurrency();
+  const fmtMoney = (amount: number, currency: string) => formatFrom(amount, currency);
 
   const pages = Math.ceil(total / PAGE_SIZE);
   const page  = Math.floor(offset / PAGE_SIZE) + 1;

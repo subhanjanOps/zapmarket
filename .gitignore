@@ -9,3 +9,4 @@ node_modules
 .env
 services/**/.env
 *.bak
+.playwright-mcp

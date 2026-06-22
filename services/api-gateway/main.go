@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/admin"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/audit"
+	"github.com/zapmarket/zapmarket/services/api-gateway/internal/currency"
 	gw "github.com/zapmarket/zapmarket/services/api-gateway/internal/middleware"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/metrics"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/proxy"
@@ -150,6 +152,19 @@ func main() {
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"status":"ok","service":"api-gateway"}`))
+		})
+
+		r.Get("/api/v1/currencies/rates", func(w http.ResponseWriter, req *http.Request) {
+			rates, err := currency.Fetch(req.Context(), rdb)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = w.Write([]byte(`{"error":"exchange rate service unavailable"}`))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "public, max-age=300")
+			_ = json.NewEncoder(w).Encode(rates)
 		})
 
 		// Admin API — requires admin JWT.

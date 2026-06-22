@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getSellerOrder, cancelOrder, Order, OrderItem } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { StatusTimeline } from "@/app/components/StatusTimeline";
 import { SkeletonTableCard, Skel } from "@/app/components/Skeleton";
@@ -37,8 +38,8 @@ export default function OrderDetailPage() {
     }
   }
 
-  const fmtMoney = (amount: number, currency: string) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount / 100);
+  const { formatFrom } = useCurrency();
+  const fmtMoney = (amount: number, currency: string) => formatFrom(amount, currency);
 
   if (loading) {
     return (

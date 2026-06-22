@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getProducts, getSellerOrders, Product, Order } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 import { StatCard } from "@/app/components/StatCard";
 import { StatusBadge } from "@/app/components/StatusBadge";
 import { SkeletonStatCards, SkeletonTableCard } from "@/app/components/Skeleton";
@@ -44,25 +45,17 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const { format, formatFrom, rates, currency: displayCurrency } = useCurrency();
   const archivedCount = Math.max(0, productTotal - activeCount - draftCount);
 
   const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const monthOrders = orders.filter((o) => new Date(o.created_at) >= thisMonth);
 
-  // Group revenue by currency to handle multi-currency sellers correctly
-  const revenueMap = new Map<string, number>();
-  monthOrders
+  // Convert all confirmed order totals to USD, then format in display currency
+  const revenueUsdCents = monthOrders
     .filter((o) => o.status === "CONFIRMED")
-    .forEach((o) => {
-      revenueMap.set(o.currency, (revenueMap.get(o.currency) ?? 0) + o.total_amount);
-    });
-  const revenueDisplay = revenueMap.size === 0
-    ? "$0"
-    : [...revenueMap.entries()]
-        .map(([currency, amount]) =>
-          new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount / 100),
-        )
-        .join(" + ");
+    .reduce((sum, o) => sum + o.total_amount / (rates[o.currency] ?? 1), 0);
+  const revenueDisplay = format(Math.round(revenueUsdCents));
 
   if (loading) {
     return (
@@ -110,7 +103,7 @@ export default function DashboardPage() {
                 ) : orders.map((o) => (
                   <tr key={o.id}>
                     <td><Link href={`/dashboard/orders/${o.id}`} className="mono" style={{ color: "var(--accent)", textDecoration: "none" }}>{o.id.slice(0, 12)}…</Link></td>
-                    <td className="mono">{new Intl.NumberFormat("en-US", { style: "currency", currency: o.currency, maximumFractionDigits: 0 }).format(o.total_amount / 100)}</td>
+                    <td className="mono">{formatFrom(o.total_amount, o.currency)}</td>
                     <td><StatusBadge status={o.status} /></td>
                     <td style={{ color: "var(--muted)" }}>{new Date(o.created_at).toLocaleDateString()}</td>
                   </tr>

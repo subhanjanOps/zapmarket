@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { DialogProvider } from "./components/Dialog";
+import { CurrencyProvider } from "@/lib/currency";
 
 export const metadata: Metadata = {
   title: "ZapMarket — Seller Portal",
@@ -15,7 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body>
-        <DialogProvider>{children}</DialogProvider>
+        <CurrencyProvider>
+          <DialogProvider>{children}</DialogProvider>
+        </CurrencyProvider>
       </body>
     </html>
   );
