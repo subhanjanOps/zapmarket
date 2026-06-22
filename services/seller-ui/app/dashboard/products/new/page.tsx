@@ -5,6 +5,7 @@ import { createProduct, createSku, uploadImage } from "@/lib/api";
 import CategoryPicker from "@/app/components/CategoryPicker";
 import { SKUEditor, SKUDraft } from "@/app/components/SKUEditor";
 import { ImageDropzone } from "@/app/components/ImageDropzone";
+import { useCurrency } from "@/lib/currency";
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -20,6 +21,12 @@ const inputStyle: React.CSSProperties = {
 
 export default function NewProductPage() {
   const router = useRouter();
+  const { currencies } = useCurrency();
+
+  function toCents(amount: number, currencyCode: string): number {
+    const decimals = currencies.find((c) => c.code === currencyCode)?.decimals ?? 2;
+    return decimals === 0 ? Math.round(amount) : Math.round(amount * 100);
+  }
 
   const [name, setName]               = useState("");
   const [slug, setSlug]               = useState("");
@@ -73,9 +80,9 @@ export default function NewProductPage() {
             product_id: productId,
             sku_code: s.sku_code,
             attributes: attrs,
-            price_amount: Math.round(s.price_amount * 100),
+            price_amount: toCents(s.price_amount, s.price_currency),
             price_currency: s.price_currency,
-            compare_price: s.compare_price ? Math.round(s.compare_price * 100) : undefined,
+            compare_price: s.compare_price ? toCents(s.compare_price, s.price_currency) : undefined,
             weight_grams: s.weight_grams || undefined,
             is_active: s.is_active,
           });

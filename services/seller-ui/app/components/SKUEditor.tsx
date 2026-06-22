@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { SKU } from "@/lib/api";
+import { useCurrency } from "@/lib/currency";
 
 export interface SKUDraft {
   _key: string;
@@ -17,12 +18,12 @@ export interface SKUDraft {
 
 const skuInputStyle: React.CSSProperties = { padding: "0.375rem 0.625rem", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: "0.8125rem", fontFamily: "inherit", width: "100%" };
 
-function emptyDraft(): SKUDraft {
+function emptyDraft(currency = "USD"): SKUDraft {
   return {
     _key: crypto.randomUUID(),
     sku_code: "",
     price_amount: 0,
-    price_currency: "USD",
+    price_currency: currency,
     compare_price: 0,
     weight_grams: 0,
     is_active: true,
@@ -40,7 +41,12 @@ interface Props {
 }
 
 export function SKUEditor({ initial = [], onChange }: Props) {
-  const [skus, setSkus] = useState<SKUDraft[]>(initial.length ? initial : [emptyDraft()]);
+  const { currency, currencies } = useCurrency();
+  const [skus, setSkus] = useState<SKUDraft[]>(initial.length ? initial : [emptyDraft(currency)]);
+
+  function decimalsFor(code: string): number {
+    return currencies.find((c) => c.code === code)?.decimals ?? 2;
+  }
 
   function update(idx: number, patch: Partial<SKUDraft>) {
     const next = skus.map((s, i) => i === idx ? { ...s, ...patch } : s);
@@ -62,7 +68,7 @@ export function SKUEditor({ initial = [], onChange }: Props) {
   }
 
   function addSku() {
-    const next = [...skus, emptyDraft()];
+    const next = [...skus, emptyDraft(currency)];
     setSkus(next);
     onChange(next);
   }
@@ -92,12 +98,39 @@ export function SKUEditor({ initial = [], onChange }: Props) {
               <input style={skuInputStyle} value={sku.sku_code} onChange={(e) => update(si, { sku_code: e.target.value })} placeholder="e.g. TSHIRT-BLK-M" />
             </div>
             <div>
-              <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>Price (USD) *</label>
-              <input style={skuInputStyle} type="number" min="0" step="0.01" value={sku.price_amount || ""} onChange={(e) => update(si, { price_amount: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
+              <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>
+                Price *
+                <select
+                  value={sku.price_currency}
+                  onChange={(e) => update(si, { price_currency: e.target.value })}
+                  style={{ marginLeft: "0.375rem", fontSize: "0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 4, color: "var(--accent)", padding: "0 0.25rem", cursor: "pointer" }}
+                >
+                  {currencies.length > 0
+                    ? currencies.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)
+                    : <option value={sku.price_currency}>{sku.price_currency}</option>}
+                </select>
+              </label>
+              <input
+                style={skuInputStyle}
+                type="number"
+                min="0"
+                step={decimalsFor(sku.price_currency) === 0 ? "1" : "0.01"}
+                value={sku.price_amount || ""}
+                onChange={(e) => update(si, { price_amount: parseFloat(e.target.value) || 0 })}
+                placeholder={decimalsFor(sku.price_currency) === 0 ? "0" : "0.00"}
+              />
             </div>
             <div>
-              <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>Compare Price</label>
-              <input style={skuInputStyle} type="number" min="0" step="0.01" value={sku.compare_price || ""} onChange={(e) => update(si, { compare_price: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
+              <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>Compare Price ({sku.price_currency})</label>
+              <input
+                style={skuInputStyle}
+                type="number"
+                min="0"
+                step={decimalsFor(sku.price_currency) === 0 ? "1" : "0.01"}
+                value={sku.compare_price || ""}
+                onChange={(e) => update(si, { compare_price: parseFloat(e.target.value) || 0 })}
+                placeholder={decimalsFor(sku.price_currency) === 0 ? "0" : "0.00"}
+              />
             </div>
             <div>
               <label style={{ fontSize: "0.75rem", color: "var(--text-2)", fontWeight: 500, display: "block", marginBottom: "0.25rem" }}>Weight (g)</label>
