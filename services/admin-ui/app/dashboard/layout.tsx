@@ -7,7 +7,7 @@ import { ErrorBoundary } from "@/app/components/ErrorBoundary";
 import { clearToken } from "@/lib/auth";
 import {
   LayoutDashboard, Route, Network, ScrollText,
-  BarChart2, ShieldOff, LogOut, Menu, X,
+  BarChart2, ShieldOff, LogOut, Menu, X, Coins,
 } from "lucide-react";
 
 type ThemeId = "terminal" | "phosphor" | "walnut" | "cream" | "slate" | "solarized-dark" | "solarized-light";
@@ -28,7 +28,8 @@ const NAV = [
   { href: "/dashboard/registry",  label: "Registry",  Icon: Network,         idx: "03" },
   { href: "/dashboard/metrics",   label: "Metrics",   Icon: BarChart2,       idx: "04" },
   { href: "/dashboard/audit",     label: "Audit Log", Icon: ScrollText,      idx: "05" },
-  { href: "/dashboard/blocklist", label: "Blocklist", Icon: ShieldOff,       idx: "06" },
+  { href: "/dashboard/blocklist",   label: "Blocklist",  Icon: ShieldOff, idx: "06" },
+  { href: "/dashboard/currencies", label: "Currencies", Icon: Coins,     idx: "07" },
 ];
 
 function useClock() {
@@ -376,7 +377,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         zIndex: 50,
         padding: "0.25rem 0 0.5rem",
       }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0 }}>
           {NAV.map(({ href, label, Icon }) => {
             const active = isActive(href, pathname);
             return (

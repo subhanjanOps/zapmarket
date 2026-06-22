@@ -191,3 +191,28 @@ export const unblockIP = (ip: string) =>
   apiFetch<{ removed: boolean }>(`/gateway/v1/blocklist/${encodeURIComponent(ip)}`, {
     method: "DELETE",
   });
+
+// ── Currencies ────────────────────────────────────────────────────────────────
+
+export type Currency = {
+  code: string;
+  name: string;
+  flag: string;
+  decimals: number;
+  enabled: boolean;
+};
+
+export async function getCurrencies(): Promise<Currency[]> {
+  const res = await fetch("/api/gateway/api/v1/currencies");
+  if (!res.ok) throw new Error(`getCurrencies: ${res.status}`);
+  return res.json();
+}
+
+export async function toggleCurrency(code: string, enabled: boolean): Promise<void> {
+  const res = await fetch(`/api/gateway/api/v1/admin/currencies/${code}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(`toggleCurrency: ${res.status}`);
+}
