@@ -1,111 +1,149 @@
-# Code Review: `inventory-service`
+# inventory-service Review
 
 **Reviewer:** Principal Engineer
-**Date:** 2026-06-21
-**Branch:** `features/cluster-setup`
-**Verdict:** CHANGES REQUIRED
-
----
+**Date:** 2026-06-22
+**Branch:** features/cluster-setup
 
 ## Executive Summary
 
-One of the most architecturally complete services: Redis Lua atomic check-and-decrement, PostgreSQL transactional durability, outbox relay, clean domain modeling, and meaningful test coverage for `ReserveStock`. However: committed `.env`, silent outbox event loss, TOCTOU race in `ReleaseStock`, no gRPC auth, and Redis counter drift after `AddStock` failure block production deployment.
+The inventory-service is the most technically sophisticated of the three reviewed services. It implements a Redis Lua script check-and-decrement for atomic, oversell-safe stock reservation, with a DB-only fallback path when Redis is unavailable, a Redis counter rollback on Postgres rejection, a full stock movement ledger, reservation TTL tracking, double-publish prevention for release/deduct via status-checking SQL, and a transactional outbox on every mutation. It exposes a gRPC interface (ReserveStock, ReleaseStock, DeductStock, AddStock, GetStock) and a health-check HTTP endpoint. It is the only service of the three with a test file covering the critical Redis/DB interaction paths. The primary gaps are: no test for `AddStock`/`ReleaseStock`/`DeductStock` paths, a missing expired-reservation sweep job, a Redis counter that can permanently drift below the true DB value under specific race conditions, and no auth on the gRPC server.
 
 ---
 
 ## Critical Findings
 
-### C-1: `.env` File Committed With Real Credentials
-**File:** `services/inventory-service/.env`
-Contains `DB_PASSWORD=zappass123`, `REDIS_URL`, `KAFKA_BROKERS`. Must be removed from git history and `.gitignore`d.
+### C1 — Redis counter can permanently drift negative under a DB-reject-then-Redis-rollback-failure race
+**File:** `internal/service/inventory_service.go` lines 133-151
+After the Lua script decrements the Redis counter, if the Postgres `ReserveStock` fails, the service attempts to restore the counter with `rdb.IncrBy(ctx, key, int64(qty))`. If this `IncrBy` also fails (Redis transient error), the counter is permanently lower than the true `qty_available` in Postgres. The service logs a CRITICAL message but takes no further action. The effect is that future `ReserveStock` calls will return `INSUFFICIENT_STOCK` for orders that Postgres could actually fulfill — stock is effectively locked away until the Redis key is deleted and re-warmed.
+**Fix:** Implement a periodic reconciliation job (or a recovery path triggered on `CRITICAL` log) that compares the Redis counter against `SELECT qty_available FROM inventory WHERE sku_id = $1` and resets the key if they diverge. Alternatively, set a short TTL (e.g., 5 minutes) on all stock keys so stale counters self-heal, and always fall through to the DB path on a cache miss after TTL expiry.
 
-### C-2: Silent JSON Marshal Error in Outbox Path — Events Silently Dropped
-**File:** `internal/repository/inventory_repository.go:106, 154`
-```go
-payload, _ := json.Marshal(...)
+### C2 — No expired-reservation sweep job
+**File:** `internal/domain/models.go` line 80, `internal/repository/inventory_repository.go` `ReserveStock`
+`ReservationTTL = 15 * time.Minute` and `ExpiresAt` is set on every reservation row. The domain comment explicitly acknowledges that no sweep job exists. In production, if order-management-service fails to call `ReleaseStock` after a checkout failure (crash, network partition), inventory remains reserved forever. The `qty_reserved` column never decrements, and `qty_available` converges to zero over time even though real stock exists.
+**Fix:** Implement a background goroutine (or a cron job as a separate task) that runs every minute and executes:
+```sql
+UPDATE inventory i
+SET qty_reserved = qty_reserved - r.qty, updated_at = NOW()
+FROM inventory_reservations r
+WHERE r.inventory_id = i.id
+  AND r.status = 'RESERVED'
+  AND r.expires_at < NOW()
+RETURNING r.id, r.sku_id, r.qty;
 ```
-Error silently discarded. If marshal fails, `payload` is nil → `NULL` JSONB inserted → outbox relay publishes malformed/empty event. Violates "Never ignore errors."
-
-### C-3: `ReleaseStock` Has TOCTOU Race — Can Double-Free Stock in Redis
-**File:** `internal/service/inventory_service.go:168-179`
-`GetReservationDetails` and `ReleaseStock` are two separate DB round-trips. The correct fix: return `(skuID, qty)` directly from `repo.ReleaseStock` to eliminate the gap and the extra round-trip.
-
-### C-4: No Authentication or Authorization on Any gRPC Endpoint
-**File:** `internal/handler/grpc/inventory_grpc_handler.go`, `main.go:87`
-`AddStock` is a privileged write operation completely open to unauthenticated callers. No JWT validation middleware.
+Then update those reservations to `RELEASED`, write outbox events, and increment the Redis counters.
 
 ---
 
 ## High Priority Findings
 
-### H-1: Redis Counter Becomes Permanently Stale After `AddStock` + Redis Failure
-**File:** `internal/service/inventory_service.go:71-73`
-If Redis `INCRBY` fails during `AddStock`, the warning is logged and execution continues. Redis now holds a lower quantity than Postgres indefinitely — future `ReserveStock` calls produce false `INSUFFICIENT_STOCK` errors.
-**Fix:** `DEL` the key on Redis write failure, letting the cache-miss path re-warm it.
+### H1 — gRPC server has no authentication or authorization
+**File:** `internal/handler/grpc/inventory_grpc_handler.go`, `main.go`
+The gRPC server accepts `AddStock`, `ReserveStock`, `ReleaseStock`, and `DeductStock` from any in-cluster caller without verifying identity. A rogue service or a misconfigured client could add arbitrary stock or release reservations that belong to a different order.
+**Fix:** Add a `UnaryServerInterceptor` that enforces mTLS or verifies a shared service-to-service secret. `AddStock` in particular (which increases `qty_on_hand`) should require an `admin` or `warehouse` role claim, not just any service credential.
 
-### H-2: `ReserveStock` gRPC Handler Has Dead Code and Misleading Semantics
-**File:** `internal/handler/grpc/inventory_grpc_handler.go:51-55`
-`if reservation == nil` check is dead — service never returns `(nil, nil)`. The interface comment in `contracts/repositories.go` says it does. Pick one contract and enforce it consistently.
+### H2 — `AddStock` does not validate that the calling service is authorized to add to this SKU
+Even if H1's auth interceptor is added, `AddStock` should verify that the SKU exists in product-catalog-service before accepting stock. Currently any caller can add stock for a non-existent SKU ID, creating orphaned inventory rows.
+**File:** `internal/service/inventory_service.go` lines 64-86
+**Fix:** Before calling `s.repo.AddStock`, validate the SKU ID against product-catalog-service via gRPC. Accept an optional `productCatalogClient` dependency in `inventoryService`.
 
-### H-3: `inventory-service.exe` Binary Committed to Repository
-**File:** `services/inventory-service/inventory-service.exe`
-Compiled binary in source control. Delete and add `*.exe` to `.gitignore`.
+### H3 — `dbReserve` fallback comment says "not atomic" but the SQL is actually atomic (single row update with WHERE guard)
+**File:** `internal/service/inventory_service.go` lines 157-168
+The comment says: "full check-and-decrement in Postgres (original single-DB behaviour, correct but not atomic)". The Postgres `UPDATE ... WHERE qty_on_hand - qty_reserved >= $2 ... RETURNING` is actually a single atomic statement under Postgres's row-level locking — it is as atomic as the Lua script. The misleading comment could cause future maintainers to distrust the fallback and introduce unnecessary locking mechanisms.
+**Fix:** Update the comment: "fallback to Postgres path — single-statement atomic check-and-update via row lock; no Redis counter update since Redis is unavailable".
 
-### H-4: Interface Contract Ambiguity — Nil Reservation vs. Error for Insufficient Stock
-**File:** `internal/domain/contracts/repositories.go:26-29`
-Contract doc says "Returns (nil, nil) if insufficient stock — not an error." Service wraps nil into `pkgerrors.NewConflict("INSUFFICIENT_STOCK")`. Ambiguous contract across all callers.
-
-### H-5: `AddStock` Ledger Entry Uses Confusing `qtyBefore`/`qtyAfter` Naming
-**File:** `internal/repository/inventory_repository.go:37-46`
-Variables track `qty_on_hand` in some operations and `qty_reserved` in others, making the ledger semantics inconsistent. Not a bug but a maintainability hazard.
+### H4 — Redis counter is never given a TTL on warm/update
+**File:** `internal/service/inventory_service.go` lines 116, 137
+`s.rdb.Set(ctx, key, inv.QtyAvailable, 0)` passes TTL `0` (no expiry). If the Postgres and Redis values diverge (DB migration, manual correction, C1 scenario), the Redis counter will permanently override the DB until the process restarts or the key is manually deleted. This compounds the drift problem in C1.
+**Fix:** Set a bounded TTL (e.g., `5 * time.Minute`) on the cache key. A cache miss after expiry re-warms from DB, self-healing any drift. This does not remove the need for the reconciliation job in C1 but provides a safety net.
 
 ---
 
 ## Medium Priority Findings
 
-- **M-1:** `InventoryService` interface defined in `service` package — should be in `domain/contracts/` per DIP
-- **M-2:** Comment in `dbReserve` fallback says "not atomic" — incorrect; the DB path IS atomic (single UPDATE statement in transaction)
-- **M-3:** `GetReservationDetails` read has no transaction isolation — returns stale data for Redis increment
-- **M-4:** No expiry sweep for `RESERVED` reservations past `expires_at` — abandoned reservations lock stock permanently
-- **M-5:** Health endpoint always returns `{"status":"ok"}` — doesn't probe DB or Redis for Kubernetes readiness
-- **M-6:** `.env.example` missing `REDIS_URL`, `KAFKA_BROKERS`, `MIGRATE_ON_BOOT` — developer setup broken out of box
-- **M-7:** `DeductStock` writes no outbox event — `inventory.deducted` is a core business fact missing from the event stream
+### M1 — Incomplete test coverage for `AddStock`, `ReleaseStock`, and `DeductStock`
+**File:** `internal/service/inventory_service_test.go`
+The test file covers `ReserveStock` thoroughly (Redis hit, cache miss, insufficient stock, Redis down, DB rejection rollback, validation). `AddStock`, `ReleaseStock`, `DeductStock`, and `GetStock` have zero test cases.
+**Fix:** Add tests for:
+- `AddStock`: Redis key incremented when warm; Redis key not created when absent (the `luaIncrIfExists` path).
+- `ReleaseStock`: Redis counter incremented after DB release; error from DB propagated.
+- `DeductStock`: DB `CONFIRMED` transition; Redis counter not changed (correct behavior per comment).
+- `GetStock`: returns domain struct correctly.
+
+### M2 — Outbox event for `inventory.released` uses `reservationID` as `aggregate_id`, but `inventory.reserved` uses `reservation.ID`
+**File:** `internal/repository/inventory_repository.go` lines 163-166 vs lines 107-114
+Both use the reservation UUID as `aggregate_id`, which is correct and consistent. This is fine. However, `DeductStock` writes no outbox event at all — there is no `inventory.deducted` or `inventory.confirmed` event. Downstream consumers (reporting, notification) cannot observe when stock is permanently consumed.
+**Fix:** Add `insertOutboxRow(ctx, tx, reservationID, "inventory", "inventory.deducted", payload)` inside the `DeductStock` transaction.
+
+### M3 — `GetReservationDetails` is defined in the interface and implemented in the repository but never called by the service
+**File:** `internal/domain/contracts/repositories.go` line 52, `internal/repository/inventory_repository.go` lines 248-261
+`GetReservationDetails` was presumably added for the `ReleaseStock` path to look up `skuID` without a round-trip, but `ReleaseStock` in the repository already returns `skuID` via `RETURNING`. The contract method is dead code.
+**Fix:** Remove `GetReservationDetails` from the `InventoryRepository` interface and its implementation. Dead interface methods violate the Interface Segregation Principle.
+
+### M4 — `DefaultWarehouseID` is a package-level `var`, not a `const`
+**File:** `internal/domain/models.go` line 13
+```go
+var DefaultWarehouseID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+```
+`uuid.UUID` is a `[16]byte` array — it cannot be a `const`, so `var` is technically required. However, nothing prevents mutation of this value. Rename to `defaultWarehouseID` (unexported) and expose it via a function `DefaultWarehouse() uuid.UUID` to prevent accidental reassignment, or document that it is immutable.
+
+### M5 — No distributed tracing on gRPC server
+Per engineering standards, all services must support distributed tracing. The gRPC server has no OpenTelemetry `UnaryServerInterceptor`. Calls from order-management-service carry no trace context.
+**Fix:** Add `otelgrpc.UnaryServerInterceptor()` to `grpcx.NewServer()` or inject in `main.go`.
+
+### M6 — `luaReserve` Lua script has no protection against negative counters
+**File:** `internal/service/inventory_service.go` lines 32-39
+```lua
+return redis.call('DECRBY', KEYS[1], qty)
+```
+The script checks `available < qty` and returns 0 (insufficient). However, if two concurrent requests both see `available = 5` and one decrements to 2 while the other concurrently passes the check (due to a non-atomic read in a non-Lua context — impossible here, but worth noting), the counter could go negative. In the current single-script implementation this is safe because the `GET` and `DECRBY` are atomic within the Lua script. The existing behavior is correct, but a guard `if available - qty < 0 then return 0 end` would make the invariant explicit and protect against future script modifications.
 
 ---
 
 ## Low Priority Findings
 
-- **L-1:** `DefaultWarehouseID` declared as `var` — any code can reassign it; should be unexported with getter
-- **L-2:** `NewInventoryRepository` returns concrete type — should return `contracts.InventoryRepository`
-- **L-3:** `strconv.Itoa` for Lua argv — minor style inconsistency
-- **L-4:** `GetStock` has no structured log call — inconsistent observability vs. other service methods
-- **L-5:** `go.mod` declares `go 1.25.0` — Go 1.25 does not exist; causes toolchain mismatch
+### L1 — `MovementType` constants use `snake_case` strings instead of `UPPER_SNAKE_CASE`
+**File:** `internal/domain/models.go` lines 46-52
+```go
+MovementPurchaseOrder      MovementType = "purchase_order"
+MovementReservation        MovementType = "reservation"
+```
+All other status enums in the project use UPPER_SNAKE_CASE per the project memory standard. Ledger movement types should follow suit.
+**Fix:** Change to `"PURCHASE_ORDER"`, `"RESERVATION"`, etc. Add a migration to update existing rows.
+
+### L2 — `ReservationStatus` constants are UPPER_SNAKE_CASE but `MovementType` is not (inconsistency within the same file)
+Related to L1. `ReservationReserved = "RESERVED"`, `ReservationConfirmed = "CONFIRMED"`, `ReservationReleased = "RELEASED"` are correct. The `MovementType` constants in the same file should match.
+
+### L3 — Health handler is a package-level function, not a method — inconsistent with other services
+**File:** `internal/handler/http/health_handler.go`
+`httphandler.Health` is registered as a bare function. All other HTTP handlers in the codebase are methods on handler structs. This is a minor inconsistency that makes future extension (e.g., adding a DB ping check to the health response) awkward.
+**Fix:** Wrap in a `HealthHandler` struct with a `Health` method, even if the struct has no fields currently.
+
+### L4 — `inventory_service_test.go` uses `slog.Default()` directly instead of a test-scoped logger
+Minor: Using `slog.Default()` in tests means test output is mixed with application logs. Pass `slog.New(slog.NewTextHandler(io.Discard, nil))` for silent tests.
 
 ---
 
 ## Recommended Refactoring Plan
 
-**Priority 1 — Do Before Merging:**
-1. Remove `.env`, `.exe` from git; rotate credentials; add to `.gitignore`
-2. Fix silent `json.Marshal` error in outbox writes
-3. Add gRPC auth interceptor to `grpcx.NewServer()` for `AddStock`
-4. Update `.env.example` with all required vars
+**Sprint 1 (before any production traffic):**
+1. Fix C2: Implement expired-reservation sweep goroutine in `main.go`.
+2. Fix H1: Add gRPC `UnaryServerInterceptor` for service-to-service auth.
+3. Fix H4: Set a 5-minute TTL on all Redis stock keys (self-healing for drift).
 
-**Priority 2 — Next Sprint:**
-5. Refactor `ReleaseStock`: return `(skuID, qty)` from repo directly, eliminate TOCTOU gap
-6. Fix Redis staleness after `AddStock` failure: `DEL` key on Redis write error
-7. Add `inventory.deducted` outbox event to `DeductStock`
-8. Resolve `InventoryService` contract ambiguity (nil vs. error for insufficient stock)
-9. Move `InventoryService` interface to `internal/domain/contracts/`
+**Sprint 2:**
+4. Fix C1: Implement Redis/DB reconciliation on CRITICAL log or as a scheduled job.
+5. Fix M1: Add unit tests for `AddStock`, `ReleaseStock`, `DeductStock`, `GetStock`.
+6. Fix M2: Add `inventory.deducted` outbox event in `DeductStock`.
+7. Fix M3: Remove `GetReservationDetails` from the interface (dead code).
 
-**Priority 3 — Tech Debt:**
-10. Add `/ready` endpoint with DB and Redis ping
-11. Make `DefaultWarehouseID` unexported
-12. Change `NewInventoryRepository` to return interface type
-13. Fix `go 1.25.0` in `go.mod`
-14. Add integration tests for `AddStock`, `ReleaseStock`, `DeductStock` service paths
-15. Open a tracked issue for the expiry sweep on abandoned reservations
+**Sprint 3:**
+8. Fix H2: Validate SKU existence against product-catalog-service in `AddStock`.
+9. Fix L1/L2: Standardize `MovementType` to UPPER_SNAKE_CASE with migration.
+10. Add OpenTelemetry server interceptor (M5).
+11. Fix H3: Update misleading `dbReserve` comment.
 
 ---
 
-## Final Verdict: CHANGES REQUIRED
+## Final Verdict
+
+**Approved with required changes.** The inventory-service demonstrates the highest level of engineering among the three reviewed services. The Lua check-and-decrement pattern is correctly implemented, the Redis fallback and rollback logic is sound, and the test suite for `ReserveStock` is exemplary. Two critical production issues — the absence of an expired-reservation sweep job and the potential for permanent Redis counter drift — must be resolved before this service handles real orders at scale. The missing gRPC auth (H1) is required before any non-order-management-service caller can be permitted. All other findings are incremental hardening items that can be addressed in subsequent sprints.

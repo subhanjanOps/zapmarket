@@ -34,6 +34,7 @@ type Writer struct {
 	db     *sql.DB
 	ch     chan Entry
 	logger *slog.Logger
+	done   chan struct{}
 }
 
 const bufSize = 512
@@ -43,7 +44,14 @@ func NewWriter(db *sql.DB, logger *slog.Logger) *Writer {
 		db:     db,
 		ch:     make(chan Entry, bufSize),
 		logger: logger,
+		done:   make(chan struct{}),
 	}
+}
+
+// Done returns a channel closed once Run has finished draining. Callers should
+// wait on this before closing the database connection.
+func (w *Writer) Done() <-chan struct{} {
+	return w.done
 }
 
 // Log enqueues an entry. Drops silently if the buffer is full (backpressure).
@@ -57,6 +65,7 @@ func (w *Writer) Log(e Entry) {
 
 // Run drains the buffer and batch-inserts. Returns when ctx is cancelled.
 func (w *Writer) Run(ctx context.Context) {
+	defer close(w.done)
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -81,13 +90,21 @@ func (w *Writer) Run(ctx context.Context) {
 		case <-ticker.C:
 			flush()
 		case <-ctx.Done():
-			// Drain remaining entries.
+			// Drain remaining entries on a fresh context — the lifecycle ctx
+			// is already cancelled, so reusing it would fail every insert.
+			drainCtx, drainCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			for {
 				select {
 				case e := <-w.ch:
 					batch = append(batch, e)
 				default:
-					flush()
+					if len(batch) > 0 {
+						if err := w.insert(drainCtx, batch); err != nil {
+							w.logger.Warn("audit drain insert failed", "error", err, "count", len(batch))
+						}
+						batch = batch[:0]
+					}
+					drainCancel()
 					return
 				}
 			}

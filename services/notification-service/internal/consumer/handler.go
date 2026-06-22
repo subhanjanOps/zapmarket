@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/services/notification-service/internal/notifier"
@@ -34,7 +35,7 @@ func formatAmount(amountCents string, currency string) string {
 		sym = currency + " "
 	}
 	if zeroDecimalCurrencies[currency] {
-		return sym + formatWithCommas(cents/100)
+		return sym + formatWithCommas(cents)
 	}
 	whole := cents / 100
 	frac := cents % 100
@@ -63,12 +64,6 @@ func formatWithCommas(n int64) string {
 	return b.String()
 }
 
-// FormatAmountForTest exposes formatAmount for unit tests.
-// Only used in tests — not called from production code.
-func FormatAmountForTest(amountCents, currency string) string {
-	return formatAmount(amountCents, currency)
-}
-
 // Handler processes order events from Kafka and dispatches notifications.
 type Handler struct {
 	notifier notifier.Notifier
@@ -85,21 +80,29 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 	eventType := msg.Headers["event_type"]
 	outboxID := msg.Headers["outbox_id"]
 
-	// HIGH-4: validate required headers before use.
 	if outboxID == "" || eventType == "" {
 		return fmt.Errorf("missing required headers: outbox_id=%q event_type=%q", outboxID, eventType)
 	}
 
-	// Dedup: skip if we already processed this outbox event.
-	dedupKey := fmt.Sprintf("notif:dedup:%s", outboxID)
-	set, err := h.redis.SetNX(ctx, dedupKey, 1, time.Hour).Result()
-	if err != nil {
-		// CRIT-2: return error so the consumer does not commit the offset.
-		return fmt.Errorf("dedup check: %w", err)
+	// H3: validate outbox_id is a valid UUID before using it as a dedup key.
+	dedupEnabled := true
+	if _, err := uuid.Parse(outboxID); err != nil {
+		h.logger.Warn("outbox_id is not a valid UUID, skipping dedup", "outbox_id", outboxID)
+		dedupEnabled = false
 	}
-	if !set {
-		h.logger.Info("duplicate event skipped", "outbox_id", outboxID, "event_type", eventType)
-		return nil
+
+	dedupKey := fmt.Sprintf("notif:dedup:%s", outboxID)
+
+	// C2: check dedup before sending but do NOT set the key yet.
+	if dedupEnabled {
+		exists, err := h.redis.Exists(ctx, dedupKey).Result()
+		if err != nil {
+			return fmt.Errorf("dedup check: %w", err)
+		}
+		if exists > 0 {
+			h.logger.Info("duplicate event skipped", "outbox_id", outboxID, "event_type", eventType)
+			return nil
+		}
 	}
 
 	// Parse into any-typed map first to handle numeric/boolean fields in
@@ -131,6 +134,13 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 	if err := h.notifier.Send(ctx, notif); err != nil {
 		h.logger.Error("failed to send notification", "event_type", eventType, "user_id", notif.UserID, "error", err)
 		return err // Retry.
+	}
+
+	// C2: set dedup key AFTER successful send. H2: use 72h TTL.
+	if dedupEnabled {
+		if _, err := h.redis.SetNX(ctx, dedupKey, 1, 72*time.Hour).Result(); err != nil {
+			h.logger.Warn("failed to set dedup key after send", "outbox_id", outboxID, "error", err)
+		}
 	}
 
 	h.logger.Info("notification sent", "event_type", eventType, "user_id", notif.UserID)

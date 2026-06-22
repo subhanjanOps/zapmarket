@@ -17,6 +17,7 @@ const (
 	Internal     ErrorType = "internal"
 	Validation   ErrorType = "validation"
 	Unauthorized ErrorType = "unauthorized"
+	Forbidden    ErrorType = "forbidden"
 )
 
 // AppError is the standard application error shared across all services.
@@ -48,6 +49,10 @@ func NewUnauthorized(code, message string) *AppError {
 	return &AppError{Type: Unauthorized, Code: code, Message: message}
 }
 
+func NewForbidden(code, message string) *AppError {
+	return &AppError{Type: Forbidden, Code: code, Message: message}
+}
+
 func NewInternal(code, message string, err error) *AppError {
 	return &AppError{Type: Internal, Code: code, Message: message, Err: err}
 }
@@ -65,6 +70,8 @@ func (e *AppError) HTTPStatus() int {
 		return http.StatusBadRequest
 	case Unauthorized:
 		return http.StatusUnauthorized
+	case Forbidden:
+		return http.StatusForbidden
 	default:
 		return http.StatusInternalServerError
 	}
@@ -113,6 +120,8 @@ func ToGRPCStatus(err error) error {
 	case Validation:
 		return status.Error(codes.InvalidArgument, appErr.Message)
 	case Unauthorized:
+		return status.Error(codes.Unauthenticated, appErr.Message)
+	case Forbidden:
 		return status.Error(codes.PermissionDenied, appErr.Message)
 	default:
 		return status.Error(codes.Internal, "internal server error")

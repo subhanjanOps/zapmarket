@@ -53,6 +53,7 @@ type OAuthAccount struct {
 type RefreshToken struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
+	Token     string // raw token, never persisted; only populated when freshly issued
 	TokenHash string
 	ExpiresAt time.Time
 	RevokedAt *time.Time

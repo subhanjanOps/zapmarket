@@ -1,12 +1,17 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/pkg/httpx"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/authctx"
+	domainerrors "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/errors"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 )
 
 // Response documents the standard API envelope shape for swag/swagger
@@ -48,6 +53,54 @@ func HandleError(w http.ResponseWriter, err error) {
 func DecodeJSON(r *http.Request, v interface{}) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
+
+// assertOwnership fetches the product by ID and verifies that the
+// authenticated user either owns it (product.SellerID == user.Id) or is an
+// admin. It returns a typed 403 Forbidden error on mismatch, propagating the
+// underlying lookup error (e.g. 404) when the product cannot be fetched.
+func assertOwnership(ctx context.Context, productSvc service.ProductService, productID uuid.UUID, user interface {
+	GetId() string
+	GetRole() string
+}) error {
+	if user == nil {
+		return pkgerrors.NewUnauthorized("UNAUTHENTICATED", "authentication required")
+	}
+
+	product, err := productSvc.GetProductByID(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	if user.GetRole() == "admin" {
+		return nil
+	}
+
+	if product.SellerID.String() != user.GetId() {
+		return domainerrors.Forbidden()
+	}
+
+	return nil
+}
+
+// requireUser resolves the authenticated user from the request context,
+// returning a typed 401 error when absent.
+func requireUser(r *http.Request) (*authUser, error) {
+	u := authctx.UserFromContext(r.Context())
+	if u == nil {
+		return nil, pkgerrors.NewUnauthorized("UNAUTHENTICATED", "authentication required")
+	}
+	return &authUser{u.GetId(), u.GetRole()}, nil
+}
+
+// authUser is a minimal value object satisfying the interface assertOwnership
+// expects, decoupling the helper from the auth proto type.
+type authUser struct {
+	id   string
+	role string
+}
+
+func (a *authUser) GetId() string   { return a.id }
+func (a *authUser) GetRole() string { return a.role }
 
 // GetLimitOffset extracts limit and offset from query parameters with defaults
 func GetLimitOffset(r *http.Request, defaultLimit, defaultOffset int) (limit, offset int) {

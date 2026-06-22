@@ -53,6 +53,7 @@ type RefreshTokenRepository interface {
 	CreateRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) (*domain.RefreshToken, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
 	GetRefreshTokenByTokenString(ctx context.Context, tokenString string) (*domain.RefreshToken, error)
+	RotateRefreshToken(ctx context.Context, tokenID uuid.UUID, newToken string, expiresAt time.Time) error
 	RevokeRefreshToken(ctx context.Context, tokenID uuid.UUID) error
 	InvalidateUserTokens(ctx context.Context, userID uuid.UUID) error
 }

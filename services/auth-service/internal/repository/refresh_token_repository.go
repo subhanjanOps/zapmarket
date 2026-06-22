@@ -102,6 +102,33 @@ func (r *RefreshTokenRepository) GetRefreshTokenByHash(ctx context.Context, toke
 	return token, nil
 }
 
+// RotateRefreshToken replaces the stored token hash and expiry for an existing
+// token row, effectively invalidating the previous token and issuing a new one.
+func (r *RefreshTokenRepository) RotateRefreshToken(ctx context.Context, tokenID uuid.UUID, newToken string, expiresAt time.Time) error {
+	newHash := hashToken(newToken)
+	query := `
+		UPDATE refresh_tokens
+		SET token_hash = $1, expires_at = $2, updated_at = $3
+		WHERE id = $4 AND deleted_at IS NULL
+	`
+
+	result, err := r.db.ExecContext(ctx, query, newHash, expiresAt, time.Now(), tokenID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to rotate refresh token: %v", err), err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get rows affected: %v", err), err)
+	}
+
+	if rowsAffected == 0 {
+		return pkgerrors.NewUnauthorized("INVALID_TOKEN", "refresh token not found")
+	}
+
+	return nil
+}
+
 // RevokeRefreshToken revokes a refresh token
 func (r *RefreshTokenRepository) RevokeRefreshToken(ctx context.Context, tokenID uuid.UUID) error {
 	query := `

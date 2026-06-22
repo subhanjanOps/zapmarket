@@ -8,7 +8,7 @@ import { StatusBadge } from "@/app/components/StatusBadge";
 import { SKUEditor, SKUDraft, skuToAttributes } from "@/app/components/SKUEditor";
 import { ImageDropzone } from "@/app/components/ImageDropzone";
 import { SkeletonTableCard } from "@/app/components/Skeleton";
-import { useCurrency } from "@/lib/currency";
+import { useCurrency, toCents, fromCents } from "@/lib/currency";
 import { Trash2 } from "lucide-react";
 
 const inputStyle: React.CSSProperties = { padding: "0.46875rem 0.875rem", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: "0.8125rem", fontFamily: "inherit", width: "100%", outline: "none" };
@@ -21,16 +21,6 @@ export default function EditProductPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
   const { currencies, formatFrom } = useCurrency();
-
-  function fromCents(amount: number, currencyCode: string): number {
-    const decimals = currencies.find((c) => c.code === currencyCode)?.decimals ?? 2;
-    return decimals === 0 ? amount : amount / 100;
-  }
-
-  function toCents(amount: number, currencyCode: string): number {
-    const decimals = currencies.find((c) => c.code === currencyCode)?.decimals ?? 2;
-    return decimals === 0 ? Math.round(amount) : Math.round(amount * 100);
-  }
 
   const [product, setProduct]     = useState<Product | null>(null);
   const [skus, setSkus]           = useState<SKU[]>([]);
@@ -61,9 +51,9 @@ export default function EditProductPage() {
           _key: sk.id ?? crypto.randomUUID(),
           id: sk.id,
           sku_code: sk.sku_code,
-          price_amount: fromCents(sk.price_amount, sk.price_currency),
+          price_amount: fromCents(sk.price_amount, sk.price_currency, currencies),
           price_currency: sk.price_currency,
-          compare_price: fromCents(sk.compare_price ?? 0, sk.price_currency),
+          compare_price: fromCents(sk.compare_price ?? 0, sk.price_currency, currencies),
           weight_grams: sk.weight_grams ?? 0,
           is_active: sk.is_active,
           attributes: skuToAttributes(sk),
@@ -89,13 +79,13 @@ export default function EditProductPage() {
             return updateSku(draft.id, {
               sku_code: draft.sku_code,
               attributes: attrs,
-              price_amount: toCents(draft.price_amount, draft.price_currency),
-              compare_price: draft.compare_price ? toCents(draft.compare_price, draft.price_currency) : undefined,
+              price_amount: toCents(draft.price_amount, draft.price_currency, currencies),
+              compare_price: draft.compare_price ? toCents(draft.compare_price, draft.price_currency, currencies) : undefined,
               weight_grams: draft.weight_grams || undefined,
               is_active: draft.is_active,
             });
           } else if (draft.sku_code.trim()) {
-            return createSku({ product_id: id, sku_code: draft.sku_code, attributes: attrs, price_amount: toCents(draft.price_amount, draft.price_currency), price_currency: draft.price_currency, compare_price: draft.compare_price ? toCents(draft.compare_price, draft.price_currency) : undefined, weight_grams: draft.weight_grams || undefined, is_active: draft.is_active });
+            return createSku({ product_id: id, sku_code: draft.sku_code, attributes: attrs, price_amount: toCents(draft.price_amount, draft.price_currency, currencies), price_currency: draft.price_currency, compare_price: draft.compare_price ? toCents(draft.compare_price, draft.price_currency, currencies) : undefined, weight_grams: draft.weight_grams || undefined, is_active: draft.is_active });
           }
           return Promise.resolve();
         })

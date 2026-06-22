@@ -25,3 +25,7 @@ func SKUNotFound(id string) error {
 func ImageNotFound(id string) error {
 	return pkgerrors.NewNotFound("IMAGE_NOT_FOUND", fmt.Sprintf("image %s not found", id))
 }
+
+func Forbidden() error {
+	return pkgerrors.NewForbidden("FORBIDDEN", "you do not have permission to perform this action")
+}

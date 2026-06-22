@@ -1,121 +1,118 @@
-# Code Review: `product-catalog-service`
-
-**Reviewer:** Principal Engineer
-**Date:** 2026-06-21
-**Branch:** `features/cluster-setup`
-**Verdict:** CHANGES REQUIRED
-
----
+# product-catalog-service Review
 
 ## Executive Summary
 
-Well-structured service with clean layer separation, consistent dependency injection, and a solid feature set (products, SKUs, categories with topological sort, product images). However: zero tests, seller authorization bypass on write operations, committed `.env`, a cache race condition, and a gRPC connection leak block production approval.
+The service is well-structured and reads cleanly. Layering is mostly correct (handler → service → repository via interfaces), repositories use parameterized SQL, pagination is bounded, the cache-aside layer is composed by interface, and the image upload path sniffs content type rather than trusting the client. The team has clearly internalized most of the engineering standards.
+
+However, there is one **critical, exploitable authorization gap that blocks production**: no seller ownership check exists anywhere. Any authenticated seller can update, delete, or attach images to *any other seller's* product, SKU, or image. The `seller_id` is captured on create but never enforced on subsequent mutations. This is the central question the review brief asks ("can seller A edit seller B's product?") and the answer today is **yes**.
+
+Secondary concerns: zero test coverage (no `*_test.go` files exist despite mockgen directives being wired up), a multi-currency model that stores `currency` per SKU but never validates it, image upload mutations that don't verify the image belongs to the product in the URL path, and a cache layer that can serve stale data and silently swallows Redis errors.
+
+Verdict: **CHANGES REQUIRED.**
 
 ---
 
 ## Critical Findings
 
-### C-1: Zero Test Coverage
-No `*_test.go` files exist in the entire service. `//go:generate mockgen` directives are present but never executed. Complex logic (topological sort, cache invalidation) is completely untested.
+### C1. No seller ownership enforcement — horizontal privilege escalation
+**Files:** `internal/handler/http/product_handler.go`, `sku_handler.go`, `product_image_handler.go`, `internal/service/*`, `main.go`
 
-### C-2: Seller Authorization Not Enforced on Write Operations
-**Files:** `internal/handler/http/product_handler.go:255-344`, `internal/handler/http/sku_handler.go:198-268`
-`UpdateProduct`, `DeleteProduct`, `UpdateSKU`, `DeleteSKU` all gate on role (`seller`/`admin`) but never verify the requesting seller owns the resource. Seller A can modify or delete Seller B's products.
+`RequireRole("seller", "admin")` gates the *mutation* routes, but role is the only check. Nothing ties the acting seller to the resource being mutated:
 
-**Fix:** After fetching the existing resource, compare `existingProduct.SellerID` against the authenticated user's ID; return HTTP 403 on mismatch.
+- `UpdateProduct` / `DeleteProduct` take only the product `id` from the URL. The update handler fetches the existing product (to preserve `seller_id`) but never compares `existingProduct.SellerID` against the caller's `user.Id`. Seller A can `PUT /api/v1/products/{B's id}` and overwrite seller B's product. `DeleteProduct` doesn't even load the product first.
+- `CreateSKU` / `UpdateSKU` / `DeleteSKU` never load the parent product to check its owner. Any seller can mutate any SKU.
+- `CreateProductImage` / `UpdateImagePosition` / `DeleteProductImage` never check that the product (or image) belongs to the caller.
 
-### C-3: Committed `.env` File With Real-Looking Credentials
-**File:** `services/product-catalog-service/.env`
-Contains MinIO credentials (`minioadmin`/`minioadmin`), JWT secret, and DB credentials. Must be removed from git history and `.gitignore`d.
+This violates the engineering-standards "Always validate: Authorization" rule and is a textbook IDOR / horizontal-privilege-escalation bug. `CreateProduct` correctly derives `seller_id` from the token (good — it ignores any client-supplied seller), which makes the *absence* of the same rigor on update/delete more glaring.
 
-### C-4: Race Condition in `DeleteProduct` Cache Decorator
-**File:** `internal/service/product_cache.go:119-131`
-`GetProductByID` and `DeleteProduct` are two separate calls with no transaction. A concurrent slug update between them leaves a stale slug key in Redis indefinitely. Error from `GetProductByID` is also silently swallowed (`p, _ :=`).
+**Fix:** Enforce ownership in the **service layer** (it must not live only in the handler, or the gRPC path / future callers bypass it). Thread the acting user identity + role into the use case (an explicit `actorID`/`actorRole` argument or a small auth-context value object), load the owning product, and reject with `403 FORBIDDEN` when `actorRole != "admin"` and `product.SellerID != actorID`. For SKUs and images, resolve ownership through the parent product. Add a `seller_id`-scoped `WHERE` to the update/delete SQL as defense in depth.
+
+### C2. Image mutations are not scoped to the product in the route
+**File:** `internal/handler/http/product_image_handler.go`
+
+`UpdateImagePosition` and `DeleteProductImage` are routed under `/products/{product_id}/images/{id}` but ignore `product_id` entirely — they operate on `{id}` alone. Even once C1 is fixed, an image from product X can be manipulated via product Y's URL. Resolve the image, confirm `image.ProductID == product_id`, and confirm ownership of that product.
 
 ---
 
 ## High Priority Findings
 
-### H-1: `authctx` Depends on Proto-Generated Type — Dependency Inversion Violation
-**File:** `internal/authctx/authctx.go:12-13`
-Imports and re-exports `*authpb.User`. Should use a domain `AuthUser` struct; middleware translates at the boundary.
+### H1. Zero automated test coverage
+No `*_test.go` files exist in the service. `//go:generate mockgen` directives are present on every service and the repository contracts, so the seams for testing are deliberately built — but nothing uses them. The engineering standards list Testability as a top-five priority and "Optimization comes after correctness," yet correctness is entirely unverified. At minimum, table-driven tests are needed for: the ownership checks (C1, once added), `BulkCreateCategories` topological sort (including the unresolvable-parent/cycle path), `capPageSize` / `validateSortField`, the cache-aside hit/miss/invalidation paths, and the image content-type sniffing.
 
-### H-2: `internal/errors/category.go` Is Entirely Dead Code
-Defines 5 error constructors; none are called anywhere. All error construction happens inline via `pkgerrors`.
+### H2. Multi-currency `currency` is stored but never validated
+**Files:** `internal/service/sku_service.go`, `internal/domain/models.go`, migration `0001_init.up.sql`
 
-### H-3: `UpdateProduct` Handler Contains Business Logic (Fetch-and-Merge)
-**File:** `internal/handler/http/product_handler.go:269-316`
-Merge pattern (which fields are optional, how to handle partial updates) lives in the interface layer. Must move to a service-layer use case.
+`CreateSKU` defaults `Currency` to `"INR"` when empty but accepts *any* string otherwise. The column is `CHAR(3)` with no `CHECK` constraint and no ISO-4217 validation in the service. A client can persist `"XXX"`, `"us"`, or junk. Given the brief calls out multi-currency as a new, load-bearing concern, this is a data-integrity hole — downstream FX conversion (`currency-service` / `fx-rates`) will choke on garbage codes. Validate against an allow-list (or call currency-service) and normalize to upper-case. `UpdateSKU` doesn't default currency at all, so an update with an empty currency would attempt to write `""` into a `CHAR(3) NOT NULL` column and fail at the DB rather than with a clean validation error.
 
-### H-4: Extra DB Round-Trip After Create/Update SKU
-**File:** `internal/handler/http/sku_handler.go:91-97, 234-238`
-After `CreateSKU`/`UpdateSKU` a `GetSKUByID` is issued unnecessarily. Repository should `RETURNING` the row.
+### H3. Cache layer swallows Redis errors and can serve stale data
+**File:** `internal/service/product_cache.go`
 
-### H-5: `GetSKUByID` Has No Nil UUID Guard
-**File:** `internal/service/sku_service.go:72-76`
-Unlike `GetProductByID` and `GetCategoryByID`, no `uuid.Nil` check. Inconsistent contract.
+- Every `rdb.Set(...).Err()` and `rdb.Del(...).Err()` result is discarded with `_ =`, violating the "Never ignore errors" standard. A failed invalidation on `UpdateProduct` is invisible — stale data is served for the full TTL with no signal. At least log at `Warn`.
+- `GetProductByID` populates *both* the id key and the slug key on a miss, but `UpdateProduct`/`DeleteProduct` invalidate using the slug from the passed struct. On a **slug change**, the stale `product:slug:<oldSlug>` entry is never invalidated and serves a stale product for 5 minutes.
+- `DeleteProduct` recovers the slug via `p, _ := c.inner.GetProductByID(...)` — the error is dropped, so a fetch failure silently skips slug-key cleanup.
 
-### H-6: `BulkCreateCategories` Has No Body Size Limit
-**File:** `internal/handler/http/category_handler.go:100-124`
-No `http.MaxBytesReader` before JSON parse. Client can send unbounded payload.
+### H4. gRPC and public reads expose non-ACTIVE products
+**Files:** `internal/handler/grpc/product_catalog_grpc_handler.go`, `internal/handler/http/product_handler.go`
 
-### H-7: gRPC Connection Leaked in Auth Middleware
-**File:** `internal/middleware/auth.go:23-31`
-`grpc.ClientConn` is never stored on `AuthMiddleware` — no way to close it during graceful shutdown.
+`GetProduct`/`GetSKU`/`GetSKUsByProduct` (gRPC) have no auth and no status filtering. The HTTP `GetProductByID`/`GetProductBySlug` are fully public and also return `DRAFT`/`INACTIVE` products. A competitor can enumerate a seller's unreleased catalog by ID/slug. Confirm intent; if drafts must stay private, filter to `ACTIVE` for unauthenticated/cross-service reads (or require ownership for non-active).
 
 ---
 
 ## Medium Priority Findings
 
-- **M-1:** Error code inconsistency — `"DATABASE_ERROR"` vs `"INTERNAL_SERVER_ERROR"` across repositories
-- **M-2:** `sort_by` validated in both service AND repository — redundant fallback in repo silently masks bugs
-- **M-3:** Cache key uses MD5 (`crypto/md5`) — triggers security scanners; `json.Marshal` error silently discarded causing all lists to share one cache slot on failure
-- **M-4:** `GET /products/{id}` and `/slug/{slug}` don't filter DRAFT products — buyers can access drafts
-- **M-5:** `BulkCreateCategories` has no atomicity across waves — partial write on wave failure with no rollback
-- **M-6:** `DecodeJSON` has no body size limit — affects all JSON endpoints
-- **M-7:** Layer naming deviates from `architecture-principles.md` (`service/` should be `application/`, etc.)
-- **M-8:** `GetImageByProductID` and `GetImageBySKUID` omit `object_key` from SELECT — latent data integrity bug
+### M1. Extra read-after-write round trip on SKU create/update
+**File:** `internal/handler/http/sku_handler.go`
+
+`CreateSKU`/`UpdateSKU` call `GetSKUByID` immediately after the write to return DB-defaulted timestamps — an extra round trip per mutation, duplicated across both endpoints. Prefer `INSERT ... RETURNING` / `UPDATE ... RETURNING` and populate the struct in place.
+
+### M2. Optimistic locking is inconsistent between product and SKU
+**Files:** `internal/repository/product_repository.go`, `sku_repository.go`
+
+`UpdateProduct` uses `WHERE ... AND updated_at = $8` for optimistic concurrency and maps 0-rows to `409`. `UpdateSku` has no such guard — concurrent SKU updates are last-write-wins silently. Apply the same pattern to SKUs or document why not. The product "merge-from-existing" PUT also treats a field set to its zero value (e.g. clearing a description with `""`) as "not provided"; acceptable for PUT-as-PATCH but should be documented.
+
+### M3. Pagination cap is split across two places and the echoed limit is wrong
+**Files:** `internal/handler/http/base.go`, `internal/service/list_validation.go`
+
+The handler computes `limit` via `GetLimitOffset` (no max), then the service re-caps via `capPageSize`. `httpx.Paginated` echoes the *handler's* uncapped limit while the DB used the capped one — `limit=10000` returns 100 rows but reports `limit=10000`. Single source of truth; surface the effective limit.
+
+### M4. Image upload multi-reader reconstruction is subtle and untested
+**Files:** `internal/handler/http/product_image_handler.go`, `internal/service/product_image_service.go`
+
+The sniff-buffer + `io.MultiReader` reconstruction and `formFileSize` header read are correct but fragile enough to warrant a test (see H1). The service's orphan-cleanup-on-DB-failure is good. No magic-byte vs. extension cross-check beyond `DetectContentType` — acceptable.
+
+### M5. `uniqueStrings` mutates its input slice via `ss[:0]`
+**File:** `internal/service/category_service.go`
+
+`out := ss[:0]` reuses the caller's backing array. Safe here (locally-built input) but a latent aliasing bug if reused on a caller-owned slice. Allocate fresh unless the in-place optimization is genuinely needed.
 
 ---
 
 ## Low Priority Findings
 
-- **L-1:** `GetLimitOffset` silently falls back on parse errors — should return 400
-- **L-2:** `uniqueStrings` utility lives in `category_service.go` — wrong home
-- **L-3:** `SKUId` field should be `SKUID` per Go convention
-- **L-4:** Service discovery hostname hardcoded (`zapmarket-product-catalog-service`) in `main.go:211`
-- **L-5:** `UploadProductImage` log says "uploading" but fires after the upload completes
-- **L-6:** `CreateProductImage` auto-assigned `position` never returned — response always shows `position: 0`
+- **L1.** `domainProductToProto`/`domainSKUToProto` use `time.Time.String()` for timestamps — non-RFC3339, hard to parse. Use `time.RFC3339` or a proto `Timestamp`.
+- **L2.** Many distinct validation failures share one code `"INVALID_DATA"`; clients can't distinguish "name required" from "category required." Consider field-specific codes.
+- **L3.** `DecodeJSON` uses a bare decoder with no `DisallowUnknownFields` and no body-size limit on JSON endpoints (only the image endpoint caps body size).
+- **L4.** Observability standard requires `trace_id`/`request_id`/`correlation_id` in logs; `chimiddleware.RequestID` sets it on context but the `slog` calls don't include it, so logs can't be correlated.
+- **L5.** Every read logs at `Info` (`"fetching product by id"`, etc.) — noisy in production; prefer `Debug`.
+- **L6.** `attributesToRawMessage` accepts arbitrary, unbounded JSON stored verbatim into the GIN-indexed JSONB column.
+- **L7.** Naming inconsistency: `SkuRepository`/`CreateSku` vs. domain `SKU` / service `CreateSKU`. Standardize the `SKU` initialism casing.
 
 ---
 
 ## Recommended Refactoring Plan
 
-**Sprint 1 — Blockers:**
-1. Remove `.env` from git, rotate credentials
-2. Add seller ownership check in all mutating handlers
-3. Fix `DeleteProduct` cache race and swallowed error
-4. Store and `Close()` gRPC connection in `AuthMiddleware`
-
-**Sprint 2 — High Priority:**
-5. Run `mockgen` and write unit tests (topological sort, cache, service validation paths)
-6. Move fetch-and-merge logic from handler to service layer
-7. Delete `internal/errors/category.go` or use it consistently
-8. Apply `io.LimitReader` in `DecodeJSON`; add body limit to bulk endpoint
-
-**Sprint 3 — Medium Priority:**
-9. Add `object_key` to `GetImageByProductID`/`GetImageBySKUID`
-10. Return `position` from `CreateProductImage` via `RETURNING`
-11. Align layer naming with architecture principles
-12. Standardize error codes across repositories
-13. Replace MD5 with SHA-256; handle `json.Marshal` error in cache key
-14. Filter DRAFT products on public endpoints
-
-**Sprint 4 — Housekeeping:**
-15. Fix `SKUId` → `SKUID`
-16. Remove redundant sort validation from repositories
-17. Externalize service discovery hostname
+1. **(Critical, first)** Introduce service-layer ownership enforcement. Add an actor abstraction (`actorID`, `role`) to `UpdateProduct`, `DeleteProduct`, and all SKU/image mutations. Load the owning product, reject non-owner non-admin with `403`. Add `seller_id` to update/delete `WHERE` clauses as defense in depth. Fix image routes to validate `product_id` matches the image. (C1, C2)
+2. **(Critical)** Backfill tests for the new ownership rules before merging — they guard the regression you just fixed. (H1)
+3. **(High)** Validate/normalize currency in `CreateSKU`/`UpdateSKU`, default it on update, add a DB `CHECK` or FK. (H2)
+4. **(High)** Log Redis errors, fix slug-key invalidation on slug change, stop dropping the `DeleteProduct` lookup error. (H3)
+5. **(High)** Decide and document non-`ACTIVE` product visibility for gRPC/public reads; filter if drafts must be private. (H4)
+6. **(Medium)** Consolidate pagination capping; switch SKU create/update to `RETURNING`; add optimistic locking to SKU update. (M1–M3)
+7. **(Low)** RFC3339 timestamps, field-specific error codes, JSON body limits, request-id in structured logs.
 
 ---
 
-## Final Verdict: CHANGES REQUIRED
+## Final Verdict
+
+**CHANGES REQUIRED.**
+
+The code is clean and the architecture is sound, but the missing seller ownership checks (C1/C2) are a directly exploitable horizontal-privilege-escalation vulnerability that fails the explicit authorization requirement in the engineering standards. Combined with zero test coverage and unvalidated multi-currency input, this is not yet production-ready. Address C1, C2, H1, and H2 at minimum before re-review.

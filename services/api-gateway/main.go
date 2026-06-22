@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -122,12 +123,22 @@ func main() {
 
 	// ── Upstream pool ──────────────────────────────────────────────────────
 	upstreams := make(map[string]*proxy.Upstream) // service name → proxy pool
+	var upstreamsMu sync.RWMutex
 
 	getUpstream := func(name string) *proxy.Upstream {
+		upstreamsMu.RLock()
+		u, ok := upstreams[name]
+		upstreamsMu.RUnlock()
+		if ok {
+			return u
+		}
+
+		upstreamsMu.Lock()
+		defer upstreamsMu.Unlock()
 		if u, ok := upstreams[name]; ok {
 			return u
 		}
-		u := proxy.New(name, log)
+		u = proxy.New(name, log)
 		u.OnRequest = func(upstream string, status int, _ time.Duration) {
 			tracker.Track(upstream, status)
 		}
@@ -137,15 +148,20 @@ func main() {
 
 	// ── Router builder (called on every route reload) ──────────────────────
 	adminUIOrigin := envOrDefault("ADMIN_UI_ORIGIN", "http://localhost:3001")
-	extraOrigins := strings.Split(envOrDefault("EXTRA_ALLOWED_ORIGINS", ""), ",")
+	var extraOrigins []string
+	for _, o := range strings.Split(envOrDefault("EXTRA_ALLOWED_ORIGINS", ""), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			extraOrigins = append(extraOrigins, o)
+		}
+	}
 
 	buildRouter := func() http.Handler {
 		r := chi.NewRouter()
 		r.Use(chimw.Recoverer)
+		r.Use(gw.SanitizeIdentityHeaders)
 		r.Use(gw.RequestID)
 		r.Use(corsMiddleware(adminUIOrigin, cfg.AppEnv, extraOrigins))
 		r.Use(gw.Blocklist(rdb))
-		r.Use(rl.Limit)
 		r.Use(auditMiddleware(auditWriter))
 
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +173,7 @@ func main() {
 		adminHandler := admin.NewHandler(db, redisReg, tracker, rdb, resolve)
 		r.Route("/gateway/v1", func(r chi.Router) {
 			r.Use(authMW.Authenticate)
+			r.Use(rl.Limit)
 			r.Use(admin.RequireAdmin)
 			adminHandler.Mount(r)
 		})
@@ -196,19 +213,24 @@ func main() {
 
 			switch route.AuthMode {
 			case "none":
-				r.Handle(route.PathPrefix+"/*", handler)
-				r.Handle(route.PathPrefix, handler)
+				noneHandler := rl.Limit(handler)
+				r.Handle(route.PathPrefix+"/*", noneHandler)
+				r.Handle(route.PathPrefix, noneHandler)
 			case "required":
-				r.With(authMW.Authenticate).Handle(route.PathPrefix+"/*", handler)
-				r.With(authMW.Authenticate).Handle(route.PathPrefix, handler)
+				reqHandler := authMW.Authenticate(rl.Limit(handler))
+				r.Handle(route.PathPrefix+"/*", reqHandler)
+				r.Handle(route.PathPrefix, reqHandler)
 			case "method_split":
 				// GET/HEAD are public; all other methods require auth.
+				// Rate limiting runs after auth so per-user limits engage.
+				authedWrite := authMW.Authenticate(rl.Limit(handler))
+				publicRead := rl.Limit(handler)
 				split := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 					if req.Method == http.MethodGet || req.Method == http.MethodHead {
-						handler.ServeHTTP(w, req)
+						publicRead.ServeHTTP(w, req)
 						return
 					}
-					authMW.Authenticate(handler).ServeHTTP(w, req)
+					authedWrite.ServeHTTP(w, req)
 				})
 				r.Handle(route.PathPrefix+"/*", split)
 				r.Handle(route.PathPrefix, split)
@@ -293,12 +315,19 @@ func main() {
 	}
 	// 2. Cancel context to stop background goroutines (route watcher, audit writer, auto-bind).
 	cancel()
-	// 3. Close auth gRPC connection after HTTP drains so in-flight auth RPCs finish.
+	// 3. Wait for the audit writer to drain remaining entries (bounded) before the
+	//    deferred db.Close() fires, so the final batch is persisted.
+	select {
+	case <-auditWriter.Done():
+	case <-time.After(6 * time.Second):
+		log.Warn("audit writer drain timed out")
+	}
+	// 4. Close auth gRPC connection after HTTP drains so in-flight auth RPCs finish.
 	if err := authMW.Close(); err != nil {
 		log.Error("auth middleware close error", "error", err)
 	}
-	// 4. Close Redis (defer in main() handles this, but explicit for clarity in order).
-	// 5. Close DB (defer in main() handles this).
+	// 5. Close Redis (defer in main() handles this, but explicit for clarity in order).
+	// 6. Close DB (defer in main() handles this).
 	log.Info("gateway stopped")
 }
 

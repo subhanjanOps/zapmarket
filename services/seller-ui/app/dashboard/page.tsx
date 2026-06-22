@@ -51,7 +51,9 @@ export default function DashboardPage() {
   const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const monthOrders = orders.filter((o) => new Date(o.created_at) >= thisMonth);
 
-  // Convert all confirmed order totals to USD, then format in display currency
+  // Revenue is calculated from the last 10 fetched orders only (limit: 10 above).
+  // If the seller has more than 10 orders this month, this figure will be understated.
+  // Fix: pass a server-side `from` date filter and fetch with a higher limit, or compute totals server-side.
   const revenueUsdCents = monthOrders
     .filter((o) => o.status === "CONFIRMED")
     .reduce((sum, o) => sum + o.total_amount / (rates[o.currency] ?? 1), 0);

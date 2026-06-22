@@ -26,6 +26,18 @@ func RequestID(next http.Handler) http.Handler {
 	})
 }
 
+// SanitizeIdentityHeaders strips client-supplied copies of the trusted identity
+// headers from every inbound request before any auth check runs. Only the
+// Authenticate middleware may set these after successful token validation.
+func SanitizeIdentityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Del("X-User-ID")
+		r.Header.Del("X-User-Email")
+		r.Header.Del("X-User-Role")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func GetRequestID(ctx context.Context) string {
 	if id, ok := ctx.Value(requestIDKey).(string); ok {
 		return id

@@ -222,7 +222,7 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, userID uuid.UUID
 		return nil, err
 	}
 
-	refreshToken.TokenHash = tokenString
+	refreshToken.Token = tokenString
 	return refreshToken, nil
 }
 

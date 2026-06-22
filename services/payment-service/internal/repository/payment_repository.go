@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/database"
@@ -19,6 +20,32 @@ type PaymentRepository struct {
 
 func NewPaymentRepository(db *sql.DB) *PaymentRepository {
 	return &PaymentRepository{db}
+}
+
+func (r *PaymentRepository) GetPendingWithGatewayCharge(ctx context.Context, olderThan time.Duration) ([]*domain.Payment, error) {
+	rows, err := r.db.QueryContext(ctx, paymentSelectQuery+`
+		WHERE status = 'PENDING'
+		  AND gateway_txn_id IS NOT NULL
+		  AND created_at < NOW() - $1::interval
+		  AND deleted_at IS NULL
+	`, fmt.Sprintf("%d seconds", int(olderThan.Seconds())))
+	if err != nil {
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to query stale pending payments", err)
+	}
+	defer rows.Close()
+
+	var payments []*domain.Payment
+	for rows.Next() {
+		p := &domain.Payment{}
+		if err := rows.Scan(
+			&p.ID, &p.OrderID, &p.UserID, &p.IdempotencyKey, &p.Status, &p.Amount, &p.Currency, &p.Gateway,
+			&p.GatewayTxnID, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt,
+		); err != nil {
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan stale pending payment", err)
+		}
+		payments = append(payments, p)
+	}
+	return payments, rows.Err()
 }
 
 func (r *PaymentRepository) GetByIdempotencyKey(ctx context.Context, key uuid.UUID) (*domain.Payment, error) {
@@ -55,11 +82,12 @@ func (r *PaymentRepository) MarkCaptured(ctx context.Context, paymentID uuid.UUI
 				gateway_txn_id = $2,
 				updated_at = NOW()
 			WHERE id = $1
+				AND status IN ('PENDING', 'AUTHORISED')
 				AND deleted_at IS NULL
 			RETURNING order_id, user_id
 		`, paymentID, gatewayTxnID).Scan(&orderID, &userID)
 		if errors.Is(err, sql.ErrNoRows) {
-			return pkgerrors.NewNotFound("PAYMENT_NOT_FOUND", "payment not found")
+			return pkgerrors.NewConflict("PAYMENT_ALREADY_CAPTURED", "payment is not in a capturable state")
 		}
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to mark payment captured", err)

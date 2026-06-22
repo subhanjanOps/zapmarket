@@ -236,3 +236,13 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 export function useCurrency() {
   return useContext(CurrencyContext);
 }
+
+export function toCents(amount: number, currencyCode: string, currencies: CurrencyMeta[]): number {
+  const decimals = currencies.find((c) => c.code === currencyCode)?.decimals ?? 2;
+  return decimals === 0 ? Math.round(amount) : Math.round(amount * 100);
+}
+
+export function fromCents(amount: number, currencyCode: string, currencies: CurrencyMeta[]): number {
+  const decimals = currencies.find((c) => c.code === currencyCode)?.decimals ?? 2;
+  return decimals === 0 ? amount : amount / 100;
+}

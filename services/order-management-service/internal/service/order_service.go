@@ -118,6 +118,7 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		ticker := time.NewTicker(50 * time.Millisecond)
 		defer ticker.Stop()
 		deadline := time.Now().Add(lockTTL)
+	outer:
 		for time.Now().Before(deadline) {
 			select {
 			case <-ctx.Done():
@@ -131,7 +132,7 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 					}
 				}
 				if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
-					break // lock released; fall through to DB check
+					break outer // lock released; fall through to DB check
 				}
 			}
 		}

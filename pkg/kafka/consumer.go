@@ -25,7 +25,7 @@ func NewConsumer(brokers []string, topic, groupID string) *Consumer {
 		MinBytes:       1,
 		MaxBytes:       10e6,
 		MaxWait:        500 * time.Millisecond,
-		CommitInterval: time.Second,
+		CommitInterval: 0,
 	})
 	return &Consumer{reader: r}
 }

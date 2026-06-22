@@ -1,110 +1,241 @@
-# Code Review: `notification-service`
+# notification-service Review
 
-**Reviewer:** Principal Engineer
-**Date:** 2026-06-21
-**Branch:** `features/cluster-setup`
-**Verdict:** CHANGES REQUIRED
+Reviewer: Principal Engineer (automated review via Claude Code)
+Date: 2026-06-22
+Branch: features/cluster-setup
 
 ---
 
 ## Executive Summary
 
-Deliberately lean Kafka consumer reading from 3 topics (orders, payments, inventory) and dispatching notifications. Readable scaffold with sound design ideas: `Notifier` interface, Redis dedup, at-least-once Kafka delivery, structured logging. However: no tests, a dedup correctness bug that causes duplicate notifications under Redis failure, a health server goroutine leak, and Kafka reader leaks on close errors block production deployment.
+The notification-service is a well-scoped Kafka consumer. Its core plumbing — graceful shutdown, per-topic consumer with backoff restart, Redis deduplication, and a clean notifier abstraction — is solid for an early-stage implementation. However, two correctness bugs (a zero-decimal currency division error and a dedup-before-send race that permanently drops notifications on transient errors), a significant SRP violation in handler.go, a test-escape hatch antipattern, and a missing infrastructure-level commit configuration prevent this from being production-ready.
+
+**Verdict: CHANGES REQUIRED**
 
 ---
 
 ## Critical Findings
 
-### CRIT-1: No Tests Exist At All
-No `*_test.go` files anywhere. `buildNotification` is a pure function — trivially testable. `Handle` requires only interface mocks. Dedup branch and all event-type branches are completely unverified.
+### CRIT-1 — Zero-decimal currency bug: divides by 100 when it must not
 
-### CRIT-2: Duplicate Delivery Under Redis Failure
-**File:** `internal/consumer/handler.go:34-41`
-When `SetNX` returns an error, code falls through and processes the message anyway. On re-delivery with Redis still down, the notification is sent a second time — duplicate emails/SMS to real users.
-**Fix:** Return `fmt.Errorf("dedup check: %w", err)` so the consumer doesn't commit the offset and retries after Redis recovers.
+**File:** `internal/consumer/handler.go:36-38`
 
-### CRIT-3: Kafka Consumer Reader Leaked on Close Error
-**File:** `main.go:99-110`
-`c.Close()` error is discarded with `_ =`. A failed close can leave connections open. Under sustained broker instability, a new `kafkago.Reader` is created on every retry cycle — connections accumulate until OS exhausts file descriptors.
-**Fix:** Log errors from `c.Close()`.
+For zero-decimal currencies (JPY, KRW, IDR) the raw integer value stored by payment processors IS the whole unit — no sub-unit conversion is needed. The current code does `cents/100` for these currencies, silently collapsing every JPY amount by 100x. A payment of ¥1,500 (stored as `1500`) would be displayed as ¥15.
 
-### CRIT-4: Health Server Goroutine Has No Graceful Shutdown
-**File:** `main.go:53-57`
-`http.ListenAndServe` without an `http.Server` instance — no way to shut down when `ctx` is cancelled. Goroutine leaks on service stop.
-**Fix:** Use `http.Server` with `Shutdown(ctx)` in the shutdown sequence.
+The test `TestFormatAmount_JPY_ZeroDecimal` passes `"150000"` and expects `"¥1,500"`, which is internally consistent with the /100 path but contradicts standard payment processor semantics (Stripe, Adyen) where JPY `1500` = ¥1,500.
+
+**Required action:** Decide and document the minor-unit convention. If storing JPY as `1500` for ¥1,500 (standard), remove `/100` and update the test to pass `"1500"` expecting `"¥1,500"`.
+
+---
+
+### CRIT-2 — Dedup key set before Send: permanent notification loss on transient Send failure
+
+**File:** `internal/consumer/handler.go:94-134`
+
+The current execution order is:
+1. SetNX dedup key in Redis (expires in 1 hour)
+2. Parse payload
+3. notifier.Send()
+4. Return error on Send failure (offset not committed, message redelivered)
+
+On retry after step 4:
+1. SetNX returns false (key already exists)
+2. Handler returns nil — treated as a dedup hit
+3. Offset is committed
+4. **Notification is permanently lost**
+
+Any transient Send failure (network blip, downstream provider unavailable) silently drops the notification. This violates at-least-once delivery semantics.
+
+**Required action:** Move SetNX to after a successful Send. Accept the theoretical risk of double-sending on a Redis write failure after Send succeeds — that is vastly preferable to silent permanent loss.
 
 ---
 
 ## High Priority Findings
 
-### HIGH-1: Monolithic Shared Config Is an Architectural Violation
-**File:** `go.mod:9`, `pkg/config/config.go`
-Notification-service loads `DBHost`, `DBPassword`, `JWTSecretKey`, `GoogleClientSecret`, `MinIOAccessKey`, etc. — none of which it uses. Should define its own `internal/config` with only `AppEnv`, `KafkaBrokers`, `RedisURL`, `HTTPPort`.
+### HIGH-1 — SRP violation: handler.go owns both event routing and monetary formatting
 
-### HIGH-2: Layer Structure Doesn't Match `architecture-principles.md`
-- `Notification` struct and `Notifier` interface belong in `internal/domain/`
-- `LogNotifier` belongs in `internal/infrastructure/notifier/`
-- `Handler` belongs in `internal/interfaces/kafka/`
-- `buildNotification` is business logic embedded in the interface layer — must move to `internal/application/`
+**File:** `internal/consumer/handler.go`
 
-### HIGH-3: `buildNotification` Business Logic Lives in Interface Layer
-**File:** `internal/consumer/handler.go:78-147`
-Handler decides "what message does `payment.captured` produce?" — that is application logic. Coding guidelines: "Kafka Consumers must: 1. Deserialize. 2. Validate. 3. Call use case. Nothing else."
+handler.go contains Kafka message routing (Handle, buildNotification), monetary string formatting (formatAmount, formatWithCommas), currency metadata tables (zeroDecimalCurrencies, currencySymbols), and an exported test-escape hatch (FormatAmountForTest).
 
-### HIGH-4: `outbox_id` Not Validated Before Use as Dedup Key
-**File:** `internal/consumer/handler.go:29-33`
-If `outbox_id` header is absent, dedup key becomes `"notif:dedup:"`. All header-less messages race on the same Redis key — only the first is processed, all others silently dropped.
-**Fix:** Validate `outbox_id` and `event_type` are non-empty; return error if missing.
+Per the engineering standards (Single Responsibility Principle) and coding guidelines ("Kafka Consumers must: 1. Deserialize event, 2. Validate event, 3. Call use case — nothing else"), monetary formatting is a distinct concern that belongs in `internal/currency/format.go`.
 
-### HIGH-5: `google/uuid` and `pkg/registry` Are Unused Dependencies
-**File:** `go.mod:6, 12`
-Dead dependencies. Run `go mod tidy`.
+**Required action:** Extract formatting into `internal/currency`. Delete `FormatAmountForTest`.
+
+---
+
+### HIGH-2 — FormatAmountForTest export is an antipattern
+
+**File:** `internal/consumer/handler.go:68-70`
+
+Wrapping a private function in a ForXxxTest export to allow external test packages to reach it pollutes the production API surface — any downstream code could call FormatAmountForTest from non-test files and the compiler will not prevent it.
+
+Correct Go approaches: (a) move the function to its own package so tests import it naturally, or (b) change the test file to `package consumer` (whitebox) so it can call formatAmount directly.
+
+**Required action:** Remove FormatAmountForTest. Use approach (a) or (b) above.
+
+---
+
+### HIGH-3 — Dedup TTL of 1 hour is too short
+
+**File:** `internal/consumer/handler.go:95`
+
+Kafka at-least-once delivery can redeliver messages after broker restarts or offset resets, which can happen hours or days later. A 1-hour TTL means any message redelivered after 60 minutes will bypass dedup and send a duplicate notification.
+
+The rest of the codebase uses 24-hour idempotency key TTLs for order/payment endpoints.
+
+**Required action:** Increase to at minimum `24 * time.Hour`, ideally `72 * time.Hour`. Add a comment documenting the rationale.
+
+---
+
+### HIGH-4 — Missing outbox_id format validation
+
+**File:** `internal/consumer/handler.go:88-91`
+
+The handler validates non-empty outbox_id but not its format. A whitespace-only or malformed value produces a Redis key like `notif:dedup:   ` that is valid at the Go/Redis level but semantically broken. outbox_id is expected to be a UUID per the transactional outbox pattern. `github.com/google/uuid` is already in go.mod.
+
+**Required action:** Parse outbox_id with uuid.Parse() and return an error on failure.
+
+---
+
+### HIGH-5 — CommitInterval races with manual CommitMessages
+
+**File:** `pkg/kafka/consumer.go:27`
+
+`CommitInterval: time.Second` enables automatic background offset commits at 1-second intervals. The consumer simultaneously calls CommitMessages manually. These two commit paths can race: the background committer may auto-commit an offset before the handler returns successfully, destroying the at-least-once guarantee.
+
+**Required action:** Set `CommitInterval: 0` in `pkg/kafka/consumer.go` to enforce manual-only commits.
 
 ---
 
 ## Medium Priority Findings
 
-- **MED-1:** `payment.processed` and `payment.captured` produce identical notification text — likely copy-paste error; user receives duplicate emails for same payment
-- **MED-2:** `notif.UserID` not validated before `Send` — empty UserID silently sends to wrong/no recipient
-- **MED-3:** Health endpoint always returns `{"status":"ok"}` — doesn't probe Redis or Kafka for Kubernetes readiness
-- **MED-4:** Retry backoff is fixed 5s for all 3 consumers — thundering herd on broker outage; need exponential backoff with jitter
-- **MED-5:** `Notification` struct missing `Channel` and `Priority` fields — adding a real notifier later requires breaking changes
-- **MED-6:** `LogNotifier.Send` ignores `ctx` without documentation — interface contract doesn't communicate cancellation expectation
-- **MED-7:** `go.mod` declares `go 1.25.0` — Go 1.25 does not exist; will fail on standard CI
+### MED-1 — No metrics or distributed tracing
+
+Per docs/engineering-standards.md: "All services must support: Structured Logging, Metrics, Distributed Tracing" with required context fields trace_id, request_id, correlation_id.
+
+The notification-service has only structured logging. No Prometheus counters (messages processed, notifications sent, dedup hits, errors by event type) and no trace ID propagation from Kafka headers.
+
+**Required action:** At minimum, extract trace_id from Kafka message headers and attach to all log lines via slog.With. Add metrics as a follow-up backlog item.
+
+---
+
+### MED-2 — Health endpoint always returns 200 regardless of Redis/Kafka health
+
+**File:** `main.go:48-57`
+
+/health returns {"status":"ok"} unconditionally. If Redis is unavailable or Kafka consumers are in crash-restart loops, the health endpoint still reports healthy. Kubernetes liveness/readiness probes cannot detect the degradation.
+
+**Required action:** Add Redis ping to a /readyz endpoint. Add a "last message processed" timestamp that the readiness check validates against a staleness threshold.
+
+---
+
+### MED-3 — buildNotification switch has no extensibility path
+
+**File:** `internal/consumer/handler.go:140-204`
+
+The function is 64 lines and within the 80-line limit but will grow as new event types are added. Each addition requires modifying this function, violating the Open/Closed Principle.
+
+The pattern — each case produces a Notification struct from a string map — is a strong fit for a template table where new event types become data additions, not code changes.
+
+**Required action:** Refactor to a template-driven lookup after HIGH-1 (currency extraction) is complete.
+
+---
+
+### MED-4 — inventory.reserved skip is indistinguishable from unknown event type in logs
+
+**File:** `internal/consumer/handler.go:186-188`
+
+The caller logs "no notification template for event" for both intentionally-skipped (inventory.reserved) and genuinely-unknown event types. Alerting on unhandled events is impossible.
+
+**Required action:** Distinguish the two cases — either via a three-value return (send/skip/unknown) or by logging at a different level/key inside the inventory.reserved case.
+
+---
+
+### MED-5 — Per-topic consumer model should be documented
+
+**File:** `main.go:84-90`
+
+Three goroutines each create an independent Kafka reader with the same group ID but different topics. This is functionally correct but the design choice and its scaling implications (N instances = N readers per topic) are undocumented.
+
+**Required action:** Add a comment in runConsumer documenting the per-topic-reader design decision.
 
 ---
 
 ## Low Priority Findings
 
-- **LOW-1:** Handler struct comment says "processes order events" — actually processes 3 topic types
-- **LOW-2:** Port `:8085` hardcoded in `main.go:54` — should come from config
-- **LOW-3:** `runConsumer` accepts `*consumer.Handler` — should accept `pkgkafka.HandlerFunc` for testability
-- **LOW-4:** `defer rdb.Close()` at end of `main` — technically safe but fragile if goroutine tracking changes
-- **LOW-5:** `Dockerfile` EXPOSE 8085 but `CLAUDE.md` service table lists notification-service port as `—`
+### LOW-1 — go.mod declares go 1.25.0 which does not exist
+
+**File:** `go.mod:3`
+
+Go 1.25 does not exist. This is likely a typo for go 1.24.0. Can cause unexpected behaviour with `go work sync` and CI toolchain selection.
+
+**Required action:** Correct to `go 1.24.0` or the actual minimum required version.
+
+---
+
+### LOW-2 — google/uuid in go.mod but unused in production code
+
+**File:** `go.mod:6`
+
+`github.com/google/uuid` is declared but not imported by any .go file. `go mod tidy` will remove it. Add it back when HIGH-4 (UUID validation) is implemented.
+
+---
+
+### LOW-3 — Test coverage covers only the happy-path of formatAmount
+
+**File:** `internal/consumer/handler_test.go`
+
+Current tests: 4 cases, all for formatAmount. Notably missing:
+- Duplicate dedup key (skip path)
+- Missing outbox_id or event_type header
+- Malformed JSON payload
+- buildNotification per event type
+- inventory.depleted with empty seller_id
+- notifier.Send failure and retry semantics
+- Negative amounts in formatAmount
+
+**Required action:** Add table-driven tests for Handle using miniredis and a mock notifier.Notifier.
+
+---
+
+### LOW-4 — pkg/registry in go.mod but not visibly used
+
+**File:** `go.mod:13`
+
+No import of `pkg/registry` visible in any .go file. Run `go mod tidy` to confirm if it is a transitive requirement or a leftover.
+
+---
+
+### LOW-5 — Health server port 8085 conflicts with planned import-service
+
+**File:** `main.go:53`
+
+Per project memory, the planned import-service targets port 8085. The notification-service health endpoint is already on :8085. Running both locally will produce a port conflict.
+
+**Required action:** Move notification-service health to an unused port (e.g. 8087). Add HTTP_PORT to the config struct and .env.example.
 
 ---
 
 ## Recommended Refactoring Plan
 
-**Phase 1 — Critical (Block Production):**
-1. Fix CRIT-2: Return error from `Handle` when Redis `SetNX` fails
-2. Fix CRIT-3: Log errors from `c.Close()` in `runConsumer`
-3. Fix CRIT-4: Replace fire-and-forget `ListenAndServe` with graceful `http.Server`
-4. Fix HIGH-4: Validate `outbox_id` and `event_type` at top of `Handle`
-5. Write unit tests for `buildNotification` and `Handle`
+Execute in this order to minimise conflict surface:
 
-**Phase 2 — Architecture:**
-6. Create service-specific `internal/config` — remove dependency on monolithic `pkg/config`
-7. Restructure packages: `Notification`/`Notifier` → `internal/domain/`, `LogNotifier` → `internal/infrastructure/`, `Handler` → `internal/interfaces/kafka/`, `buildNotification` → `internal/application/`
-8. Run `go mod tidy` (removes `google/uuid`, `pkg/registry`)
-
-**Phase 3 — Reliability:**
-9. Implement exponential backoff with jitter in `runConsumer`
-10. Add Redis ping to `/health` for readiness
-11. Add `Channel` and `Priority` to `Notification` struct
-12. Fix `go.mod` Go version
-13. Resolve duplicate `payment.processed`/`payment.captured` notification text
+1. **Fix CRIT-2** — Move SetNX to after successful Send. Highest correctness impact.
+2. **Fix HIGH-5** — Set CommitInterval: 0 in pkg/kafka/consumer.go. Restores at-least-once semantics.
+3. **Fix CRIT-1** — Decide zero-decimal convention, fix formatAmount, update JPY test.
+4. **Fix HIGH-3** — Increase dedup TTL to 72 * time.Hour.
+5. **HIGH-1 + HIGH-2** — Extract currency formatting to internal/currency/format.go. Delete FormatAmountForTest.
+6. **HIGH-4** — Add UUID validation for outbox_id.
+7. **MED-3** — Refactor buildNotification to a template-table after extraction is complete.
+8. **LOW-3** — Add handler integration tests with miniredis and mock notifier.
+9. **LOW-1, LOW-2, LOW-4, LOW-5** — Go version typo, unused deps, port conflict.
+10. **MED-1, MED-2** — Trace ID propagation and real readiness check.
 
 ---
 
-## Final Verdict: CHANGES REQUIRED
+## Final Verdict
+
+**CHANGES REQUIRED**
+
+Two correctness defects (CRIT-1 zero-decimal division bug, CRIT-2 dedup-before-send causes permanent notification loss on any transient Send failure) and one infrastructure issue (HIGH-5 auto-commit racing with manual commits) must be resolved before this service handles real payment events. The remaining findings are important quality and reliability improvements but do not independently block correctness.

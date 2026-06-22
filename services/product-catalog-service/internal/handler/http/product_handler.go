@@ -266,6 +266,17 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user, err := requireUser(r)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	if err := assertOwnership(r.Context(), h.productService, id, user); err != nil {
+		HandleError(w, err)
+		return
+	}
+
 	// Fetch existing product to preserve seller_id
 	existingProduct, err := h.productService.GetProductByID(r.Context(), id)
 	if err != nil {

@@ -29,6 +29,19 @@ local key    = KEYS[1]
 local now    = tonumber(ARGV[1])
 local window = tonumber(ARGV[2])
 local ttl    = tonumber(ARGV[3])
+local limit  = tonumber(ARGV[4])
+
+-- Evict entries older than the window first.
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+
+-- Count requests already in the window.
+local count = redis.call('ZCARD', key)
+
+-- Reject over-limit requests WITHOUT recording them, so a rejected request
+-- does not occupy a slot or refresh the window and keep an abuser locked out.
+if count >= limit then
+	return count + 1
+end
 
 -- Record this request (score = timestamp ms, member = timestamp ms as string).
 -- Using the timestamp as both score and member means duplicate ms timestamps
@@ -36,14 +49,11 @@ local ttl    = tonumber(ARGV[3])
 -- missed count, and millisecond-resolution is more than sufficient.
 redis.call('ZADD', key, now, tostring(now))
 
--- Evict entries older than the window.
-redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
-
 -- Keep the key alive for one full window after the last request.
 redis.call('EXPIRE', key, ttl)
 
--- Return the count of entries still in the window.
-return redis.call('ZCARD', key)
+-- Return the count of entries now in the window.
+return count + 1
 `)
 
 // RateLimiter is chi middleware backed by a Redis sliding-window counter.
@@ -71,7 +81,7 @@ func (rl *RateLimiter) Limit(next http.Handler) http.Handler {
 
 		count, err := slidingWindow.Run(ctx, rl.rdb,
 			[]string{key},
-			nowMS, windowMS, ttlSecs,
+			nowMS, windowMS, ttlSecs, limit,
 		).Int64()
 
 		remaining := max(int64(0), int64(limit)-count)
