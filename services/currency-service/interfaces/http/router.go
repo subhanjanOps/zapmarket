@@ -11,13 +11,15 @@ import (
 func NewRouter(h *Handler, m *metrics.Metrics) http.Handler {
 	mux := http.NewServeMux()
 
-	// Public endpoints — no auth (gateway enforces auth_mode=none for these paths)
-	mux.HandleFunc("GET /v1/currencies", h.ListCurrencies)
-	mux.HandleFunc("GET /v1/currencies/rates/history", h.GetRatesHistory)
-	mux.HandleFunc("GET /v1/currencies/rates", h.GetRates)
+	// Public endpoints — no auth (gateway enforces auth_mode=none for these paths).
+	// Paths use /api/v1/ prefix to match what the gateway forwards (strip_prefix=false).
+	mux.HandleFunc("GET /api/v1/currencies", h.ListCurrencies)
+	mux.HandleFunc("GET /api/v1/currencies/rates/history", h.GetRatesHistory)
+	mux.HandleFunc("GET /api/v1/currencies/rates", h.GetRates)
 
-	// Admin endpoint — gateway enforces JWT role=admin before forwarding here
-	mux.HandleFunc("PUT /v1/admin/currencies/{code}", h.ToggleCurrency)
+	// Admin endpoint — gateway enforces JWT role=admin before forwarding here.
+	// Also register under /api/v1/ for consistency with the gateway route.
+	mux.HandleFunc("PUT /api/v1/admin/currencies/{code}", h.ToggleCurrency)
 
 	// Prometheus metrics
 	mux.Handle("/metrics", m.Handler())

@@ -5,6 +5,7 @@ CREATE DATABASE inventory;
 CREATE DATABASE payment;
 CREATE DATABASE notification;
 CREATE DATABASE productcatalog;
+CREATE DATABASE currency;
 
 -- userauth and productcatalog schemas are now owned by golang-migrate:
 -- see services/auth-service/migrations and
