@@ -6,7 +6,7 @@ import Link from "next/link";
 export const metadata: Metadata = { title: "All Products" };
 export const revalidate = 60;
 
-const GW = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+const GW = process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
 const PAGE_SIZE = 20;
 
 interface SearchParams { page?: string; category_id?: string; search?: string; sort_by?: string; sort_order?: string; }

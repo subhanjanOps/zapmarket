@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import ProductInteractions from "@/components/ProductInteractions";
 
-const GW = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+const GW = process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;

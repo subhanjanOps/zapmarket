@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export const revalidate = 300;
 
-const GW = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+const GW = process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
 
 async function fetchCampaigns() {
   try {
@@ -27,7 +27,7 @@ async function fetchCampaigns() {
 
 async function fetchCategories() {
   try {
-    const r = await fetch(`${GW}/v1/categories`, { next: { revalidate: 3600 } });
+    const r = await fetch(`${GW}/v1/categories`, { cache: "no-store" });
     if (!r.ok) return [];
     const d = await r.json();
     return d.data ?? d ?? [];
@@ -36,7 +36,7 @@ async function fetchCategories() {
 
 async function fetchNewArrivals() {
   try {
-    const r = await fetch(`${GW}/v1/products?limit=8&sort_by=created_at&sort_order=desc`, { next: { revalidate: 300 } });
+    const r = await fetch(`${GW}/v1/products?limit=8&sort_by=created_at&sort_order=desc`, { cache: "no-store" });
     if (!r.ok) return [];
     const d = await r.json();
     return d.data ?? d ?? [];

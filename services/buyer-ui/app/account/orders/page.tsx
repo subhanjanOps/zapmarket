@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 
 export const metadata: Metadata = { title: "My Orders" };
-const GW = process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+const GW = process.env.GATEWAY_URL ?? process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
 
 const STATUS_COLOR: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
