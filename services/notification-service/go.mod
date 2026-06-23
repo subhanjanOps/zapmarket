@@ -1,6 +1,6 @@
 module github.com/zapmarket/zapmarket/services/notification-service
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/google/uuid v1.6.0
@@ -9,7 +9,6 @@ require (
 	github.com/zapmarket/zapmarket/pkg/config v0.0.0
 	github.com/zapmarket/zapmarket/pkg/kafka v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
-	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
 )
 
 require (

@@ -1,6 +1,6 @@
 module github.com/zapmarket/zapmarket/services/payment-service
 
-go 1.22.0
+go 1.25.0
 
 require (
 	github.com/google/uuid v1.6.0
@@ -15,7 +15,6 @@ require (
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
-	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
 	github.com/zapmarket/zapmarket/pkg/relay v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.81.1
 )
