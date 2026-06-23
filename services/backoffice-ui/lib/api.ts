@@ -108,33 +108,33 @@ export const getCategories = (params: {
   if (params.sort_by)         q.set("sort_by",    params.sort_by);
   if (params.sort_order)      q.set("sort_order", params.sort_order);
   const qs = q.toString() ? `?${q}` : "";
-  return listReq<Category>(`/api/v1/categories${qs}`);
+  return listReq<Category>(`/v1/categories${qs}`);
 };
 
 export const getCategory = (id: string) =>
-  req<{ data: Category }>(`/api/v1/categories/${id}`).then((r) => r.data);
+  req<{ data: Category }>(`/v1/categories/${id}`).then((r) => r.data);
 
 export const createCategory = (
   body: { name: string; slug: string; parent_id?: string },
-) => req<{ data: Category }>("/api/v1/categories", {
+) => req<{ data: Category }>("/v1/categories", {
   method: "POST", body: JSON.stringify(body),
 }).then((r) => r.data);
 
 export const bulkCreateCategories = (
   categories: { name: string; slug: string; parent_name?: string }[],
-) => req<{ data: Category[] }>("/api/v1/categories/bulk", {
+) => req<{ data: Category[] }>("/v1/categories/bulk", {
   method: "POST", body: JSON.stringify({ categories }),
 }).then((r) => r.data ?? []);
 
 export const updateCategory = (
   id: string,
   body: { name: string; slug: string; parent_id?: string },
-) => req<{ data: Category }>(`/api/v1/categories/${id}`, {
+) => req<{ data: Category }>(`/v1/categories/${id}`, {
   method: "PUT", body: JSON.stringify(body),
 }).then((r) => r.data);
 
 export const deleteCategory = (id: string) =>
-  req(`/api/v1/categories/${id}`, { method: "DELETE" });
+  req(`/v1/categories/${id}`, { method: "DELETE" });
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
@@ -153,27 +153,27 @@ export const getProducts = (params: ProductParams = {}) => {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
   const qs = q.toString() ? `?${q}` : "";
-  return listReq<Product>(`/api/v1/products${qs}`);
+  return listReq<Product>(`/v1/products${qs}`);
 };
 
 export const getProduct = (id: string) =>
-  req<{ data: Product }>(`/api/v1/products/${id}`).then((r) => r.data);
+  req<{ data: Product }>(`/v1/products/${id}`).then((r) => r.data);
 
 export const createProduct = (
   body: { name: string; slug: string; category_id: string; seller_id: string; description?: string; status?: string },
-) => req<{ data: Product }>("/api/v1/products", {
+) => req<{ data: Product }>("/v1/products", {
   method: "POST", body: JSON.stringify(body),
 }).then((r) => r.data);
 
 export const updateProduct = (
   id: string,
   body: Partial<{ name: string; slug: string; description: string; category_id: string; status: string }>,
-) => req<{ data: Product }>(`/api/v1/products/${id}`, {
+) => req<{ data: Product }>(`/v1/products/${id}`, {
   method: "PUT", body: JSON.stringify(body),
 }).then((r) => r.data);
 
 export const deleteProduct = (id: string) =>
-  req(`/api/v1/products/${id}`, { method: "DELETE" });
+  req(`/v1/products/${id}`, { method: "DELETE" });
 
 // ── SKUs ──────────────────────────────────────────────────────────────────────
 
@@ -189,11 +189,11 @@ export const getSkus = (params: SKUParams = {}) => {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
   const qs = q.toString() ? `?${q}` : "";
-  return listReq<SKU>(`/api/v1/skus${qs}`);
+  return listReq<SKU>(`/v1/skus${qs}`);
 };
 
 export const getSku = (id: string) =>
-  req<{ data: SKU }>(`/api/v1/skus/${id}`).then((r) => r.data);
+  req<{ data: SKU }>(`/v1/skus/${id}`).then((r) => r.data);
 
 export const createSku = (
   body: {
@@ -206,7 +206,7 @@ export const createSku = (
     weight_grams?: number;
     variant_attrs?: Record<string, unknown>;
   },
-) => req<{ data: SKU }>("/api/v1/skus", {
+) => req<{ data: SKU }>("/v1/skus", {
   method: "POST", body: JSON.stringify(body),
 }).then((r) => r.data);
 
@@ -221,12 +221,12 @@ export const updateSku = (
     weight_grams: number;
     variant_attrs: Record<string, unknown>;
   }>,
-) => req<{ data: SKU }>(`/api/v1/skus/${id}`, {
+) => req<{ data: SKU }>(`/v1/skus/${id}`, {
   method: "PUT", body: JSON.stringify(body),
 }).then((r) => r.data);
 
 export const deleteSku = (id: string) =>
-  req(`/api/v1/skus/${id}`, { method: "DELETE" });
+  req(`/v1/skus/${id}`, { method: "DELETE" });
 
 // ── Admin: Users ─────────────────────────────────────────────────────────────
 
@@ -328,7 +328,7 @@ export const adminCancelOrder = (id: string) =>
 // ── Images ────────────────────────────────────────────────────────────────────
 
 export const getImages = (productId: string) =>
-  listReq<ProductImage>(`/api/v1/products/${productId}/images`);
+  listReq<ProductImage>(`/v1/products/${productId}/images`);
 
 export const deleteImage = (productId: string, imageId: string) =>
-  req(`/api/v1/products/${productId}/images/${imageId}`, { method: "DELETE" });
+  req(`/v1/products/${productId}/images/${imageId}`, { method: "DELETE" });
