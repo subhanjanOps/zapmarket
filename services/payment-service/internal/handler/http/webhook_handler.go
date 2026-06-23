@@ -11,10 +11,16 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/service"
 )
+
+// webhookMaxAge is the maximum age of a webhook request. Requests older than
+// this are rejected to prevent replay attacks.
+const webhookMaxAge = 5 * time.Minute
 
 // WebhookHandler verifies and dispatches the payment gateway's async
 // status callbacks. Built ahead of any real gateway integration (see
@@ -51,6 +57,18 @@ func (h *WebhookHandler) Health(w http.ResponseWriter, r *http.Request) {
 // anything in the payload — an unsigned or wrongly-signed request is
 // rejected outright.
 func (h *WebhookHandler) HandlePaymentWebhook(w http.ResponseWriter, r *http.Request) {
+	// Reject stale requests before reading the body.
+	tsHeader := r.Header.Get("X-Webhook-Timestamp")
+	if tsHeader == "" {
+		http.Error(w, "missing X-Webhook-Timestamp", http.StatusBadRequest)
+		return
+	}
+	tsUnix, err := strconv.ParseInt(tsHeader, 10, 64)
+	if err != nil || time.Since(time.Unix(tsUnix, 0)).Abs() > webhookMaxAge {
+		http.Error(w, "webhook timestamp out of range", http.StatusBadRequest)
+		return
+	}
+
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1MB cap
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)

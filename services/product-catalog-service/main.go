@@ -2,7 +2,7 @@
 // @version		1.0
 // @description	Manages products, SKUs, categories, and images for ZapMarket.
 // @host			localhost:8081
-// @BasePath		/api/v1
+// @BasePath		/v1
 // @securityDefinitions.apikey	BearerAuth
 // @in							header
 // @name						Authorization
@@ -126,7 +126,7 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.RequestID)
 
-	r.Route("/api/v1", func(r chi.Router) {
+	r.Route("/v1", func(r chi.Router) {
 
 		// ── Public: read-only ──────────────────────────────────────────────────
 		r.Get("/categories", categoryH.GetCategoryList)

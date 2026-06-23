@@ -78,11 +78,24 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.Items) == 0 {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ITEMS", "items must not be empty")
+		return
+	}
+
 	items := make([]service.CheckoutItem, len(req.Items))
 	for i, it := range req.Items {
 		skuID, err := uuid.Parse(it.SKUID)
 		if err != nil {
 			ErrorResponse(w, http.StatusBadRequest, "INVALID_SKU_ID", fmt.Sprintf("items[%d]: sku_id must be a valid UUID", i))
+			return
+		}
+		if it.Quantity <= 0 {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_QUANTITY", fmt.Sprintf("items[%d]: quantity must be greater than zero", i))
+			return
+		}
+		if it.UnitPrice <= 0 {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_UNIT_PRICE", fmt.Sprintf("items[%d]: unit_price must be greater than zero", i))
 			return
 		}
 		item := service.CheckoutItem{
@@ -221,7 +234,7 @@ func (h *OrderHandler) ListSellerOrders(w http.ResponseWriter, r *http.Request) 
 }
 
 // parsePage reads limit and offset from query params, with safe defaults.
-// limit is capped at 100 to prevent DoS via oversized queries.
+// limit is clamped to [1, 100] to prevent DoS via oversized queries.
 func parsePage(r *http.Request) (limit, offset int) {
 	limit = 20
 	offset = 0
@@ -230,7 +243,7 @@ func parsePage(r *http.Request) (limit, offset int) {
 			limit = n
 		}
 	}
-	if limit <= 0 || limit > 100 {
+	if limit > 100 {
 		limit = 100
 	}
 	if v := r.URL.Query().Get("offset"); v != "" {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/service"
@@ -27,6 +28,9 @@ func (h *AdminOrderHandler) AdminListOrders(w http.ResponseWriter, r *http.Reque
 	offset, _ := strconv.Atoi(q.Get("offset"))
 	if limit <= 0 {
 		limit = 20
+	}
+	if limit > 500 {
+		limit = 500
 	}
 
 	params := contracts.OrderListParams{
@@ -68,28 +72,14 @@ func (h *AdminOrderHandler) AdminListOrders(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if orders == nil {
+		orders = []*domain.Order{}
+	}
 	page := 1
 	if limit > 0 && offset > 0 {
 		page = offset/limit + 1
 	}
-
-	type listResp struct {
-		Data     interface{} `json:"data"`
-		Total    int64       `json:"total"`
-		Page     int         `json:"page"`
-		PageSize int         `json:"page_size"`
-		Success  bool        `json:"success"`
-	}
-	if orders == nil {
-		orders = []*domain.Order{}
-	}
-	JSON(w, http.StatusOK, listResp{
-		Success:  true,
-		Data:     orders,
-		Total:    total,
-		Page:     page,
-		PageSize: limit,
-	})
+	httpx.Paginated(w, http.StatusOK, orders, total, page, limit)
 }
 
 // AdminGetOrder handles GET /v1/admin/orders/{id}

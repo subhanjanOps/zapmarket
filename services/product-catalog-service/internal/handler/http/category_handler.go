@@ -47,7 +47,7 @@ type UpdateCategoryRequest struct {
 //	@Failure		401		{object}	Response
 //	@Failure		403		{object}	Response
 //	@Failure		409		{object}	Response
-//	@Router			/api/v1/categories [post]
+//	@Router			/v1/categories [post]
 func (h *CategoryHandler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	var req CreateCategoryRequest
 	if err := DecodeJSON(r, &req); err != nil {
@@ -96,7 +96,7 @@ type BulkCreateCategoriesRequest struct {
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		403		{object}	Response
-//	@Router			/api/v1/categories/bulk [post]
+//	@Router			/v1/categories/bulk [post]
 func (h *CategoryHandler) BulkCreateCategories(w http.ResponseWriter, r *http.Request) {
 	var req BulkCreateCategoriesRequest
 	if err := DecodeJSON(r, &req); err != nil {
@@ -138,7 +138,7 @@ func (h *CategoryHandler) BulkCreateCategories(w http.ResponseWriter, r *http.Re
 //	@Success		200	{object}	Response{data=domain.Category}
 //	@Failure		400	{object}	Response
 //	@Failure		404	{object}	Response
-//	@Router			/api/v1/categories/{id} [get]
+//	@Router			/v1/categories/{id} [get]
 func (h *CategoryHandler) GetCategoryByID(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -165,7 +165,7 @@ func (h *CategoryHandler) GetCategoryByID(w http.ResponseWriter, r *http.Request
 //	@Success		200		{object}	Response{data=domain.Category}
 //	@Failure		400		{object}	Response
 //	@Failure		404		{object}	Response
-//	@Router			/api/v1/categories/slug/{slug} [get]
+//	@Router			/v1/categories/slug/{slug} [get]
 func (h *CategoryHandler) GetCategoryBySlug(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if slug == "" {
@@ -196,7 +196,7 @@ func (h *CategoryHandler) GetCategoryBySlug(w http.ResponseWriter, r *http.Reque
 //	@Param			root_only	query		bool	false	"If true, return only root categories (parent_id IS NULL)"
 //	@Success		200			{object}	Response{data=[]domain.Category}
 //	@Failure		400			{object}	Response
-//	@Router			/api/v1/categories [get]
+//	@Router			/v1/categories [get]
 func (h *CategoryHandler) GetCategoryList(w http.ResponseWriter, r *http.Request) {
 	limit, offset := GetLimitOffset(r, domain.DefaultPageSize, 0)
 
@@ -245,7 +245,7 @@ func (h *CategoryHandler) GetCategoryList(w http.ResponseWriter, r *http.Request
 //	@Failure		401		{object}	Response
 //	@Failure		403		{object}	Response
 //	@Failure		404		{object}	Response
-//	@Router			/api/v1/categories/{id} [put]
+//	@Router			/v1/categories/{id} [put]
 func (h *CategoryHandler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -286,7 +286,7 @@ func (h *CategoryHandler) UpdateCategory(w http.ResponseWriter, r *http.Request)
 //	@Failure		401	{object}	Response
 //	@Failure		403	{object}	Response
 //	@Failure		404	{object}	Response
-//	@Router			/api/v1/categories/{id} [delete]
+//	@Router			/v1/categories/{id} [delete]
 func (h *CategoryHandler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)

@@ -21,6 +21,8 @@ package http
 // @name Authorization
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -223,6 +225,18 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "email, password, and full_name are required")
 		return
 	}
+	if len(req.Email) > 254 {
+		h.writeError(w, http.StatusBadRequest, "email must be 254 characters or fewer")
+		return
+	}
+	if len(req.Password) > 72 {
+		h.writeError(w, http.StatusBadRequest, "password must be 72 characters or fewer")
+		return
+	}
+	if len(req.FullName) > 255 {
+		h.writeError(w, http.StatusBadRequest, "full_name must be 255 characters or fewer")
+		return
+	}
 	if req.Role != string(domain.RoleBuyer) && req.Role != string(domain.RoleSeller) {
 		h.writeError(w, http.StatusBadRequest, "role must be 'buyer' or 'seller'")
 		return
@@ -343,23 +357,12 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /me [get]
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
-	// Extract JWT from Authorization header
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		h.writeError(w, http.StatusUnauthorized, "missing authorization header")
+	token, ok := bearerToken(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "missing or invalid authorization header")
 		return
 	}
 
-	// Remove "Bearer " prefix
-	parts := strings.Split(authHeader, " ")
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		h.writeError(w, http.StatusUnauthorized, "invalid authorization header")
-		return
-	}
-
-	token := parts[1]
-
-	// Validate token and get user
 	user, err := h.authSvc.ValidateAccessToken(r.Context(), token)
 	if err != nil {
 		h.writeError(w, http.StatusUnauthorized, "invalid or expired token")
@@ -431,13 +434,11 @@ func (h *Handler) AdminBootstrap(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} AuthResponse "Missing or invalid token"
 // @Router /v1/auth/logout [post]
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	parts := strings.Split(authHeader, " ")
-	if len(parts) != 2 || parts[0] != "Bearer" {
+	accessToken, ok := bearerToken(r)
+	if !ok {
 		h.writeError(w, http.StatusUnauthorized, "missing or invalid authorization header")
 		return
 	}
-	accessToken := parts[1]
 
 	user, err := h.authSvc.ValidateAccessToken(r.Context(), accessToken)
 	if err != nil {
@@ -453,6 +454,26 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, http.StatusOK, map[string]string{"message": "logged out"})
 }
 
+// bearerToken extracts the token from the "Authorization: Bearer <token>" header.
+// Returns ("", false) when the header is absent or malformed.
+func bearerToken(r *http.Request) (string, bool) {
+	parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(parts[1]), true
+}
+
+// generateState returns a cryptographically random 16-byte hex string for use
+// as an OAuth state parameter to prevent CSRF.
+func generateState() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
 // GoogleOAuthURL handles GET /auth/oauth/google/url
 // @Summary Get Google OAuth URL
 // @Description Get the URL for initiating Google OAuth flow
@@ -465,8 +486,12 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GoogleOAuthURL(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	if state == "" {
-		// Generate a simple random state
-		state = "state-" + strings.ReplaceAll(time.Now().String(), " ", "-")[:16]
+		var err error
+		state, err = generateState()
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, "failed to generate state")
+			return
+		}
 	}
 
 	url, err := h.oauthSvc.GetGoogleOAuthURL(state)
@@ -530,8 +555,12 @@ func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) FacebookOAuthURL(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	if state == "" {
-		// Generate a simple random state
-		state = "state-" + strings.ReplaceAll(time.Now().String(), " ", "-")[:16]
+		var err error
+		state, err = generateState()
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, "failed to generate state")
+			return
+		}
 	}
 
 	url, err := h.oauthSvc.GetFacebookOAuthURL(state)

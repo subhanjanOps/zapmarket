@@ -43,6 +43,7 @@ func (sr *SkuRepository) CreateSku(
 		VALUES (
 			$1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW()
 		)
+		RETURNING created_at, updated_at
 	`
 
 	variantAttrs, err := json.Marshal(sku.VariantAttrs)
@@ -50,7 +51,7 @@ func (sr *SkuRepository) CreateSku(
 		return pkgerrors.NewValidation("INVALID_DATA", "variant_attrs must be valid JSON")
 	}
 
-	_, err = sr.db.ExecContext(
+	err = sr.db.QueryRowContext(
 		ctx,
 		query,
 		sku.ID,
@@ -62,7 +63,7 @@ func (sr *SkuRepository) CreateSku(
 		sku.Currency,
 		sku.WeightGrams,
 		sku.IsActive,
-	)
+	).Scan(&sku.CreatedAt, &sku.UpdatedAt)
 
 	if err != nil {
 		var pqErr *pq.Error

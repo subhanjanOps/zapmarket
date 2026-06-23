@@ -33,16 +33,16 @@ type CreateSKURequest struct {
 	IsActive     bool        `json:"is_active,omitempty"`
 }
 
-// UpdateSKURequest represents the request to update a SKU
+// UpdateSKURequest represents the request to update a SKU.
+// All fields are optional; only non-zero / non-nil values overwrite the existing SKU.
 type UpdateSKURequest struct {
-	ProductID    uuid.UUID   `json:"product_id"`
 	SKUCode      string      `json:"sku_code"`
 	VariantAttrs interface{} `json:"attributes,omitempty"`
 	PriceAmount  int64       `json:"price_amount"`
 	ComparePrice *int64      `json:"compare_price,omitempty"`
 	Currency     string      `json:"currency,omitempty"`
 	WeightGrams  *int32      `json:"weight_grams,omitempty"`
-	IsActive     bool        `json:"is_active,omitempty"`
+	IsActive     *bool       `json:"is_active,omitempty"`
 }
 
 // CreateSKU creates a new SKU
@@ -58,7 +58,7 @@ type UpdateSKURequest struct {
 //	@Failure		401		{object}	Response
 //	@Failure		403		{object}	Response
 //	@Failure		409		{object}	Response
-//	@Router			/api/v1/skus [post]
+//	@Router			/v1/skus [post]
 func (h *SKUHandler) CreateSKU(w http.ResponseWriter, r *http.Request) {
 	var req CreateSKURequest
 	if err := DecodeJSON(r, &req); err != nil {
@@ -88,13 +88,7 @@ func (h *SKUHandler) CreateSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.skuService.GetSKUByID(r.Context(), sku.ID)
-	if err != nil {
-		HandleError(w, err)
-		return
-	}
-
-	SuccessResponse(w, http.StatusCreated, created)
+	SuccessResponse(w, http.StatusCreated, sku)
 }
 
 // GetSKUByID returns a SKU by ID
@@ -106,7 +100,7 @@ func (h *SKUHandler) CreateSKU(w http.ResponseWriter, r *http.Request) {
 //	@Success		200	{object}	Response{data=domain.SKU}
 //	@Failure		400	{object}	Response
 //	@Failure		404	{object}	Response
-//	@Router			/api/v1/skus/{id} [get]
+//	@Router			/v1/skus/{id} [get]
 func (h *SKUHandler) GetSKUByID(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -138,7 +132,7 @@ func (h *SKUHandler) GetSKUByID(w http.ResponseWriter, r *http.Request) {
 //	@Param			sort_order	query		string	false	"Sort direction: asc|desc"
 //	@Success		200			{object}	Response{data=[]domain.SKU}
 //	@Failure		400			{object}	Response
-//	@Router			/api/v1/skus [get]
+//	@Router			/v1/skus [get]
 func (h *SKUHandler) GetSKUList(w http.ResponseWriter, r *http.Request) {
 	limit, offset := GetLimitOffset(r, domain.DefaultPageSize, 0)
 
@@ -194,7 +188,7 @@ func (h *SKUHandler) GetSKUList(w http.ResponseWriter, r *http.Request) {
 //	@Failure		401		{object}	Response
 //	@Failure		403		{object}	Response
 //	@Failure		404		{object}	Response
-//	@Router			/api/v1/skus/{id} [put]
+//	@Router			/v1/skus/{id} [put]
 func (h *SKUHandler) UpdateSKU(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -209,35 +203,47 @@ func (h *SKUHandler) UpdateSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	variantAttrs, err := json.Marshal(req.VariantAttrs)
-	if err != nil {
-		ErrorResponse(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid attributes")
-		return
-	}
-
-	sku := &domain.SKU{
-		ID:           id,
-		SKUCode:      req.SKUCode,
-		VariantAttrs: variantAttrs,
-		PriceAmount:  req.PriceAmount,
-		ComparePrice: req.ComparePrice,
-		Currency:     req.Currency,
-		WeightGrams:  req.WeightGrams,
-		IsActive:     req.IsActive,
-	}
-
-	if err := h.skuService.UpdateSKU(r.Context(), sku); err != nil {
-		HandleError(w, err)
-		return
-	}
-
-	updated, err := h.skuService.GetSKUByID(r.Context(), id)
+	existing, err := h.skuService.GetSKUByID(r.Context(), id)
 	if err != nil {
 		HandleError(w, err)
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, updated)
+	// Merge: only overwrite fields the caller explicitly provided.
+	merged := *existing
+	if req.SKUCode != "" {
+		merged.SKUCode = req.SKUCode
+	}
+	if req.PriceAmount > 0 {
+		merged.PriceAmount = req.PriceAmount
+	}
+	if req.Currency != "" {
+		merged.Currency = req.Currency
+	}
+	if req.ComparePrice != nil {
+		merged.ComparePrice = req.ComparePrice
+	}
+	if req.WeightGrams != nil {
+		merged.WeightGrams = req.WeightGrams
+	}
+	if req.IsActive != nil {
+		merged.IsActive = *req.IsActive
+	}
+	if req.VariantAttrs != nil {
+		variantAttrs, err := json.Marshal(req.VariantAttrs)
+		if err != nil {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid attributes")
+			return
+		}
+		merged.VariantAttrs = variantAttrs
+	}
+
+	if err := h.skuService.UpdateSKU(r.Context(), &merged); err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	SuccessResponse(w, http.StatusOK, &merged)
 }
 
 // DeleteSKU deletes a SKU
@@ -251,7 +257,7 @@ func (h *SKUHandler) UpdateSKU(w http.ResponseWriter, r *http.Request) {
 //	@Failure		401	{object}	Response
 //	@Failure		403	{object}	Response
 //	@Failure		404	{object}	Response
-//	@Router			/api/v1/skus/{id} [delete]
+//	@Router			/v1/skus/{id} [delete]
 func (h *SKUHandler) DeleteSKU(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)

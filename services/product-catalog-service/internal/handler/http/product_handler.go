@@ -55,7 +55,7 @@ type UpdateProductRequest struct {
 //	@Failure		401		{object}	Response
 //	@Failure		403		{object}	Response
 //	@Failure		409		{object}	Response
-//	@Router			/api/v1/products [post]
+//	@Router			/v1/products [post]
 func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	var req CreateProductRequest
 	if err := DecodeJSON(r, &req); err != nil {
@@ -124,7 +124,7 @@ func attributesToRawMessage(v interface{}) (json.RawMessage, error) {
 //	@Success		200	{object}	Response{data=domain.Product}
 //	@Failure		400	{object}	Response
 //	@Failure		404	{object}	Response
-//	@Router			/api/v1/products/{id} [get]
+//	@Router			/v1/products/{id} [get]
 func (h *ProductHandler) GetProductByID(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -151,7 +151,7 @@ func (h *ProductHandler) GetProductByID(w http.ResponseWriter, r *http.Request) 
 //	@Success		200		{object}	Response{data=domain.Product}
 //	@Failure		400		{object}	Response
 //	@Failure		404		{object}	Response
-//	@Router			/api/v1/products/slug/{slug} [get]
+//	@Router			/v1/products/slug/{slug} [get]
 func (h *ProductHandler) GetProductBySlug(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	if slug == "" {
@@ -183,7 +183,7 @@ func (h *ProductHandler) GetProductBySlug(w http.ResponseWriter, r *http.Request
 //	@Param			sort_order	query		string	false	"Sort direction: asc|desc"
 //	@Success		200			{object}	Response{data=[]domain.Product}
 //	@Failure		400			{object}	Response
-//	@Router			/api/v1/products [get]
+//	@Router			/v1/products [get]
 func (h *ProductHandler) GetProductList(w http.ResponseWriter, r *http.Request) {
 	limit, offset := GetLimitOffset(r, domain.DefaultPageSize, 0)
 
@@ -251,7 +251,7 @@ func (h *ProductHandler) GetProductList(w http.ResponseWriter, r *http.Request) 
 //	@Failure		401		{object}	Response
 //	@Failure		403		{object}	Response
 //	@Failure		404		{object}	Response
-//	@Router			/api/v1/products/{id} [put]
+//	@Router			/v1/products/{id} [put]
 func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -341,7 +341,7 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 //	@Failure		401	{object}	Response
 //	@Failure		403	{object}	Response
 //	@Failure		404	{object}	Response
-//	@Router			/api/v1/products/{id} [delete]
+//	@Router			/v1/products/{id} [delete]
 func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
