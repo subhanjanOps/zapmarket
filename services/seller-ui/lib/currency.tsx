@@ -64,7 +64,7 @@ export async function fetchRates(): Promise<{ rates: Record<string, number>; asO
       };
       if (Date.now() - ts < RATES_TTL) return { rates, asOf, stale };
     }
-    const res = await fetch("/api/proxy/api/v1/currencies/rates");
+    const res = await fetch("/api/proxy/v1/currencies/rates");
     const data = await res.json() as RatesPayload;
     const rates: Record<string, number> = { USD: 1, ...data.rates };
     localStorage.setItem(RATES_KEY, JSON.stringify({
@@ -90,7 +90,7 @@ async function fetchCurrencyList(): Promise<CurrencyMeta[]> {
       const { list, ts } = JSON.parse(cached) as { list: CurrencyMeta[]; ts: number };
       if (Date.now() - ts < CURRENCIES_TTL) return list;
     }
-    const res = await fetch("/api/proxy/api/v1/currencies");
+    const res = await fetch("/api/proxy/v1/currencies");
     if (!res.ok) throw new Error(`currency list fetch: ${res.status}`);
     const list = await res.json() as CurrencyMeta[];
     localStorage.setItem(CURRENCIES_KEY, JSON.stringify({ list, ts: Date.now() }));

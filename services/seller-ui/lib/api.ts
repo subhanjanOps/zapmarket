@@ -94,20 +94,20 @@ export async function getProducts(
   if (params.offset)  q.set("offset",  String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
   const r = await req<{ data: Product[]; total: number; page: number; page_size: number }>(
-    `/api/proxy/api/v1/products${qs}`,
+    `/api/proxy/v1/products${qs}`,
   );
   return { products: r.data ?? [], total: r.total ?? 0, limit: r.page_size ?? 20, offset: ((r.page ?? 1) - 1) * (r.page_size ?? 20) };
 }
 
 export async function getProduct(id: string): Promise<Product> {
-  const r = await req<{ data: Product }>(`/api/proxy/api/v1/products/${id}`);
+  const r = await req<{ data: Product }>(`/api/proxy/v1/products/${id}`);
   return r.data;
 }
 
 export async function createProduct(
   data: { name: string; slug: string; description: string; category_id: string; status: string },
 ): Promise<Product> {
-  const r = await req<{ data: Product }>("/api/proxy/api/v1/products", { method: "POST", body: JSON.stringify(data) });
+  const r = await req<{ data: Product }>("/api/proxy/v1/products", { method: "POST", body: JSON.stringify(data) });
   return r.data;
 }
 
@@ -115,12 +115,12 @@ export async function updateProduct(
   id: string,
   data: Partial<{ name: string; slug: string; description: string; category_id: string; status: string }>,
 ): Promise<Product> {
-  const r = await req<{ data: Product }>(`/api/proxy/api/v1/products/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  const r = await req<{ data: Product }>(`/api/proxy/v1/products/${id}`, { method: "PUT", body: JSON.stringify(data) });
   return r.data;
 }
 
 export async function deleteProduct(id: string): Promise<void> {
-  return req(`/api/proxy/api/v1/products/${id}`, { method: "DELETE" });
+  return req(`/api/proxy/v1/products/${id}`, { method: "DELETE" });
 }
 
 // ── SKUs ──────────────────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ export interface SKU {
 }
 
 export async function getSkus(productId: string): Promise<{ skus: SKU[] }> {
-  const r = await req<{ data: SKU[] }>(`/api/proxy/api/v1/skus?product_id=${productId}`);
+  const r = await req<{ data: SKU[] }>(`/api/proxy/v1/skus?product_id=${productId}`);
   return { skus: r.data ?? [] };
 }
 
@@ -155,7 +155,7 @@ export async function createSku(
     is_active: boolean;
   },
 ): Promise<SKU> {
-  const r = await req<{ data: SKU }>("/api/proxy/api/v1/skus", { method: "POST", body: JSON.stringify(data) });
+  const r = await req<{ data: SKU }>("/api/proxy/v1/skus", { method: "POST", body: JSON.stringify(data) });
   return r.data;
 }
 
@@ -163,12 +163,12 @@ export async function updateSku(
   id: string,
   data: Partial<Omit<SKU, "id" | "product_id" | "created_at">>,
 ): Promise<SKU> {
-  const r = await req<{ data: SKU }>(`/api/proxy/api/v1/skus/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  const r = await req<{ data: SKU }>(`/api/proxy/v1/skus/${id}`, { method: "PUT", body: JSON.stringify(data) });
   return r.data;
 }
 
 export async function deleteSku(id: string): Promise<void> {
-  return req(`/api/proxy/api/v1/skus/${id}`, { method: "DELETE" });
+  return req(`/api/proxy/v1/skus/${id}`, { method: "DELETE" });
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ export interface ProductImage {
 }
 
 export async function getImages(productId: string): Promise<{ images: ProductImage[] }> {
-  const r = await req<{ data: ProductImage[] }>(`/api/proxy/api/v1/products/${productId}/images`);
+  const r = await req<{ data: ProductImage[] }>(`/api/proxy/v1/products/${productId}/images`);
   return { images: r.data ?? [] };
 }
 
@@ -192,7 +192,7 @@ export async function uploadImage(productId: string, file: File, skuId?: string)
   fd.append("file", file);
   if (skuId) fd.append("sku_id", skuId);
   // No Content-Type — browser sets multipart/form-data with boundary automatically.
-  const res = await fetch(`/api/proxy/api/v1/products/${productId}/images`, { method: "POST", body: fd, cache: "no-store" });
+  const res = await fetch(`/api/proxy/v1/products/${productId}/images`, { method: "POST", body: fd, cache: "no-store" });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { const j = await res.json(); msg = j.error ?? j.message ?? msg; } catch { /* */ }
@@ -203,11 +203,11 @@ export async function uploadImage(productId: string, file: File, skuId?: string)
 }
 
 export async function setImagePosition(productId: string, imageId: string, position: number): Promise<void> {
-  return req(`/api/proxy/api/v1/products/${productId}/images/${imageId}/position`, { method: "PATCH", body: JSON.stringify({ position }) });
+  return req(`/api/proxy/v1/products/${productId}/images/${imageId}/position`, { method: "PATCH", body: JSON.stringify({ position }) });
 }
 
 export async function deleteImage(productId: string, imageId: string): Promise<void> {
-  return req(`/api/proxy/api/v1/products/${productId}/images/${imageId}`, { method: "DELETE" });
+  return req(`/api/proxy/v1/products/${productId}/images/${imageId}`, { method: "DELETE" });
 }
 
 // ── Categories ────────────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ export async function getCategories(params: {
   if (params.limit  != null) q.set("limit",     String(params.limit));
   if (params.offset != null) q.set("offset",    String(params.offset));
   const qs = q.toString() ? `?${q}` : "";
-  const r = await req<{ data: Category[]; total: number }>(`/api/proxy/api/v1/categories${qs}`);
+  const r = await req<{ data: Category[]; total: number }>(`/api/proxy/v1/categories${qs}`);
   return { categories: r.data ?? [], total: r.total ?? 0 };
 }
 
