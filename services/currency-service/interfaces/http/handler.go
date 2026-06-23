@@ -7,23 +7,25 @@ import (
 	"net/http"
 	"time"
 
+	domainerrors "github.com/zapmarket/zapmarket/services/currency-service/domain/errors"
 	"github.com/zapmarket/zapmarket/services/currency-service/application/usecases"
+	"github.com/zapmarket/zapmarket/services/currency-service/domain/valueobjects"
 )
 
 // Handler holds all HTTP handlers for the currency service.
 type Handler struct {
-	listCurrencies  *usecases.ListCurrenciesUseCase
-	getRates        *usecases.GetRatesUseCase
-	toggleCurrency  *usecases.ToggleCurrencyUseCase
-	getRatesHistory *usecases.GetRatesHistoryUseCase
+	listCurrencies  usecases.CurrencyLister
+	getRates        usecases.RatesGetter
+	toggleCurrency  usecases.CurrencyToggler
+	getRatesHistory usecases.RatesHistoryGetter
 	log             *slog.Logger
 }
 
 func NewHandler(
-	listCurrencies *usecases.ListCurrenciesUseCase,
-	getRates *usecases.GetRatesUseCase,
-	toggleCurrency *usecases.ToggleCurrencyUseCase,
-	getRatesHistory *usecases.GetRatesHistoryUseCase,
+	listCurrencies usecases.CurrencyLister,
+	getRates usecases.RatesGetter,
+	toggleCurrency usecases.CurrencyToggler,
+	getRatesHistory usecases.RatesHistoryGetter,
 	log *slog.Logger,
 ) *Handler {
 	return &Handler{
@@ -35,27 +37,33 @@ func NewHandler(
 	}
 }
 
-// ListCurrencies handles GET /v1/currencies — public, no auth.
+// ListCurrencies handles GET /api/v1/currencies — public, no auth.
 func (h *Handler) ListCurrencies(w http.ResponseWriter, r *http.Request) {
 	currencies, err := h.listCurrencies.Execute(r.Context())
 	if err != nil {
-		h.log.Error("list currencies", "error", err)
+		h.log.Error("list currencies", "error", err, "request_id", requestIDFrom(r.Context()))
 		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	h.writeJSON(w, http.StatusOK, currencies)
 }
 
-// GetRates handles GET /v1/currencies/rates — public, no auth.
+// GetRates handles GET /api/v1/currencies/rates?base=USD — public, no auth.
+// The base query parameter defaults to USD.
 func (h *Handler) GetRates(w http.ResponseWriter, r *http.Request) {
-	ratesDTO, err := h.getRates.Execute(r.Context(), "USD")
+	base := r.URL.Query().Get("base")
+	if base == "" {
+		base = "USD"
+	}
+
+	ratesDTO, err := h.getRates.Execute(r.Context(), base)
 	if err != nil {
 		var staleErr *usecases.ErrRatesTooStale
 		if errors.As(err, &staleErr) {
 			h.writeError(w, http.StatusServiceUnavailable, "exchange rates unavailable: "+staleErr.Error())
 			return
 		}
-		h.log.Error("get rates", "error", err)
+		h.log.Error("get rates", "error", err, "base", base, "request_id", requestIDFrom(r.Context()))
 		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -63,18 +71,20 @@ func (h *Handler) GetRates(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, ratesDTO)
 }
 
-// ToggleCurrency handles PUT /v1/admin/currencies/{code}.
-// The gateway enforces JWT auth (auth_mode=required); this handler additionally
-// verifies that the X-User-Role header (set by gateway after token validation)
-// is "admin".
+// ToggleCurrency handles PUT /api/v1/admin/currencies/{code}.
+// The gateway enforces JWT auth (auth_mode=required) and sets X-User-Role after token
+// validation. This handler performs a secondary role check. Note: this assumes network
+// policy prevents direct access to the service, bypassing the gateway. For stronger
+// guarantees, forward the JWT to auth-service for validation.
 func (h *Handler) ToggleCurrency(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("X-User-Role") != "admin" {
 		h.writeError(w, http.StatusForbidden, "admin role required")
 		return
 	}
+
 	code := r.PathValue("code")
-	if code == "" {
-		h.writeError(w, http.StatusBadRequest, "currency code is required")
+	if _, err := valueobjects.NewCurrencyCode(code); err != nil {
+		h.writeError(w, http.StatusBadRequest, "currency code must be a 3-letter ISO 4217 code")
 		return
 	}
 
@@ -87,17 +97,23 @@ func (h *Handler) ToggleCurrency(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.toggleCurrency.Execute(r.Context(), code, body.Enabled); err != nil {
-		h.log.Error("toggle currency", "code", code, "enabled", body.Enabled, "error", err)
-		h.writeError(w, http.StatusNotFound, err.Error())
+		var notFound *domainerrors.ErrCurrencyNotFound
+		if errors.As(err, &notFound) {
+			h.writeError(w, http.StatusNotFound, "currency not found")
+			return
+		}
+		h.log.Error("toggle currency", "code", code, "enabled", body.Enabled, "error", err,
+			"request_id", requestIDFrom(r.Context()))
+		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+	h.writeJSON(w, http.StatusOK, map[string]any{
 		"code":    code,
 		"enabled": body.Enabled,
 	})
 }
 
-// GetRatesHistory handles GET /v1/currencies/rates/history?date=YYYY-MM-DD
+// GetRatesHistory handles GET /api/v1/currencies/rates/history?date=YYYY-MM-DD&base=USD
 func (h *Handler) GetRatesHistory(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.URL.Query().Get("date")
 	if dateStr == "" {
@@ -109,9 +125,20 @@ func (h *Handler) GetRatesHistory(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "date must be in YYYY-MM-DD format")
 		return
 	}
-	dto, err := h.getRatesHistory.Execute(r.Context(), "USD", date)
+
+	base := r.URL.Query().Get("base")
+	if base == "" {
+		base = "USD"
+	}
+
+	dto, err := h.getRatesHistory.Execute(r.Context(), base, date)
 	if err != nil {
-		h.log.Error("get rates history", "error", err)
+		var noHistory *domainerrors.ErrNoRatesHistory
+		if errors.As(err, &noHistory) {
+			h.writeError(w, http.StatusNotFound, noHistory.Error())
+			return
+		}
+		h.log.Error("get rates history", "error", err, "request_id", requestIDFrom(r.Context()))
 		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -119,10 +146,12 @@ func (h *Handler) GetRatesHistory(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, dto)
 }
 
-func (h *Handler) writeJSON(w http.ResponseWriter, status int, v interface{}) {
+func (h *Handler) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		h.log.Error("encode response", "error", err)
+	}
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, status int, msg string) {

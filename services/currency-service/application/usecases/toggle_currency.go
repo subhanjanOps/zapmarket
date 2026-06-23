@@ -19,7 +19,11 @@ func NewToggleCurrencyUseCase(repo repositories.CurrencyRepository) *ToggleCurre
 
 func (uc *ToggleCurrencyUseCase) Execute(ctx context.Context, code string, enabled bool) error {
 	if _, err := uc.repo.Get(ctx, code); err != nil {
+		// Propagate domain errors (ErrCurrencyNotFound) unwrapped so callers can inspect them.
+		return err
+	}
+	if err := uc.repo.Toggle(ctx, code, enabled); err != nil {
 		return fmt.Errorf("toggle currency: %w", err)
 	}
-	return uc.repo.Toggle(ctx, code, enabled)
+	return nil
 }

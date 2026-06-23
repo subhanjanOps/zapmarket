@@ -2,7 +2,7 @@ package grpc
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"google.golang.org/grpc"
@@ -16,14 +16,14 @@ import (
 // CurrencyServer implements the generated CurrencyServiceServer interface.
 type CurrencyServer struct {
 	currencypb.UnimplementedCurrencyServiceServer
-	listCurrencies *usecases.ListCurrenciesUseCase
-	getRates       *usecases.GetRatesUseCase
+	listCurrencies usecases.CurrencyLister
+	getRates       usecases.RatesGetter
 	log            *slog.Logger
 }
 
 func NewCurrencyServer(
-	listCurrencies *usecases.ListCurrenciesUseCase,
-	getRates *usecases.GetRatesUseCase,
+	listCurrencies usecases.CurrencyLister,
+	getRates usecases.RatesGetter,
 	log *slog.Logger,
 ) *CurrencyServer {
 	return &CurrencyServer{
@@ -33,7 +33,7 @@ func NewCurrencyServer(
 	}
 }
 
-// Register registers the CurrencyService with the given gRPC server using the generated descriptor.
+// Register registers the CurrencyService with the given gRPC server.
 func (s *CurrencyServer) Register(srv *grpc.Server) {
 	currencypb.RegisterCurrencyServiceServer(srv, s)
 }
@@ -65,8 +65,12 @@ func (s *CurrencyServer) GetRates(ctx context.Context, req *currencypb.GetRatesR
 	}
 	ratesDTO, err := s.getRates.Execute(ctx, base)
 	if err != nil {
+		var staleErr *usecases.ErrRatesTooStale
+		if errors.As(err, &staleErr) {
+			return nil, status.Errorf(codes.Unavailable, "exchange rates too stale: %v", err)
+		}
 		s.log.Error("grpc GetRates", "error", err, "base", base)
-		return nil, status.Errorf(codes.Unavailable, "get rates: %v", err)
+		return nil, status.Errorf(codes.Internal, "get rates: %v", err)
 	}
 	return &currencypb.GetRatesResponse{
 		Base:  ratesDTO.Base,
@@ -76,7 +80,3 @@ func (s *CurrencyServer) GetRates(ctx context.Context, req *currencypb.GetRatesR
 		Rates: ratesDTO.Rates,
 	}, nil
 }
-
-// jsonCodec is used to register JSON encoding for gRPC when no proto codec is present.
-// Call RegisterJSONCodec before creating the gRPC server when using this package.
-var _ = json.Marshal // ensure encoding/json is imported

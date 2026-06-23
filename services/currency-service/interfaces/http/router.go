@@ -1,34 +1,44 @@
 package http
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
-	"github.com/zapmarket/zapmarket/services/currency-service/interfaces/metrics"
+	"github.com/zapmarket/zapmarket/services/currency-service/infrastructure/metrics"
 )
 
 // NewRouter builds the HTTP mux for the currency service.
-func NewRouter(h *Handler, m *metrics.Metrics) http.Handler {
+// liveness is called by the /health endpoint to verify downstream dependencies.
+func NewRouter(h *Handler, m *metrics.Metrics, liveness func(context.Context) error) http.Handler {
 	mux := http.NewServeMux()
 
 	// Public endpoints — no auth (gateway enforces auth_mode=none for these paths).
-	// Paths use /api/v1/ prefix to match what the gateway forwards (strip_prefix=false).
 	mux.HandleFunc("GET /api/v1/currencies", h.ListCurrencies)
 	mux.HandleFunc("GET /api/v1/currencies/rates/history", h.GetRatesHistory)
 	mux.HandleFunc("GET /api/v1/currencies/rates", h.GetRates)
 
 	// Admin endpoint — gateway enforces JWT role=admin before forwarding here.
-	// Also register under /api/v1/ for consistency with the gateway route.
 	mux.HandleFunc("PUT /api/v1/admin/currencies/{code}", h.ToggleCurrency)
 
-	// Prometheus metrics
+	// Prometheus metrics — internal only, not exposed via gateway.
 	mux.Handle("/metrics", m.Handler())
 
-	// Health check
+	// Health / readiness — checks DB and Redis so load-balancers can drain unhealthy instances.
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if err := liveness(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status":  "unhealthy",
+				"service": "currency-service",
+				"error":   err.Error(),
+			})
+			return
+		}
 		fmt.Fprint(w, `{"status":"ok","service":"currency-service"}`)
 	})
 
-	return mux
+	return RequestID(mux)
 }

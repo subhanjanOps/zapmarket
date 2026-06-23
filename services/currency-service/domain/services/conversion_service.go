@@ -5,23 +5,39 @@ import (
 	"math"
 )
 
-// zeroDecimal currencies have no fractional minor units (1 JPY = 1 JPY, not 100).
+// zeroDecimal lists ISO 4217 currencies with no fractional minor units.
+// These are divided by 1 rather than 100 when converting from USD cents.
 var zeroDecimal = map[string]bool{
-	"JPY": true,
-	"KRW": true,
+	"BIF": true,
+	"CLP": true,
+	"GNF": true,
+	"HUF": true,
 	"IDR": true,
+	"ISK": true,
+	"JPY": true,
+	"KMF": true,
+	"KRW": true,
+	"MGA": true,
+	"PYG": true,
+	"RWF": true,
+	"TWD": true,
+	"UGX": true,
+	"VND": true,
+	"VUV": true,
+	"XAF": true,
+	"XOF": true,
+	"XPF": true,
 }
 
 // ConversionService converts USD-cent amounts to a display amount in a target currency.
-// All inputs are minor units (USD cents). Returns a float64 display amount.
-// This service is pure (no I/O) and fully unit-testable.
+// Inputs are minor units (USD cents). Returns a float64 display amount.
+// This service is pure (no I/O) and is available for a future /convert endpoint.
 type ConversionService struct{}
 
 func NewConversionService() *ConversionService { return &ConversionService{} }
 
 // Convert converts usdCents to the target currency using the provided rate map
 // (keyed by ISO 4217 code, values are multipliers relative to USD).
-// Returns the display amount (already in the target currency's major/minor unit).
 func (s *ConversionService) Convert(usdCents int64, toCurrency string, rates map[string]float64) (float64, error) {
 	rate, ok := rates[toCurrency]
 	if !ok {

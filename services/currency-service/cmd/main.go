@@ -28,12 +28,12 @@ import (
 	"github.com/zapmarket/zapmarket/services/currency-service/application/ports"
 	"github.com/zapmarket/zapmarket/services/currency-service/application/usecases"
 	"github.com/zapmarket/zapmarket/services/currency-service/infrastructure/external"
-	kafkainfra "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/kafka"
-	infraredis "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/redis"
+	inframetrics "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/metrics"
 	infrapostgres "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/postgres"
+	infraredis "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/redis"
+	kafkainfra "github.com/zapmarket/zapmarket/services/currency-service/infrastructure/kafka"
 	grpcserver "github.com/zapmarket/zapmarket/services/currency-service/interfaces/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/currency-service/interfaces/http"
-	"github.com/zapmarket/zapmarket/services/currency-service/interfaces/metrics"
 	"github.com/zapmarket/zapmarket/services/currency-service/interfaces/worker"
 
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
@@ -80,16 +80,16 @@ func main() {
 	log.Info("connected to Redis", "addr", cfg.RedisURL)
 
 	// ── Metrics ───────────────────────────────────────────────────────────────
-	m := metrics.New()
+	m := inframetrics.New()
 
 	// ── Repositories ──────────────────────────────────────────────────────────
 	currencyRepo := infrapostgres.NewCurrencyRepository(db)
 	ratesRepo := infrapostgres.NewRatesRepository(db)
 	ratesCache := infraredis.NewRatesCache(rdb)
 
-	// ── FX Provider ───────────────────────────────────────────────────────────
+	// ── FX Providers ──────────────────────────────────────────────────────────
 	primaryProvider := external.NewFrankfurterProvider(cfg.RateProviderURL)
-	secondaryProvider := external.NewOpenExchangeRatesProvider("https://open.er-api.com")
+	secondaryProvider := external.NewOpenExchangeRatesProvider(cfg.FallbackRateProviderURL)
 	provider := external.NewFallbackProvider(primaryProvider, secondaryProvider)
 
 	// ── Kafka publisher (optional — no-op when KAFKA_BROKERS not set) ─────────
@@ -109,7 +109,18 @@ func main() {
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
 	httpHandler := httphandler.NewHandler(listCurrenciesUC, getRatesUC, toggleCurrencyUC, getRatesHistoryUC, log)
-	router := httphandler.NewRouter(httpHandler, m)
+
+	liveness := func(ctx context.Context) error {
+		if err := db.PingContext(ctx); err != nil {
+			return fmt.Errorf("db: %w", err)
+		}
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("redis: %w", err)
+		}
+		return nil
+	}
+
+	router := httphandler.NewRouter(httpHandler, m, liveness)
 
 	httpServer := &nethhttp.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
@@ -216,4 +227,3 @@ func runMigrations(cfg *svcconfig.Config) error {
 func init() {
 	slog.SetDefault(logger.New(os.Getenv("APP_ENV")))
 }
-

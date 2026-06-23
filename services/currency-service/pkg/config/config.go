@@ -24,10 +24,11 @@ type Config struct {
 	// Redis (shared instance with gateway)
 	RedisURL string
 
-	// FX provider
-	RateProviderURL     string
-	RateRefreshInterval time.Duration
-	MaxRateAge          time.Duration
+	// FX providers
+	RateProviderURL         string
+	FallbackRateProviderURL string
+	RateRefreshInterval     time.Duration
+	MaxRateAge              time.Duration
 
 	// Registry
 	ServiceName string
@@ -50,9 +51,10 @@ func Load() (*Config, error) {
 
 		RedisURL: getEnv("REDIS_URL", "localhost:6379"),
 
-		RateProviderURL:     getEnv("RATE_PROVIDER_URL", "https://api.frankfurter.app"),
-		RateRefreshInterval: getEnvDuration("RATE_REFRESH_INTERVAL", time.Hour),
-		MaxRateAge:          getEnvDuration("MAX_RATE_AGE", 24*time.Hour),
+		RateProviderURL:         getEnv("RATE_PROVIDER_URL", "https://api.frankfurter.app"),
+		FallbackRateProviderURL: getEnv("FALLBACK_RATE_PROVIDER_URL", "https://open.er-api.com"),
+		RateRefreshInterval:     getEnvDuration("RATE_REFRESH_INTERVAL", time.Hour),
+		MaxRateAge:              getEnvDuration("MAX_RATE_AGE", 24*time.Hour),
 
 		ServiceName:   "currency-service",
 		MigrateOnBoot: getEnvBool("MIGRATE_ON_BOOT", true),

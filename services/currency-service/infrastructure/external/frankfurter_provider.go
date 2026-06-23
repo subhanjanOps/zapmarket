@@ -53,10 +53,9 @@ func (p *FrankfurterProvider) FetchLatest(ctx context.Context, base string) (por
 
 	asOf, err := time.Parse("2006-01-02", fr.Date)
 	if err != nil {
-		asOf = time.Now().UTC()
+		return ports.RateSet{}, fmt.Errorf("frankfurter: unexpected date format %q: %w", fr.Date, err)
 	}
 
-	// Ensure base is always in the rate map with value 1.
 	if fr.Rates == nil {
 		fr.Rates = make(map[string]float64)
 	}

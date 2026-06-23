@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/zapmarket/zapmarket/services/currency-service/application/usecases"
-	"github.com/zapmarket/zapmarket/services/currency-service/interfaces/metrics"
+	"github.com/zapmarket/zapmarket/services/currency-service/infrastructure/metrics"
 )
 
-// RateIngestor runs the scheduled rate ingestion on a ticker.
-// It does NOT fetch on startup — it waits for the first tick.
+// RateIngestor runs scheduled rate ingestion on a ticker.
+// It fetches immediately on startup to warm the cache, then on every tick.
 type RateIngestor struct {
-	ingest   *usecases.IngestRatesUseCase
+	ingest   usecases.RateIngester
 	interval time.Duration
 	base     string
 	metrics  *metrics.Metrics
@@ -20,7 +20,7 @@ type RateIngestor struct {
 }
 
 func NewRateIngestor(
-	ingest *usecases.IngestRatesUseCase,
+	ingest usecases.RateIngester,
 	interval time.Duration,
 	base string,
 	m *metrics.Metrics,
@@ -35,24 +35,33 @@ func NewRateIngestor(
 	}
 }
 
-// Run starts the background ticker. Blocks until ctx is cancelled.
+// Run starts the background ingestor. Blocks until ctx is cancelled.
+// An immediate fetch is performed before the first tick to ensure rates are available
+// from the moment the service starts accepting traffic.
 func (r *RateIngestor) Run(ctx context.Context) {
+	r.log.Info("rate ingestor started", "interval", r.interval, "base", r.base)
+	r.runOnce(ctx)
+
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
-	r.log.Info("rate ingestor started", "interval", r.interval, "base", r.base)
+
 	for {
 		select {
 		case <-ctx.Done():
 			r.log.Info("rate ingestor stopped")
 			return
 		case <-ticker.C:
-			if err := r.ingest.Execute(ctx, r.base); err != nil {
-				r.log.Warn("rate ingestion failed", "error", err)
-				r.metrics.RecordIngest(false)
-			} else {
-				r.log.Info("rate ingestion succeeded", "base", r.base)
-				r.metrics.RecordIngest(true)
-			}
+			r.runOnce(ctx)
 		}
+	}
+}
+
+func (r *RateIngestor) runOnce(ctx context.Context) {
+	if err := r.ingest.Execute(ctx, r.base); err != nil {
+		r.log.Warn("rate ingestion failed", "error", err)
+		r.metrics.RecordIngest(false)
+	} else {
+		r.log.Info("rate ingestion succeeded", "base", r.base)
+		r.metrics.RecordIngest(true)
 	}
 }

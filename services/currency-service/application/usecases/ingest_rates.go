@@ -79,12 +79,16 @@ func (uc *IngestRatesUseCase) Execute(ctx context.Context, base string) error {
 
 	uc.log.Debug("rates ingested", "base", base, "count", len(rows), "as_of", rateSet.AsOf)
 
-	// Publish event after successful persistence.
-	payload, _ := json.Marshal(map[string]interface{}{
+	payload, err := json.Marshal(map[string]any{
 		"base":       base,
 		"as_of":      rateSet.AsOf.Format("2006-01-02"),
 		"rate_count": len(rows),
 	})
+	if err != nil {
+		uc.log.Warn("ingest rates: marshal event payload failed", "error", err)
+		return nil
+	}
+
 	if err := uc.publisher.Publish(ctx, "currency.rates.updated", payload); err != nil {
 		uc.log.Warn("ingest rates: publish event failed", "error", err)
 	}

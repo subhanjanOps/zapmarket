@@ -3,9 +3,11 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
+	domainerrors "github.com/zapmarket/zapmarket/services/currency-service/domain/errors"
 	"github.com/zapmarket/zapmarket/services/currency-service/domain/entities"
 )
 
@@ -41,8 +43,8 @@ func (r *CurrencyRepository) Get(ctx context.Context, code string) (entities.Cur
 		`SELECT code, name, flag, decimals, enabled, created_at, updated_at
 		 FROM currencies WHERE code = $1`, code).
 		Scan(&c.Code, &c.Name, &c.Flag, &c.Decimals, &c.Enabled, &c.CreatedAt, &c.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return entities.Currency{}, fmt.Errorf("currency %q not found", code)
+	if errors.Is(err, sql.ErrNoRows) {
+		return entities.Currency{}, &domainerrors.ErrCurrencyNotFound{Code: code}
 	}
 	if err != nil {
 		return entities.Currency{}, fmt.Errorf("get currency: %w", err)

@@ -2,8 +2,11 @@ package usecases_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
+
+	domainerrors "github.com/zapmarket/zapmarket/services/currency-service/domain/errors"
 
 	"github.com/zapmarket/zapmarket/services/currency-service/application/usecases"
 	"github.com/zapmarket/zapmarket/services/currency-service/domain/entities"
@@ -40,15 +43,17 @@ func TestGetRatesHistory_ReturnsDTO(t *testing.T) {
 	}
 }
 
-func TestGetRatesHistory_EmptyOnNoData(t *testing.T) {
+func TestGetRatesHistory_ReturnsErrNoRatesHistoryOnNoData(t *testing.T) {
 	repo := &fakeHistoryRepo{rows: nil}
 	uc := usecases.NewGetRatesHistoryUseCase(repo)
-	date := time.Now().UTC()
-	dto, err := uc.Execute(context.Background(), "USD", date)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := uc.Execute(context.Background(), "USD", date)
+	if err == nil {
+		t.Fatal("expected ErrNoRatesHistory, got nil")
 	}
-	if len(dto.Rates) != 0 {
-		t.Errorf("expected empty rates, got %v", dto.Rates)
+	var noHistory *domainerrors.ErrNoRatesHistory
+	if !errors.As(err, &noHistory) {
+		t.Errorf("expected ErrNoRatesHistory, got %T: %v", err, err)
 	}
 }

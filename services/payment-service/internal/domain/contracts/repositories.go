@@ -6,7 +6,6 @@ package contracts
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain"
