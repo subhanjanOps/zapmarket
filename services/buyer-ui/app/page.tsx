@@ -6,6 +6,7 @@ import BlogCard from "@/components/BlogCard";
 import GlossaryEntry from "@/components/GlossaryEntry";
 import { getAllPosts, getAllTerms } from "@/lib/mdx";
 import Link from "next/link";
+import { publicImageUrl } from "@/lib/images";
 
 export const metadata: Metadata = {
   title: "ZapMarket — Shop Smarter",
@@ -39,7 +40,22 @@ async function fetchNewArrivals() {
     const r = await fetch(`${GW}/v1/products?limit=8&sort_by=created_at&sort_order=desc`, { cache: "no-store" });
     if (!r.ok) return [];
     const d = await r.json();
-    return d.data ?? d ?? [];
+    const products: Record<string, unknown>[] = d.data ?? d ?? [];
+    await Promise.all(
+      products.map(async (p) => {
+        try {
+          const ir = await fetch(`${GW}/v1/products/${p.id}/images`, { next: { revalidate: 300 } });
+          if (!ir.ok) return;
+          const id = await ir.json();
+          const imgs: { url: string; position: number }[] = id.data ?? [];
+          if (imgs.length > 0) {
+            imgs.sort((a, b) => a.position - b.position);
+            p.images = [{ url: publicImageUrl(imgs[0].url) }];
+          }
+        } catch { /* keep placeholder */ }
+      })
+    );
+    return products;
   } catch { return []; }
 }
 

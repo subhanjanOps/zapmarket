@@ -269,6 +269,8 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - GATEWAY_URL=http://zapmarket-api-gateway:8000
+      - MINIO_INTERNAL_URL=http://zapmarket-minio:9000
+      - NEXT_PUBLIC_MINIO_URL=http://localhost:9000
     ports:
       - "3000:3000"
     networks:

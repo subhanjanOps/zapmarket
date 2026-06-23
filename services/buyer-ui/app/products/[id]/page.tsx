@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import ProductInteractions from "@/components/ProductInteractions";
+import { publicImageUrl } from "@/lib/images";
 
 const GW = process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
 
@@ -17,9 +18,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const [productRes, skusRes] = await Promise.all([
+  const [productRes, skusRes, imagesRes] = await Promise.all([
     fetch(`${GW}/v1/products/${id}`, { next: { revalidate: 300 } }).then((r) => r.ok ? r.json() : null).catch(() => null),
     fetch(`${GW}/v1/skus?product_id=${id}`, { next: { revalidate: 300 } }).then((r) => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
+    fetch(`${GW}/v1/products/${id}/images`, { next: { revalidate: 300 } }).then((r) => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
   ]);
 
   if (!productRes) {
@@ -31,7 +33,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   }
 
   const skus = skusRes.data ?? skusRes ?? [];
-  const firstImage = productRes.images?.[0]?.url ?? "/placeholder-product.png";
+  const rawImages: { url: string; position: number }[] = imagesRes.data ?? [];
+  rawImages.sort((a, b) => a.position - b.position);
+  const firstImage = publicImageUrl(rawImages[0]?.url);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
