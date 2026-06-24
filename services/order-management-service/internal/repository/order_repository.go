@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -179,7 +180,10 @@ func (r *OrderRepository) MarkReserved(ctx context.Context, orderID uuid.UUID, i
 			}
 		}
 
-		payload := []byte(fmt.Sprintf(`{"order_id":%q}`, orderID.String()))
+		payload, err := json.Marshal(map[string]string{"order_id": orderID.String()})
+		if err != nil {
+			return pkgerrors.NewInternal("INTERNAL_ERROR", "failed to marshal outbox payload", err)
+		}
 		return insertOutboxEvent(ctx, tx, orderID, "order", "order.reserved", payload)
 	})
 }

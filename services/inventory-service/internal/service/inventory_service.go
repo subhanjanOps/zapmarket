@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
@@ -113,7 +114,7 @@ func (s *inventoryService) ReserveStock(ctx context.Context, skuID, orderID uuid
 		if dbErr != nil {
 			return nil, dbErr
 		}
-		if setErr := s.rdb.Set(ctx, key, inv.QtyAvailable, 0).Err(); setErr != nil {
+		if setErr := s.rdb.Set(ctx, key, inv.QtyAvailable, 24*time.Hour).Err(); setErr != nil {
 			s.logger.Warn("failed to warm redis stock key", "sku_id", skuID, "error", setErr)
 			return s.dbReserve(ctx, skuID, orderID, qty)
 		}
@@ -179,8 +180,10 @@ func (s *inventoryService) ReleaseStock(ctx context.Context, reservationID uuid.
 		return err
 	}
 
-	// Increment Redis counter: released units are available again.
-	if redisErr := s.rdb.IncrBy(ctx, stockKey(skuID), qty).Err(); redisErr != nil {
+	// Increment Redis only if the key exists. If absent, the next ReserveStock
+	// cache-miss will warm it from DB. Using INCRBY on a missing key would seed
+	// it with only the released delta instead of the true available qty.
+	if _, redisErr := luaIncrIfExists.Run(ctx, s.rdb, []string{stockKey(skuID)}, qty).Int64(); redisErr != nil && !errors.Is(redisErr, goredis.Nil) {
 		s.logger.Warn("failed to increment redis stock after release", "reservation_id", reservationID, "error", redisErr)
 	}
 

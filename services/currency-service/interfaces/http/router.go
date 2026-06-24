@@ -11,7 +11,8 @@ import (
 
 // NewRouter builds the HTTP mux for the currency service.
 // liveness is called by the /health endpoint to verify downstream dependencies.
-func NewRouter(h *Handler, m *metrics.Metrics, liveness func(context.Context) error) http.Handler {
+// authMW must be non-nil; it validates JWTs for admin routes via auth-service gRPC.
+func NewRouter(h *Handler, m *metrics.Metrics, liveness func(context.Context) error, authMW *AuthMiddleware) http.Handler {
 	mux := http.NewServeMux()
 
 	// Public endpoints — no auth (gateway enforces auth_mode=none for these paths).
@@ -19,8 +20,8 @@ func NewRouter(h *Handler, m *metrics.Metrics, liveness func(context.Context) er
 	mux.HandleFunc("GET /api/v1/currencies/rates/history", h.GetRatesHistory)
 	mux.HandleFunc("GET /api/v1/currencies/rates", h.GetRates)
 
-	// Admin endpoint — gateway enforces JWT role=admin before forwarding here.
-	mux.HandleFunc("PUT /api/v1/admin/currencies/{code}", h.ToggleCurrency)
+	// Admin endpoint — JWT validated by auth-service; only admin role permitted.
+	mux.Handle("PUT /api/v1/admin/currencies/{code}", authMW.RequireRole("admin")(http.HandlerFunc(h.ToggleCurrency)))
 
 	// Prometheus metrics — internal only, not exposed via gateway.
 	mux.Handle("/metrics", m.Handler())

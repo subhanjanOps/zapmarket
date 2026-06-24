@@ -13,7 +13,7 @@ package http
 // @license.url http://www.apache.org/licenses/LICENSE-2.0.html
 
 // @host localhost:8080
-// @BasePath /auth
+// @BasePath /v1/auth
 // @schemes http https
 
 // @securityDefinitions.apikey BearerAuth
@@ -25,7 +25,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"os"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -229,6 +229,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "email must be 254 characters or fewer")
 		return
 	}
+	if _, err := mail.ParseAddress(req.Email); err != nil {
+		h.writeError(w, http.StatusBadRequest, "email must be a valid email address")
+		return
+	}
 	if len(req.Password) > 72 {
 		h.writeError(w, http.StatusBadRequest, "password must be 72 characters or fewer")
 		return
@@ -259,7 +263,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, http.StatusCreated, AuthResponse{
 		User:         userToResponse(user),
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.TokenHash,
+		RefreshToken: refreshToken.Token,
 	})
 }
 
@@ -305,7 +309,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, http.StatusOK, AuthResponse{
 		User:         userToResponse(user),
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.TokenHash,
+		RefreshToken: refreshToken.Token,
 	})
 }
 
@@ -378,7 +382,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 // Creates the first admin user. Protected by ADMIN_BOOTSTRAP_SECRET env var.
 // Returns 409 if an admin already exists (one-shot endpoint).
 func (h *Handler) AdminBootstrap(w http.ResponseWriter, r *http.Request) {
-	secret := os.Getenv("ADMIN_BOOTSTRAP_SECRET")
+	secret := h.cfg.AdminBootstrapSecret
 	if secret == "" {
 		h.writeError(w, http.StatusForbidden, "bootstrap not enabled — set ADMIN_BOOTSTRAP_SECRET")
 		return
@@ -421,7 +425,7 @@ func (h *Handler) AdminBootstrap(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, http.StatusCreated, AuthResponse{
 		User:         userToResponse(user),
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.TokenHash,
+		RefreshToken: refreshToken.Token,
 	})
 }
 
@@ -484,14 +488,14 @@ func generateState() (string, error) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /oauth/google/url [get]
 func (h *Handler) GoogleOAuthURL(w http.ResponseWriter, r *http.Request) {
-	state := r.URL.Query().Get("state")
-	if state == "" {
-		var err error
-		state, err = generateState()
-		if err != nil {
-			h.writeError(w, http.StatusInternalServerError, "failed to generate state")
-			return
-		}
+	state, err := generateState()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to generate state")
+		return
+	}
+
+	if err := h.authSvc.StoreOAuthState(r.Context(), state); err != nil {
+		slog.Warn("failed to store OAuth state", "error", err)
 	}
 
 	url, err := h.oauthSvc.GetGoogleOAuthURL(state)
@@ -518,8 +522,23 @@ func (h *Handler) GoogleOAuthURL(w http.ResponseWriter, r *http.Request) {
 // @Router /oauth/google/callback [get]
 func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
 	if code == "" {
 		h.writeError(w, http.StatusBadRequest, "missing code parameter")
+		return
+	}
+	if state == "" {
+		h.writeError(w, http.StatusBadRequest, "missing state parameter")
+		return
+	}
+
+	valid, err := h.authSvc.ValidateAndConsumeOAuthState(r.Context(), state)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to validate state")
+		return
+	}
+	if !valid {
+		h.writeError(w, http.StatusBadRequest, "invalid or expired state parameter")
 		return
 	}
 
@@ -539,7 +558,7 @@ func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, http.StatusOK, AuthResponse{
 		User:         userToResponse(user),
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.TokenHash,
+		RefreshToken: refreshToken.Token,
 	})
 }
 
@@ -553,14 +572,14 @@ func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} AuthResponse "Internal server error"
 // @Router /oauth/facebook/url [get]
 func (h *Handler) FacebookOAuthURL(w http.ResponseWriter, r *http.Request) {
-	state := r.URL.Query().Get("state")
-	if state == "" {
-		var err error
-		state, err = generateState()
-		if err != nil {
-			h.writeError(w, http.StatusInternalServerError, "failed to generate state")
-			return
-		}
+	state, err := generateState()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to generate state")
+		return
+	}
+
+	if err := h.authSvc.StoreOAuthState(r.Context(), state); err != nil {
+		slog.Warn("failed to store OAuth state", "error", err)
 	}
 
 	url, err := h.oauthSvc.GetFacebookOAuthURL(state)
@@ -587,8 +606,23 @@ func (h *Handler) FacebookOAuthURL(w http.ResponseWriter, r *http.Request) {
 // @Router /oauth/facebook/callback [get]
 func (h *Handler) FacebookOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
 	if code == "" {
 		h.writeError(w, http.StatusBadRequest, "missing code parameter")
+		return
+	}
+	if state == "" {
+		h.writeError(w, http.StatusBadRequest, "missing state parameter")
+		return
+	}
+
+	valid, err := h.authSvc.ValidateAndConsumeOAuthState(r.Context(), state)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to validate state")
+		return
+	}
+	if !valid {
+		h.writeError(w, http.StatusBadRequest, "invalid or expired state parameter")
 		return
 	}
 
@@ -608,6 +642,6 @@ func (h *Handler) FacebookOAuthCallback(w http.ResponseWriter, r *http.Request) 
 	h.writeResponse(w, http.StatusOK, AuthResponse{
 		User:         userToResponse(user),
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.TokenHash,
+		RefreshToken: refreshToken.Token,
 	})
 }

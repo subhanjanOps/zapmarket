@@ -15,6 +15,7 @@ import (
 
 // AuthMiddleware validates JWTs via the auth-service gRPC endpoint.
 type AuthMiddleware struct {
+	conn       *grpc.ClientConn
 	authClient authpb.AuthServiceClient
 	logger     *slog.Logger
 }
@@ -26,9 +27,15 @@ func NewAuthMiddleware(addr string, logger *slog.Logger) (*AuthMiddleware, error
 		return nil, err
 	}
 	return &AuthMiddleware{
+		conn:       conn,
 		authClient: authpb.NewAuthServiceClient(conn),
 		logger:     logger,
 	}, nil
+}
+
+// Close releases the underlying gRPC connection. Call during service shutdown.
+func (m *AuthMiddleware) Close() error {
+	return m.conn.Close()
 }
 
 // Authenticate validates the Bearer token on the request.

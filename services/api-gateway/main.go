@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -405,8 +406,10 @@ func auditMiddleware(w *audit.Writer) func(http.Handler) http.Handler {
 			if u := gw.UserFromContext(r.Context()); u != nil {
 				userID = u.ID
 			}
-			ip := r.Header.Get("X-Forwarded-For")
-			if ip == "" {
+			// Always use RemoteAddr — the gateway is the edge server and
+			// X-Forwarded-For is trivially spoofable by clients.
+			ip, _, ipErr := net.SplitHostPort(r.RemoteAddr)
+			if ipErr != nil {
 				ip = r.RemoteAddr
 			}
 			w.Log(audit.Entry{

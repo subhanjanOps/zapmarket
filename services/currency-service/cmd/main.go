@@ -110,6 +110,13 @@ func main() {
 	// ── HTTP server ───────────────────────────────────────────────────────────
 	httpHandler := httphandler.NewHandler(listCurrenciesUC, getRatesUC, toggleCurrencyUC, getRatesHistoryUC, log)
 
+	authMW, err := httphandler.NewAuthMiddleware(cfg.AuthServiceAddr, log)
+	if err != nil {
+		log.Error("failed to dial auth-service", "error", err)
+		os.Exit(1)
+	}
+	defer authMW.Close()
+
 	liveness := func(ctx context.Context) error {
 		if err := db.PingContext(ctx); err != nil {
 			return fmt.Errorf("db: %w", err)
@@ -120,7 +127,7 @@ func main() {
 		return nil
 	}
 
-	router := httphandler.NewRouter(httpHandler, m, liveness)
+	router := httphandler.NewRouter(httpHandler, m, liveness, authMW)
 
 	httpServer := &nethhttp.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),

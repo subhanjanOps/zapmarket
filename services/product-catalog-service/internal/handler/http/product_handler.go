@@ -350,6 +350,17 @@ func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user, err := requireUser(r)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	if err := assertOwnership(r.Context(), h.productService, id, user); err != nil {
+		HandleError(w, err)
+		return
+	}
+
 	if err := h.productService.DeleteProduct(r.Context(), id); err != nil {
 		HandleError(w, err)
 		return

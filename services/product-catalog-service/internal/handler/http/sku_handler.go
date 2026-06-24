@@ -13,12 +13,13 @@ import (
 
 // SKUHandler handles SKU HTTP requests
 type SKUHandler struct {
-	skuService service.SKUService
+	skuService     service.SKUService
+	productService service.ProductService
 }
 
 // NewSKUHandler creates a new SKU handler
-func NewSKUHandler(skuService service.SKUService) *SKUHandler {
-	return &SKUHandler{skuService}
+func NewSKUHandler(skuService service.SKUService, productService service.ProductService) *SKUHandler {
+	return &SKUHandler{skuService: skuService, productService: productService}
 }
 
 // CreateSKURequest represents the request to create a SKU
@@ -203,8 +204,19 @@ func (h *SKUHandler) UpdateSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user, err := requireUser(r)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
 	existing, err := h.skuService.GetSKUByID(r.Context(), id)
 	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	if err := assertOwnership(r.Context(), h.productService, existing.ProductID, user); err != nil {
 		HandleError(w, err)
 		return
 	}
@@ -263,6 +275,23 @@ func (h *SKUHandler) DeleteSKU(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "INVALID_ID", "invalid sku id")
+		return
+	}
+
+	user, err := requireUser(r)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	existing, err := h.skuService.GetSKUByID(r.Context(), id)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	if err := assertOwnership(r.Context(), h.productService, existing.ProductID, user); err != nil {
+		HandleError(w, err)
 		return
 	}
 

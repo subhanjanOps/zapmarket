@@ -105,37 +105,13 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		}
 	}
 
-	// Acquire a short-lived NX lock so only one concurrent request proceeds to
-	// the DB check-then-insert path. Others spin-wait briefly then re-read the
-	// cache (the winner will have populated it).
+	// Attempt a single NX lock; regardless of whether we win, fall through to
+	// the DB check. The DB's unique constraint on idempotency_key is the true
+	// safety net — the lock only reduces contention, not correctness.
 	const lockTTL = 10 * time.Second
 	acquired, err := s.rdb.SetNX(ctx, lockKey, "1", lockTTL).Result()
 	if err != nil {
 		s.logger.Warn("idempotency lock unavailable, proceeding without lock", "error", err)
-	}
-	if !acquired && err == nil {
-		// Another request holds the lock — wait for it to finish then re-read.
-		ticker := time.NewTicker(50 * time.Millisecond)
-		defer ticker.Stop()
-		deadline := time.Now().Add(lockTTL)
-	outer:
-		for time.Now().Before(deadline) {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-ticker.C:
-				if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
-					var order domain.Order
-					if json.Unmarshal(cached, &order) == nil {
-						s.logger.Info("idempotent replay after lock wait", "order_id", order.ID)
-						return &order, nil
-					}
-				}
-				if exists, _ := s.rdb.Exists(ctx, lockKey).Result(); exists == 0 {
-					break outer // lock released; fall through to DB check
-				}
-			}
-		}
 	}
 	defer func() {
 		if acquired {

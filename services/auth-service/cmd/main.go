@@ -31,6 +31,8 @@ import (
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -47,6 +49,7 @@ import (
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/auth-service/docs"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/email"
 	grpcHandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
@@ -86,21 +89,31 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	oauthRepo := repository.NewOAuthRepository(db)
 	tokenRepo := repository.NewRefreshTokenRepository(db)
+	resetRepo := repository.NewPasswordResetRepository(db)
 	prefsRepo := repository.NewPreferencesRepository(db)
 
-	// Initialize services
-	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, cfg)
-
 	// ── Redis (optional — auth still works without it) ───────────────────────
-	rdb := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
+	var rdb *goredis.Client
+	redisClient := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
 		slog.Warn("Redis unavailable — token blacklist and registry disabled", "addr", cfg.RedisURL, "error", err)
+		_ = redisClient.Close()
 	} else {
-		authService.SetRedis(rdb)
+		rdb = redisClient
 		defer rdb.Close()
 		slog.Info("connected to Redis", "addr", cfg.RedisURL)
 	}
 
+	// Choose emailer based on environment; SMTP only when fully configured.
+	var emailer email.Emailer
+	if cfg.SMTPHost != "" && cfg.SMTPUser != "" {
+		emailer = email.NewSMTPEmailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword, cfg.SMTPFrom)
+	} else {
+		emailer = email.NewLogEmailer()
+	}
+
+	// Initialize services
+	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, emailer, cfg, rdb)
 	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, authService, cfg)
 
 	// Initialize HTTP handlers
@@ -121,6 +134,8 @@ func main() {
 	mux.HandleFunc("/v1/auth/oauth/google/callback", httpHandler.LoggingMiddleware(httpHandler.GoogleOAuthCallback))
 	mux.HandleFunc("/v1/auth/oauth/facebook/url", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthURL))
 	mux.HandleFunc("/v1/auth/oauth/facebook/callback", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthCallback))
+	mux.HandleFunc("/v1/auth/password/forgot", httpHandler.LoggingMiddleware(httpHandler.ForgotPassword))
+	mux.HandleFunc("/v1/auth/password/reset", httpHandler.LoggingMiddleware(httpHandler.ResetPassword))
 
 	// Swagger: spec served from the embedded swag doc (see docs/docs.go,
 	// regenerated via `swag init -g cmd/main.go`), not a file on disk.
@@ -168,6 +183,7 @@ func main() {
 	}()
 
 	// Start gRPC server in a goroutine
+	var grpcSrv *grpc.Server
 	go func() {
 		slog.Info("gRPC server configured", "port", cfg.GRPCPort)
 		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPCPort))
@@ -176,7 +192,7 @@ func main() {
 			sigChan <- syscall.SIGTERM
 			return
 		}
-		grpcSrv := grpcx.NewServer()
+		grpcSrv = grpcx.NewServer()
 		grpcServer := grpcHandler.NewAuthServer(authService, cfg)
 		authpb.RegisterAuthServiceServer(grpcSrv, grpcServer)
 		reflection.Register(grpcSrv)
@@ -189,7 +205,7 @@ func main() {
 	// ── Registry heartbeat ────────────────────────────────────────────────────
 	svcCtx, svcCancel := context.WithCancel(context.Background())
 	defer svcCancel()
-	if rdb.Ping(svcCtx).Err() == nil {
+	if rdb != nil {
 		instanceID := uuid.New().String()
 		addr := fmt.Sprintf("http://zapmarket-auth-service:%d", cfg.HTTPPort)
 		go registry.Heartbeat(svcCtx, rdb, "auth-service", instanceID, addr, slog.Default())
@@ -207,6 +223,10 @@ func main() {
 
 	if err := httpServer.Shutdown(ctx); err != nil {
 		slog.Error("HTTP server shutdown error", "error", err)
+	}
+
+	if grpcSrv != nil {
+		grpcSrv.GracefulStop()
 	}
 
 	slog.Info("Auth service stopped")

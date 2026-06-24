@@ -147,7 +147,7 @@ func (s *AuthServer) LoginPassword(ctx context.Context, req *authpb.LoginPasswor
 	return &authpb.LoginPasswordResponse{
 		User:         s.domainUserToProto(user),
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.TokenHash, // Note: refreshToken.TokenHash is the raw token string (set in generateRefreshToken)
+		RefreshToken: refreshToken.Token,
 	}, nil
 }
 
@@ -158,6 +158,8 @@ func (s *AuthServer) RegisterUser(ctx context.Context, req *authpb.RegisterUserR
 		"method", "RegisterUser",
 	)
 
+	// gRPC registration always creates buyers; sellers must register via HTTP.
+	// Add a role field to the proto to support seller registration over gRPC.
 	user, refreshToken, err := s.authSvc.RegisterUserPassword(ctx, req.Email, req.Password, req.FullName, string(domain.RoleBuyer))
 	if err != nil {
 		duration := time.Since(start)
@@ -190,7 +192,7 @@ func (s *AuthServer) RegisterUser(ctx context.Context, req *authpb.RegisterUserR
 	return &authpb.RegisterUserResponse{
 		User:         s.domainUserToProto(user),
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.TokenHash,
+		RefreshToken: refreshToken.Token,
 	}, nil
 }
 

@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 const GW = process.env.GATEWAY_URL ?? process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
 
 async function proxy(req: NextRequest, pathSegments: string[]) {
+  // Reject path traversal attempts.
+  if (pathSegments.some((s) => s === ".." || s === ".")) {
+    return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  }
+
   const token = req.cookies.get("buyer_token")?.value;
   const upstreamUrl = `${GW}/${pathSegments.join("/")}${req.nextUrl.search}`;
   const headers: Record<string, string> = {};

@@ -91,6 +91,16 @@ type NotificationPreference struct {
 	DeletedAt *time.Time
 }
 
+// PasswordResetToken represents a one-time password reset request
+type PasswordResetToken struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	TokenHash string
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
 // Claims represents JWT claims
 type Claims struct {
 	UserID    uuid.UUID `json:"user_id"`

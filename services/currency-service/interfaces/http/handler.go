@@ -55,6 +55,10 @@ func (h *Handler) GetRates(w http.ResponseWriter, r *http.Request) {
 	if base == "" {
 		base = "USD"
 	}
+	if _, err := valueobjects.NewCurrencyCode(base); err != nil {
+		h.writeError(w, http.StatusBadRequest, "base must be a 3-letter ISO 4217 currency code")
+		return
+	}
 
 	ratesDTO, err := h.getRates.Execute(r.Context(), base)
 	if err != nil {
@@ -77,11 +81,6 @@ func (h *Handler) GetRates(w http.ResponseWriter, r *http.Request) {
 // policy prevents direct access to the service, bypassing the gateway. For stronger
 // guarantees, forward the JWT to auth-service for validation.
 func (h *Handler) ToggleCurrency(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-User-Role") != "admin" {
-		h.writeError(w, http.StatusForbidden, "admin role required")
-		return
-	}
-
 	code := r.PathValue("code")
 	if _, err := valueobjects.NewCurrencyCode(code); err != nil {
 		h.writeError(w, http.StatusBadRequest, "currency code must be a 3-letter ISO 4217 code")

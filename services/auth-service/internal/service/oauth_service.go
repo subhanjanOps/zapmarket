@@ -125,7 +125,7 @@ func (s *OAuthService) HandleFacebookCallback(ctx context.Context, code string) 
 		return nil, nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to exchange code: %v", err), err)
 	}
 
-	userInfo, err := s.getFacebookUserInfo(token)
+	userInfo, err := s.getFacebookUserInfo(ctx, token)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -222,8 +222,14 @@ func (s *OAuthService) getGoogleUserInfo(token *oauth2.Token) (*OAuthUserInfo, e
 	}, nil
 }
 
-func (s *OAuthService) getFacebookUserInfo(token *oauth2.Token) (*OAuthUserInfo, error) {
-	resp, err := http.Get("https://graph.facebook.com/me?fields=id,email,name&access_token=" + token.AccessToken)
+func (s *OAuthService) getFacebookUserInfo(ctx context.Context, token *oauth2.Token) (*OAuthUserInfo, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "https://graph.facebook.com/me?fields=id,email,name&access_token="+token.AccessToken, nil)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to build request: %v", err), err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to get user info: %v", err), err)
 	}

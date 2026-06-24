@@ -12,12 +12,13 @@ import (
 
 // ProductImageHandler handles product image HTTP requests
 type ProductImageHandler struct {
-	imageService service.ProductImageService
+	imageService   service.ProductImageService
+	productService service.ProductService
 }
 
 // NewProductImageHandler creates a new product image handler
-func NewProductImageHandler(imageService service.ProductImageService) *ProductImageHandler {
-	return &ProductImageHandler{imageService}
+func NewProductImageHandler(imageService service.ProductImageService, productService service.ProductService) *ProductImageHandler {
+	return &ProductImageHandler{imageService: imageService, productService: productService}
 }
 
 // maxImageUploadBytes caps the request body read for an image upload,
@@ -45,6 +46,17 @@ func (h *ProductImageHandler) CreateProductImage(w http.ResponseWriter, r *http.
 	productID, err := uuid.Parse(productIDStr)
 	if err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "INVALID_ID", "invalid product id")
+		return
+	}
+
+	user, err := requireUser(r)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	if err := assertOwnership(r.Context(), h.productService, productID, user); err != nil {
+		HandleError(w, err)
 		return
 	}
 
@@ -191,10 +203,28 @@ type UpdateImagePositionRequest struct {
 //	@Failure		403			{object}	Response
 //	@Router			/v1/products/{product_id}/images/{id}/position [patch]
 func (h *ProductImageHandler) UpdateImagePosition(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "product_id")
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ID", "invalid product id")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "INVALID_ID", "invalid image id")
+		return
+	}
+
+	user, err := requireUser(r)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	if err := assertOwnership(r.Context(), h.productService, productID, user); err != nil {
+		HandleError(w, err)
 		return
 	}
 
@@ -226,10 +256,28 @@ func (h *ProductImageHandler) UpdateImagePosition(w http.ResponseWriter, r *http
 //	@Failure		404	{object}	Response
 //	@Router			/v1/products/{product_id}/images/{id} [delete]
 func (h *ProductImageHandler) DeleteProductImage(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "product_id")
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ID", "invalid product id")
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "INVALID_ID", "invalid image id")
+		return
+	}
+
+	user, err := requireUser(r)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	if err := assertOwnership(r.Context(), h.productService, productID, user); err != nil {
+		HandleError(w, err)
 		return
 	}
 

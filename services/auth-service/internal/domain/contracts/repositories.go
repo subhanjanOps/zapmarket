@@ -48,6 +48,13 @@ type PreferencesRepository interface {
 	Set(ctx context.Context, userID uuid.UUID, key, value string) error
 }
 
+// PasswordResetRepository defines the interface for password reset token persistence.
+type PasswordResetRepository interface {
+	CreatePasswordResetToken(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time) (*domain.PasswordResetToken, error)
+	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (*domain.PasswordResetToken, error)
+	MarkPasswordResetTokenUsed(ctx context.Context, tokenID uuid.UUID) error
+}
+
 // RefreshTokenRepository defines the interface for refresh token persistence.
 type RefreshTokenRepository interface {
 	CreateRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) (*domain.RefreshToken, error)

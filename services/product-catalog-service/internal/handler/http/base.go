@@ -3,6 +3,8 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -49,9 +51,19 @@ func HandleError(w http.ResponseWriter, err error) {
 	pkgerrors.HandleHTTP(w, err)
 }
 
-// DecodeJSON decodes JSON request body
+// maxJSONBodyBytes caps JSON request bodies to prevent memory exhaustion.
+const maxJSONBodyBytes = 1 << 20 // 1 MiB
+
+// DecodeJSON decodes JSON request body, rejecting bodies larger than 1 MiB.
 func DecodeJSON(r *http.Request, v interface{}) error {
-	return json.NewDecoder(r.Body).Decode(v)
+	lr := &io.LimitedReader{R: r.Body, N: maxJSONBodyBytes + 1}
+	if err := json.NewDecoder(lr).Decode(v); err != nil {
+		return err
+	}
+	if lr.N == 0 {
+		return errors.New("request body too large")
+	}
+	return nil
 }
 
 // assertOwnership fetches the product by ID and verifies that the

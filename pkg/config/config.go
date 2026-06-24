@@ -73,6 +73,22 @@ type Config struct {
 	// MIGRATE_ON_BOOT=false where migrations are run as an explicit deploy
 	// step instead.
 	MigrateOnBoot bool
+
+	// AdminBootstrapSecret protects the one-shot admin creation endpoint.
+	// Empty string disables the endpoint entirely.
+	AdminBootstrapSecret string
+
+	// PasswordResetBaseURL is the frontend URL prefix for reset links, e.g.
+	// "https://app.zapmarket.com/reset-password". The token is appended as a
+	// query parameter: ?token=<raw-token>.
+	PasswordResetBaseURL string
+
+	// SMTP settings for transactional email (password reset, verification).
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
 }
 
 // Load reads configuration from environment variables
@@ -130,6 +146,16 @@ func Load() (*Config, error) {
 		AppEnv:   getEnv("APP_ENV", "development"),
 
 		MigrateOnBoot: getEnvBool("MIGRATE_ON_BOOT", true),
+
+		AdminBootstrapSecret: getEnv("ADMIN_BOOTSTRAP_SECRET", ""),
+
+		PasswordResetBaseURL: getEnv("PASSWORD_RESET_BASE_URL", "http://localhost:3000/reset-password"),
+
+		SMTPHost:     getEnv("SMTP_HOST", "localhost"),
+		SMTPPort:     getEnvInt("SMTP_PORT", 587),
+		SMTPUser:     getEnv("SMTP_USER", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:     getEnv("SMTP_FROM", "noreply@zapmarket.com"),
 	}
 
 	// Validate required fields

@@ -35,6 +35,9 @@ type Config struct {
 
 	// MigrateOnBoot runs migrations at startup (default: true).
 	MigrateOnBoot bool
+
+	// AuthServiceAddr is the gRPC address of auth-service for JWT validation.
+	AuthServiceAddr string
 }
 
 func Load() (*Config, error) {
@@ -56,8 +59,9 @@ func Load() (*Config, error) {
 		RateRefreshInterval:     getEnvDuration("RATE_REFRESH_INTERVAL", time.Hour),
 		MaxRateAge:              getEnvDuration("MAX_RATE_AGE", 24*time.Hour),
 
-		ServiceName:   "currency-service",
-		MigrateOnBoot: getEnvBool("MIGRATE_ON_BOOT", true),
+		ServiceName:     "currency-service",
+		MigrateOnBoot:  getEnvBool("MIGRATE_ON_BOOT", true),
+		AuthServiceAddr: getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),
 	}
 
 	if cfg.DBUser == "" {

@@ -16,6 +16,11 @@ export default function CheckoutPage() {
   }, [items.length, router]);
 
   async function handlePlaceOrder() {
+    const missing = (["name", "phone", "line1", "city", "pincode"] as const).filter((f) => !address[f].trim());
+    if (missing.length > 0) {
+      setError(`Please fill in: ${missing.join(", ")}`);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {

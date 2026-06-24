@@ -79,6 +79,7 @@ func main() {
 		log.Error("failed to connect to auth-service", "error", err)
 		os.Exit(1)
 	}
+	defer authMW.Close()
 	log.Info("connected to auth-service", "addr", cfg.AuthServiceAddr)
 
 	// ── Object storage ────────────────────────────────────────────────────────
@@ -117,8 +118,8 @@ func main() {
 	// ── HTTP handlers ──────────────────────────────────────────────────────────
 	categoryH := httpHandler.NewCategoryHandler(categorySvc)
 	productH := httpHandler.NewProductHandler(productSvc)
-	skuH := httpHandler.NewSKUHandler(skuSvc)
-	imageH := httpHandler.NewProductImageHandler(imageSvc)
+	skuH := httpHandler.NewSKUHandler(skuSvc, productSvc)
+	imageH := httpHandler.NewProductImageHandler(imageSvc, productSvc)
 
 	// ── HTTP router ────────────────────────────────────────────────────────────
 	r := chi.NewRouter()

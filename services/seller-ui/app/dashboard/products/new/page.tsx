@@ -48,6 +48,8 @@ export default function NewProductPage() {
   }
 
   async function saveBasicInfo() {
+    // Guard: if product already created (user navigated Back), just advance.
+    if (productId) { setStep("skus"); return; }
     if (!name.trim()) { setError("Product name is required"); return; }
     const finalSlug = slug || slugify(name);
     if (!SLUG_RE.test(finalSlug)) { setError("Slug contains invalid characters"); return; }

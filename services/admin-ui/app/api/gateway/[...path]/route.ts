@@ -11,6 +11,12 @@ async function proxy(req: NextRequest, { params }: Params) {
   }
 
   const { path } = await params;
+
+  // Reject path traversal attempts.
+  if (path.some((s) => s === ".." || s === ".")) {
+    return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  }
+
   const target = `${GATEWAY}/${path.join("/")}${req.nextUrl.search}`;
 
   const headers: HeadersInit = {

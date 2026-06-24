@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
@@ -45,7 +46,8 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) erro
 	)
 
 	if err != nil {
-		if err.Error() == "pq: duplicate key value violates unique constraint \"users_email_key\"" {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
 			return pkgerrors.NewConflict("USER_ALREADY_EXISTS", "user with this email already exists")
 		}
 		return pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to create user: %v", err), err)

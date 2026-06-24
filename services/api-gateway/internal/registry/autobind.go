@@ -273,6 +273,24 @@ func deriveAuthMode(doc *swaggerDoc) string {
 	return "none"
 }
 
+// authLevel returns a numeric security level so we can compare modes.
+// Higher = more restrictive.
+func authLevel(mode string) int {
+	switch mode {
+	case "required":
+		return 2
+	case "method_split":
+		return 1
+	default: // "none" or unknown
+		return 0
+	}
+}
+
+// isAuthDowngrade returns true if newMode is less restrictive than current.
+func isAuthDowngrade(current, newMode string) bool {
+	return authLevel(newMode) < authLevel(current)
+}
+
 func (ab *AutoBinder) applyRoute(ctx context.Context, serviceName string, route routeSpec) {
 	var existingUpstream, existingAuthMode string
 	err := ab.db.QueryRowContext(ctx,
@@ -315,8 +333,11 @@ func (ab *AutoBinder) applyRoute(ctx context.Context, serviceName string, route 
 			Detail:   fmt.Sprintf("conflict: existing=%s challenger=%s", existingUpstream, serviceName),
 		})
 	default:
-		// existingUpstream == serviceName. If auth_mode drifted, correct it.
-		if existingAuthMode != route.AuthMode {
+		// existingUpstream == serviceName. If auth_mode drifted, correct it —
+		// but never downgrade from a more restrictive mode to a less restrictive
+		// one (e.g. "required" → "none") since that would silently open a
+		// previously-protected route. Operators must update auth_mode manually.
+		if existingAuthMode != route.AuthMode && !isAuthDowngrade(existingAuthMode, route.AuthMode) {
 			_, updateErr := ab.db.ExecContext(ctx,
 				`UPDATE gateway_routes SET auth_mode = $1 WHERE path_prefix = $2 AND upstream = $3`,
 				route.AuthMode, route.PathPrefix, serviceName,
@@ -330,6 +351,11 @@ func (ab *AutoBinder) applyRoute(ctx context.Context, serviceName string, route 
 					"old", existingAuthMode,
 					"new", route.AuthMode)
 			}
+		} else if existingAuthMode != route.AuthMode {
+			ab.logger.Warn("auto-bind: refusing auth_mode downgrade",
+				"prefix", route.PathPrefix,
+				"current", existingAuthMode,
+				"proposed", route.AuthMode)
 		}
 	}
 }

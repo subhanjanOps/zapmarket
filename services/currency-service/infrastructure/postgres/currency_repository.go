@@ -53,11 +53,18 @@ func (r *CurrencyRepository) Get(ctx context.Context, code string) (entities.Cur
 }
 
 func (r *CurrencyRepository) Toggle(ctx context.Context, code string, enabled bool) error {
-	_, err := r.db.ExecContext(ctx,
+	result, err := r.db.ExecContext(ctx,
 		`UPDATE currencies SET enabled = $1, updated_at = $2 WHERE code = $3`,
 		enabled, time.Now().UTC(), code)
 	if err != nil {
 		return fmt.Errorf("toggle currency: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("toggle currency: rows affected: %w", err)
+	}
+	if n == 0 {
+		return &domainerrors.ErrCurrencyNotFound{Code: code}
 	}
 	return nil
 }

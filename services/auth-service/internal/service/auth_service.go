@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -13,29 +15,39 @@ import (
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/email"
 )
 
 // AuthService handles authentication business logic
 type AuthService struct {
-	userRepo  contracts.UserRepository
-	oauthRepo contracts.OAuthRepository
-	tokenRepo contracts.RefreshTokenRepository
-	cfg       *config.Config
-	rdb       *goredis.Client // nil if Redis unavailable
+	userRepo      contracts.UserRepository
+	oauthRepo     contracts.OAuthRepository
+	tokenRepo     contracts.RefreshTokenRepository
+	resetRepo     contracts.PasswordResetRepository
+	emailer       email.Emailer
+	cfg           *config.Config
+	rdb           *goredis.Client // nil if Redis unavailable
 }
 
-// NewAuthService creates a new auth service
+// NewAuthService creates a new auth service. rdb may be nil when Redis is
+// unavailable; the service degrades gracefully (no token blacklist).
 func NewAuthService(
 	userRepo contracts.UserRepository,
 	oauthRepo contracts.OAuthRepository,
 	tokenRepo contracts.RefreshTokenRepository,
+	resetRepo contracts.PasswordResetRepository,
+	emailer email.Emailer,
 	cfg *config.Config,
+	rdb *goredis.Client,
 ) *AuthService {
 	return &AuthService{
 		userRepo:  userRepo,
 		oauthRepo: oauthRepo,
 		tokenRepo: tokenRepo,
+		resetRepo: resetRepo,
+		emailer:   emailer,
 		cfg:       cfg,
+		rdb:       rdb,
 	}
 }
 
@@ -206,8 +218,29 @@ func (s *AuthService) BlacklistToken(ctx context.Context, tokenString string, tt
 	_ = s.rdb.Set(ctx, key, 1, ttl).Err()
 }
 
-// SetRedis injects a Redis client into the service after construction.
-func (s *AuthService) SetRedis(rdb *goredis.Client) { s.rdb = rdb }
+// StoreOAuthState stores a one-time OAuth state in Redis with a 10-minute TTL.
+// If Redis is unavailable, the state is not stored and CSRF protection is degraded.
+func (s *AuthService) StoreOAuthState(ctx context.Context, state string) error {
+	if s.rdb == nil {
+		return nil
+	}
+	key := fmt.Sprintf("auth:oauth:state:%s", state)
+	return s.rdb.Set(ctx, key, 1, 10*time.Minute).Err()
+}
+
+// ValidateAndConsumeOAuthState verifies a state token exists in Redis and deletes it
+// atomically so it cannot be reused. Returns false when Redis is unavailable (degraded mode).
+func (s *AuthService) ValidateAndConsumeOAuthState(ctx context.Context, state string) (bool, error) {
+	if s.rdb == nil {
+		return true, nil // degrade gracefully when Redis is not wired
+	}
+	key := fmt.Sprintf("auth:oauth:state:%s", state)
+	n, err := s.rdb.Del(ctx, key).Result()
+	if err != nil {
+		return false, fmt.Errorf("validate oauth state: %w", err)
+	}
+	return n > 0, nil
+}
 
 // generateRefreshToken creates and stores a refresh token
 func (s *AuthService) generateRefreshToken(ctx context.Context, userID uuid.UUID) (*domain.RefreshToken, error) {
@@ -234,4 +267,99 @@ func (s *AuthService) GetUserByID(ctx context.Context, userID uuid.UUID) (*domai
 // GetUserByEmail retrieves a user by email
 func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	return s.userRepo.GetUserByEmail(ctx, email)
+}
+
+// RequestPasswordReset generates a reset token and emails a link to the user.
+// Always returns nil to avoid leaking whether the email exists (timing-safe).
+func (s *AuthService) RequestPasswordReset(ctx context.Context, userEmail string) error {
+	user, err := s.userRepo.GetUserByEmail(ctx, userEmail)
+	if err != nil {
+		// Return nil regardless so the caller cannot enumerate registered emails.
+		return nil
+	}
+
+	if user.PasswordHash == nil {
+		// OAuth-only accounts cannot use password reset.
+		return nil
+	}
+
+	rawToken, tokenHash, err := generateSecureToken()
+	if err != nil {
+		return fmt.Errorf("request password reset: %w", err)
+	}
+
+	expiresAt := time.Now().Add(30 * time.Minute)
+	if _, err := s.resetRepo.CreatePasswordResetToken(ctx, user.ID, tokenHash, expiresAt); err != nil {
+		return fmt.Errorf("request password reset: %w", err)
+	}
+
+	resetLink := fmt.Sprintf("%s?token=%s", s.cfg.PasswordResetBaseURL, rawToken)
+	if err := s.emailer.SendPasswordResetEmail(ctx, user.Email, resetLink); err != nil {
+		return fmt.Errorf("request password reset: send email: %w", err)
+	}
+
+	return nil
+}
+
+// ResetPassword validates a reset token and updates the user's password.
+func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword string) error {
+	tokenHash := hashRawToken(rawToken)
+
+	resetToken, err := s.resetRepo.GetPasswordResetTokenByHash(ctx, tokenHash)
+	if err != nil {
+		return pkgerrors.NewUnauthorized("INVALID_TOKEN", "invalid or expired password reset token")
+	}
+
+	if resetToken.UsedAt != nil {
+		return pkgerrors.NewUnauthorized("INVALID_TOKEN", "password reset token has already been used")
+	}
+
+	if time.Now().After(resetToken.ExpiresAt) {
+		return pkgerrors.NewUnauthorized("INVALID_TOKEN", "password reset token has expired")
+	}
+
+	passwordHash, err := crypto.HashPassword(newPassword)
+	if err != nil {
+		return pkgerrors.NewInternal("INTERNAL_ERROR", "failed to hash password", err)
+	}
+
+	user, err := s.userRepo.GetUserByID(ctx, resetToken.UserID)
+	if err != nil {
+		return err
+	}
+
+	user.PasswordHash = &passwordHash
+	if err := s.userRepo.UpdateUser(ctx, user); err != nil {
+		return fmt.Errorf("reset password: update user: %w", err)
+	}
+
+	if err := s.resetRepo.MarkPasswordResetTokenUsed(ctx, resetToken.ID); err != nil {
+		return fmt.Errorf("reset password: mark token used: %w", err)
+	}
+
+	// Invalidate all active refresh tokens so previously issued sessions cannot
+	// be used with the old credentials.
+	if err := s.tokenRepo.InvalidateUserTokens(ctx, user.ID); err != nil {
+		return fmt.Errorf("reset password: invalidate sessions: %w", err)
+	}
+
+	return nil
+}
+
+// generateSecureToken returns a cryptographically random 32-byte hex raw token
+// and its SHA-256 hash for storage.
+func generateSecureToken() (rawToken, tokenHash string, err error) {
+	b := make([]byte, 32)
+	if _, err = rand.Read(b); err != nil {
+		return "", "", fmt.Errorf("generate secure token: %w", err)
+	}
+	rawToken = hex.EncodeToString(b)
+	tokenHash = hashRawToken(rawToken)
+	return rawToken, tokenHash, nil
+}
+
+// hashRawToken returns the hex-encoded SHA-256 of rawToken.
+func hashRawToken(rawToken string) string {
+	sum := sha256.Sum256([]byte(rawToken))
+	return hex.EncodeToString(sum[:])
 }

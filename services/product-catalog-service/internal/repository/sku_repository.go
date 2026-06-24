@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -46,26 +45,19 @@ func (sr *SkuRepository) CreateSku(
 		RETURNING created_at, updated_at
 	`
 
-	variantAttrs, err := json.Marshal(sku.VariantAttrs)
-	if err != nil {
-		return pkgerrors.NewValidation("INVALID_DATA", "variant_attrs must be valid JSON")
-	}
-
-	err = sr.db.QueryRowContext(
+	if err := sr.db.QueryRowContext(
 		ctx,
 		query,
 		sku.ID,
 		sku.ProductID,
 		sku.SKUCode,
-		variantAttrs,
+		[]byte(sku.VariantAttrs),
 		sku.PriceAmount,
 		sku.ComparePrice,
 		sku.Currency,
 		sku.WeightGrams,
 		sku.IsActive,
-	).Scan(&sku.CreatedAt, &sku.UpdatedAt)
-
-	if err != nil {
+	).Scan(&sku.CreatedAt, &sku.UpdatedAt); err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) {
 			switch pqErr.Code {
@@ -263,16 +255,11 @@ func (sr *SkuRepository) UpdateSku(
 		AND deleted_at IS NULL
 	`
 
-	variantAttrs, err := json.Marshal(sku.VariantAttrs)
-	if err != nil {
-		return pkgerrors.NewValidation("INVALID_DATA", "variant_attrs must be valid JSON")
-	}
-
 	result, err := sr.db.ExecContext(
 		ctx,
 		query,
 		sku.SKUCode,
-		variantAttrs,
+		[]byte(sku.VariantAttrs),
 		sku.PriceAmount,
 		sku.ComparePrice,
 		sku.Currency,
