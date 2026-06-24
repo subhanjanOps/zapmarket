@@ -59,6 +59,26 @@ async function fetchNewArrivals() {
   } catch { return []; }
 }
 
+function SectionHeader({ title, href, label }: { title: string; href: string; label: string }) {
+  return (
+    <div className="flex items-center justify-between mb-5">
+      <h2
+        className="text-xl font-extrabold"
+        style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}
+      >
+        {title}
+      </h2>
+      <Link
+        href={href}
+        className="text-sm font-semibold transition-colors hover:opacity-70"
+        style={{ color: "#FF2D78" }}
+      >
+        {label} →
+      </Link>
+    </div>
+  );
+}
+
 export default async function HomePage() {
   const [campaigns, categories, newArrivals] = await Promise.all([
     fetchCampaigns(),
@@ -76,10 +96,7 @@ export default async function HomePage() {
 
       {newArrivals.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Today&apos;s Deals</h2>
-            <Link href="/deals/summer-sale" className="text-sm text-[#FF9900] hover:underline">See all deals →</Link>
-          </div>
+          <SectionHeader title="Today's Deals" href="/deals/summer-sale" label="See all deals" />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {newArrivals.slice(0, 4).map((p: Record<string, unknown>) => (
               <ProductCard key={p.id as string} product={p as { id: string; name: string; price_amount?: number; currency?: string; images?: { url: string }[] }} />
@@ -90,10 +107,7 @@ export default async function HomePage() {
 
       {newArrivals.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">New Arrivals</h2>
-            <Link href="/products?sort_by=created_at&sort_order=desc" className="text-sm text-[#FF9900] hover:underline">See all →</Link>
-          </div>
+          <SectionHeader title="New Arrivals" href="/products?sort_by=created_at&sort_order=desc" label="See all" />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {newArrivals.map((p: Record<string, unknown>) => (
               <ProductCard key={p.id as string} product={p as { id: string; name: string; price_amount?: number; currency?: string; images?: { url: string }[] }} />
@@ -104,10 +118,7 @@ export default async function HomePage() {
 
       {posts.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">From the Blog</h2>
-            <Link href="/blog" className="text-sm text-[#FF9900] hover:underline">All posts →</Link>
-          </div>
+          <SectionHeader title="From the blog" href="/blog" label="All posts" />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {posts.map((p) => <BlogCard key={p.slug} post={p} />)}
           </div>
@@ -116,10 +127,7 @@ export default async function HomePage() {
 
       {featuredTerms.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Browse the Glossary</h2>
-            <Link href="/glossary" className="text-sm text-[#FF9900] hover:underline">Full glossary →</Link>
-          </div>
+          <SectionHeader title="Browse the glossary" href="/glossary" label="Full glossary" />
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
             {featuredTerms.map((t) => <GlossaryEntry key={t.slug} term={t} />)}
           </div>

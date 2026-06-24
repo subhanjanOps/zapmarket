@@ -1,2 +1,27 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+@theme {
+  --color-zap: #FF2D78;
+  --color-amber: #FF8C00;
+  --color-teal: #00736A;
+  --color-teal-50: #E6F4F2;
+  --color-ink: #1A1208;
+  --color-mist: #F0EDE8;
+  --color-surface: #FFFCF5;
+  --font-display: var(--font-syne), system-ui, sans-serif;
+  --font-body: var(--font-jakarta), system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: #FFFCF5;
+  color: #1A1208;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

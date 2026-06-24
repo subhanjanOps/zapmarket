@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
+	authpb "github.com/zapmarket/zapmarket/services/currency-service/proto/authpb"
 )
 
 type userContextKey struct{}
