@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Zap } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -46,7 +47,7 @@ export default function Footer() {
             className="font-extrabold text-base mb-4"
             style={{ fontFamily: "var(--font-syne)", color: "#FF2D78" }}
           >
-            ⚡ ZapMarket
+            <Zap size={14} fill="#FF2D78" stroke="#FF2D78" className="inline-block mr-1" />ZapMarket
           </h3>
           <p className="text-xs" style={{ color: "#6B6052" }}>
             The fastest marketplace in India. Real sellers, real products, zapped to your door.

@@ -62,10 +62,10 @@ export default function ProductsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Products</h1>
-          <p className="page-subtitle">{total} total</p>
+          <p className="page-subtitle">{total} product{total !== 1 ? "s" : ""} total</p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button className="btn btn-ghost" onClick={load}><RefreshCw size={13} /></button>
+          <button className="btn btn-ghost" onClick={load} title="Refresh"><RefreshCw size={13} /></button>
           <Link href="/dashboard/products/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
             <Plus size={13} /> New Product
           </Link>
@@ -74,12 +74,20 @@ export default function ProductsPage() {
 
       {/* Filters */}
       <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.25rem", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: "2px", background: "var(--surface2)", borderRadius: 8, padding: 2 }}>
+        <div style={{ display: "flex", gap: "2px", background: "var(--surface2)", borderRadius: 9, padding: 3, border: "1px solid var(--border)" }}>
           {STATUSES.map((s) => (
             <button
               key={s}
               onClick={() => { setStatus(s); setOffset(0); }}
-              style={{ padding: "0.3125rem 0.75rem", borderRadius: 6, border: "none", cursor: "pointer", fontSize: "0.8125rem", fontFamily: "inherit", background: status === s ? "var(--surface)" : "transparent", color: status === s ? "var(--text)" : "var(--muted)", fontWeight: status === s ? 500 : 400, boxShadow: status === s ? "var(--shadow-sm)" : "none", transition: "all 0.1s" }}
+              style={{
+                padding: "0.3125rem 0.75rem", borderRadius: 7, border: "none", cursor: "pointer",
+                fontSize: "0.8125rem", fontFamily: "inherit",
+                background: status === s ? "var(--surface)" : "transparent",
+                color: status === s ? "var(--text)" : "var(--muted)",
+                fontWeight: status === s ? 600 : 400,
+                boxShadow: status === s ? "var(--shadow-sm)" : "none",
+                transition: "all 0.12s",
+              }}
             >
               {s === "All" ? "All" : s.charAt(0) + s.slice(1).toLowerCase()}
             </button>
@@ -89,7 +97,7 @@ export default function ProductsPage() {
         <input
           id="product-search"
           className="input"
-          style={{ width: "14rem" }}
+          style={{ width: "16rem" }}
           placeholder="Search products…"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setOffset(0); }}

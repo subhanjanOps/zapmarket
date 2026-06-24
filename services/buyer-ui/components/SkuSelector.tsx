@@ -33,7 +33,8 @@ export default function SkuSelector({ skus, onSelect }: SkuSelectorProps) {
       <div className="flex gap-2 flex-wrap">
         {skus.map((s) => (
           <button key={s.id} onClick={() => select(s.id)}
-            className={`px-3 py-1 border rounded text-sm ${s.id === selectedId ? "border-[#FF9900] bg-orange-50 font-semibold" : "border-gray-300 hover:border-gray-400"} ${!s.is_active ? "opacity-40 cursor-not-allowed" : ""}`}
+            className={`px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${s.id === selectedId ? "font-semibold text-white" : "hover:border-[#FF2D78]"} ${!s.is_active ? "opacity-40 cursor-not-allowed" : ""}`}
+            style={s.id === selectedId ? { background: "#FF2D78", border: "2px solid #FF2D78" } : { border: "2px solid #F0EDE8" }}
             disabled={!s.is_active}>
             {s.sku_code}
           </button>
@@ -48,14 +49,15 @@ export default function SkuSelector({ skus, onSelect }: SkuSelectorProps) {
         const values = [...new Set(skus.map((s) => s.attributes?.[key]).filter(Boolean))] as string[];
         return (
           <div key={key}>
-            <p className="text-sm font-medium mb-1 capitalize">{key}</p>
+            <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: "#6B6052" }}>{key}</p>
             <div className="flex gap-2 flex-wrap">
               {values.map((val) => {
                 const sku = skus.find((s) => s.attributes?.[key] === val);
                 const active = sku?.id === selectedId;
                 return (
                   <button key={val} onClick={() => sku && select(sku.id)}
-                    className={`px-3 py-1 border rounded text-sm ${active ? "border-[#FF9900] bg-orange-50 font-semibold" : "border-gray-300 hover:border-gray-400"}`}>
+                    className={`px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-colors ${active ? "font-semibold text-white" : "hover:border-[#FF2D78]"}`}
+                    style={active ? { background: "#FF2D78", border: "2px solid #FF2D78" } : { border: "2px solid #F0EDE8" }}>
                     {val}
                   </button>
                 );

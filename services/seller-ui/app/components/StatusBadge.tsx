@@ -1,17 +1,27 @@
-const MAP: Record<string, string> = {
-  ACTIVE:    "badge-green",
-  CONFIRMED: "badge-green",
-  DONE:      "badge-green",
-  DRAFT:     "badge-yellow",
-  PENDING:   "badge-yellow",
-  RESERVED:  "badge-blue",
-  ARCHIVED:  "badge-gray",
-  CANCELLED: "badge-red",
-  FAILED:    "badge-red",
-  INACTIVE:  "badge-gray",
+const MAP: Record<string, { cls: string; pulse?: boolean }> = {
+  ACTIVE:    { cls: "badge-green",  pulse: true  },
+  CONFIRMED: { cls: "badge-green",  pulse: true  },
+  DONE:      { cls: "badge-green"               },
+  DRAFT:     { cls: "badge-yellow"              },
+  PENDING:   { cls: "badge-yellow"              },
+  RESERVED:  { cls: "badge-blue"               },
+  ARCHIVED:  { cls: "badge-gray"               },
+  CANCELLED: { cls: "badge-red"                },
+  FAILED:    { cls: "badge-red"                },
+  INACTIVE:  { cls: "badge-gray"               },
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const cls = MAP[status?.toUpperCase()] ?? "badge-gray";
-  return <span className={`badge ${cls}`}>{status}</span>;
+  const entry = MAP[status?.toUpperCase()] ?? { cls: "badge-gray" };
+  return (
+    <span className={`badge ${entry.cls}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+      {entry.pulse && (
+        <span
+          className="status-dot status-dot-green status-dot-pulse"
+          style={{ width: 5, height: 5 }}
+        />
+      )}
+      {status}
+    </span>
+  );
 }

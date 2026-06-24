@@ -207,7 +207,14 @@
       "Bash(OBSIDIAN_API_KEY=\"205a569d728fab998adef3b0d0d12048467e8962e7bf4f7b33e4602af8c81da5\" obsidian help)",
       "Bash(OBSIDIAN_API_KEY=\"205a569d728fab998adef3b0d0d12048467e8962e7bf4f7b33e4602af8c81da5\" OBSIDIAN_API_SECRET=\"\" obsidian help)",
       "Bash(obsidian --help)",
-      "Bash(obsidian version *)"
+      "Bash(obsidian version *)",
+      "mcp__shadcn__list_items_in_registries",
+      "Bash(py \".claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.5.0/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"marketplace seller dashboard e-commerce product management\" --design-system -p \"ZapMarket Seller\")",
+      "Bash(py *)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ]
 }

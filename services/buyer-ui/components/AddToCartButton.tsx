@@ -22,11 +22,11 @@ export default function AddToCartButton({ sku, productName, productImage }: Prop
   return (
     <div className="flex gap-3 mt-4">
       <button onClick={handleAdd} disabled={!sku}
-        className="flex-1 bg-[#FF9900] text-black font-semibold py-3 rounded hover:bg-[#e68900] disabled:opacity-50 disabled:cursor-not-allowed">
+        className="flex-1 bg-[#FF2D78] text-white font-semibold py-3 rounded hover:bg-[#e0245f] disabled:opacity-50 disabled:cursor-not-allowed">
         Add to Cart
       </button>
       <button onClick={handleBuyNow} disabled={!sku}
-        className="flex-1 bg-[#232F3E] text-white font-semibold py-3 rounded hover:bg-[#374151] disabled:opacity-50 disabled:cursor-not-allowed">
+        className="flex-1 bg-[#00736A] text-white font-semibold py-3 rounded hover:bg-[#005f58] disabled:opacity-50 disabled:cursor-not-allowed">
         Buy Now
       </button>
     </div>

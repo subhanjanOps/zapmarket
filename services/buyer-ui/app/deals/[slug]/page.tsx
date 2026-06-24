@@ -39,7 +39,7 @@ export default async function DealPage({ params }: { params: Promise<{ slug: str
 
   return (
     <div>
-      <div className="relative bg-[#232F3E] text-white py-20 text-center overflow-hidden">
+      <div className="relative bg-[#00736A] text-white py-20 text-center overflow-hidden">
         {typeof campaign.banner_image_url === "string" && campaign.banner_image_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={campaign.banner_image_url} alt={campaign.title as string} className="absolute inset-0 w-full h-full object-cover opacity-20" />

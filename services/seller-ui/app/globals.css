@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -206,6 +206,10 @@ body {
   transition: background 0.25s, color 0.25s;
 }
 
+h1, h2, h3, h4 {
+  font-family: "Rubik", "Outfit", system-ui, sans-serif;
+}
+
 /* Tabular figures for anything numeric */
 .tabular { font-variant-numeric: tabular-nums; }
 
@@ -225,7 +229,7 @@ html { scroll-behavior: smooth; }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 1.25rem 1.5rem;
   box-shadow: var(--shadow-sm);
 }
@@ -240,11 +244,28 @@ html { scroll-behavior: smooth; }
 }
 
 .card-title {
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: var(--text);
   margin: 0;
+  letter-spacing: -0.01em;
 }
+
+/* Stat card icon wrapper */
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Trend badge */
+.trend-up   { color: var(--success); }
+.trend-down { color: var(--danger); }
+.trend-flat { color: var(--muted); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    BUTTONS
@@ -451,11 +472,13 @@ tbody tr:hover td { background: var(--surface2); }
 }
 
 .page-title {
-  font-size: 1.25rem;
+  font-size: 1.625rem;
   font-weight: 700;
   color: var(--text);
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  font-family: "Rubik", "Outfit", system-ui, sans-serif;
+  line-height: 1.1;
 }
 
 .page-subtitle {

@@ -35,7 +35,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <p className="text-xs text-[#FF9900] font-medium uppercase tracking-wide">{post.meta.category}</p>
+      <p className="text-xs text-[#FF2D78] font-medium uppercase tracking-wide">{post.meta.category}</p>
       <h1 className="text-3xl font-bold mt-2 mb-2">{post.meta.title}</h1>
       <p className="text-sm text-gray-500 mb-8">{post.meta.published_at}</p>
       <article className="prose prose-lg max-w-none">

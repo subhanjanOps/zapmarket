@@ -53,22 +53,33 @@ export default function CheckoutPage() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-8">Checkout</h1>
       <div className="flex flex-col lg:flex-row gap-8">
-        <div className="flex-1 bg-white border border-gray-200 rounded-lg p-6">
-          <h2 className="font-semibold mb-4">Shipping Address</h2>
+        <div className="flex-1 rounded-2xl p-6" style={{ background: "#fff", border: "1px solid #F0EDE8" }}>
+          <h2 className="font-bold mb-5" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>Shipping Address</h2>
           <div className="space-y-3">
             {(["name", "phone", "line1", "city", "pincode"] as const).map((field) => (
-              <input key={field} type="text"
-                placeholder={field === "line1" ? "Address Line 1" : field.charAt(0).toUpperCase() + field.slice(1)}
-                value={address[field]}
-                onChange={(e) => setAddress((a) => ({ ...a, [field]: e.target.value }))}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-[#FF9900]" />
+              <div key={field}>
+                <label htmlFor={`field-${field}`} className="block text-xs font-semibold mb-1 uppercase tracking-wide" style={{ color: "#6B6052" }}>
+                  {field === "line1" ? "Address Line 1" : field.charAt(0).toUpperCase() + field.slice(1)}
+                </label>
+                <input
+                  id={`field-${field}`}
+                  type={field === "phone" ? "tel" : "text"}
+                  autoComplete={field === "name" ? "name" : field === "phone" ? "tel" : field === "line1" ? "address-line1" : field === "city" ? "address-level2" : "postal-code"}
+                  value={address[field]}
+                  onChange={(e) => setAddress((a) => ({ ...a, [field]: e.target.value }))}
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                  style={{ border: "2px solid #F0EDE8", background: "#FFFCF5", color: "#1A1208" }}
+                  onFocus={(e) => { e.target.style.borderColor = "#FF2D78"; }}
+                  onBlur={(e) => { e.target.style.borderColor = "#F0EDE8"; }}
+                />
+              </div>
             ))}
           </div>
         </div>
 
         <div className="lg:w-72">
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="font-semibold mb-4">Order Review</h2>
+          <div className="rounded-2xl p-6" style={{ background: "#fff", border: "1px solid #F0EDE8" }}>
+            <h2 className="font-bold mb-4" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>Order Review</h2>
             {items.map((i) => (
               <div key={i.skuId} className="flex justify-between text-sm mb-2">
                 <span className="text-gray-700 truncate max-w-[160px]">{i.name} ×{i.qty}</span>
@@ -80,8 +91,12 @@ export default function CheckoutPage() {
               <span>INR {(total() / 100).toFixed(2)}</span>
             </div>
             {error && <p className="mt-3 text-red-500 text-sm">{error}</p>}
-            <button onClick={handlePlaceOrder} disabled={loading}
-              className="mt-4 w-full bg-[#FF9900] text-black font-semibold py-3 rounded hover:bg-[#e68900] disabled:opacity-50">
+            <button
+              onClick={handlePlaceOrder}
+              disabled={loading}
+              className="mt-4 w-full font-bold py-3 rounded-xl text-white transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+              style={{ background: "#FF2D78", fontFamily: "var(--font-syne)" }}
+            >
               {loading ? "Placing Order…" : "Place Order"}
             </button>
           </div>

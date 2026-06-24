@@ -21,7 +21,7 @@ export default function CountdownTimer({ validUntil }: { validUntil: string }) {
   return (
     <p className="text-lg font-semibold text-gray-800">
       Deal ends in{" "}
-      <span className="text-[#FF9900]">
+      <span className="text-[#FF2D78]">
         {h}h {m}m {s}s
       </span>
     </p>

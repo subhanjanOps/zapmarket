@@ -35,7 +35,7 @@ export default async function GlossaryTermPage({ params }: { params: Promise<{ t
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <Link href="/glossary" className="text-sm text-[#FF9900] hover:underline">← Back to Glossary</Link>
+      <Link href="/glossary" className="text-sm text-[#FF2D78] hover:underline">← Back to Glossary</Link>
       <h1 className="text-3xl font-bold mt-3">{entry.meta.term}</h1>
       <p className="text-xs text-gray-500 mb-6">{entry.meta.category}</p>
       <article className="prose prose-lg max-w-none">
@@ -46,7 +46,7 @@ export default async function GlossaryTermPage({ params }: { params: Promise<{ t
           <h3 className="font-semibold mb-3">Related Terms</h3>
           <div className="flex flex-wrap gap-2">
             {entry.meta.related_terms.map((t) => (
-              <Link key={t} href={`/glossary/${t}`} className="px-3 py-1 border border-gray-300 rounded text-sm hover:border-[#FF9900] hover:text-[#FF9900]">{t}</Link>
+              <Link key={t} href={`/glossary/${t}`} className="px-3 py-1 border border-gray-300 rounded text-sm hover:border-[#FF2D78] hover:text-[#FF2D78]">{t}</Link>
             ))}
           </div>
         </div>

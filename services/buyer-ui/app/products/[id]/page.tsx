@@ -27,7 +27,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   if (!productRes) {
     return (
       <div className="text-center py-20 text-gray-500">
-        Product not found. <a href="/products" className="text-[#FF9900]">Back to shopping</a>
+        Product not found. <a href="/products" className="text-[#FF2D78]">Back to shopping</a>
       </div>
     );
   }
@@ -41,15 +41,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row gap-8">
         <div className="md:w-1/2">
-          <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
-            <Image src={firstImage} alt={productRes.name} fill className="object-contain p-4" sizes="(max-width: 768px) 100vw, 50vw" />
+          <div className="aspect-square relative rounded-2xl overflow-hidden" style={{ background: "#FFFCF5", border: "1px solid #F0EDE8" }}>
+            <Image src={firstImage} alt={productRes.name} fill className="object-contain p-6" sizes="(max-width: 768px) 100vw, 50vw" />
           </div>
         </div>
         <div className="md:w-1/2">
-          <h1 className="text-2xl font-bold text-gray-900">{productRes.name}</h1>
-          {productRes.description && <p className="mt-3 text-gray-600">{productRes.description}</p>}
+          <h1 className="text-2xl font-extrabold" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>{productRes.name}</h1>
+          {productRes.description && <p className="mt-3 text-sm leading-relaxed" style={{ color: "#6B6052" }}>{productRes.description}</p>}
           {skus.length > 0 && (
-            <div className="mt-4">
+            <div className="mt-6">
               <ProductInteractions skus={skus} productName={productRes.name} productImage={firstImage} />
             </div>
           )}

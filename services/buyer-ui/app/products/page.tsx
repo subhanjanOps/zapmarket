@@ -56,11 +56,11 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       <aside className="hidden md:block w-56 shrink-0">
         <h3 className="font-semibold mb-3">Categories</h3>
         <ul className="space-y-1 text-sm">
-          <li><Link href="/products" className="text-gray-700 hover:text-[#FF9900]">All</Link></li>
+          <li><Link href="/products" className="text-gray-700 hover:text-[#FF2D78]">All</Link></li>
           {categories.map((c) => (
             <li key={c.id}>
               <Link href={`/products?category_id=${c.id}`}
-                className={`hover:text-[#FF9900] ${sp.category_id === c.id ? "text-[#FF9900] font-semibold" : "text-gray-700"}`}>
+                className={`hover:text-[#FF2D78] ${sp.category_id === c.id ? "text-[#FF2D78] font-semibold" : "text-gray-700"}`}>
                 {c.name}
               </Link>
             </li>
@@ -72,7 +72,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             {[["created_at", "desc", "Newest"], ["price_amount", "asc", "Price: Low to High"], ["price_amount", "desc", "Price: High to Low"]].map(([sb, so, label]) => (
               <li key={label}>
                 <Link href={`/products?sort_by=${sb}&sort_order=${so}${sp.category_id ? `&category_id=${sp.category_id}` : ""}`}
-                  className={`hover:text-[#FF9900] ${sp.sort_by === sb && sp.sort_order === so ? "text-[#FF9900] font-semibold" : "text-gray-700"}`}>
+                  className={`hover:text-[#FF2D78] ${sp.sort_by === sb && sp.sort_order === so ? "text-[#FF2D78] font-semibold" : "text-gray-700"}`}>
                   {label}
                 </Link>
               </li>

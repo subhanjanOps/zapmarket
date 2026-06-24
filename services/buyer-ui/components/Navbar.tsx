@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, Zap } from "lucide-react";
 import CartButton from "./CartButton";
 
 export default function Navbar() {
@@ -15,7 +15,7 @@ export default function Navbar() {
           className="shrink-0 text-2xl font-extrabold tracking-tight leading-none"
           style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}
         >
-          ⚡<span style={{ color: "#FF2D78" }}>Zap</span>Market
+          <Zap size={20} fill="#FF2D78" stroke="#FF2D78" className="inline-block mr-0.5" /><span style={{ color: "#FF2D78" }}>Zap</span>Market
         </Link>
 
         <div
