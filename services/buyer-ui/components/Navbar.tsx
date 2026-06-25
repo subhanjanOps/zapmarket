@@ -3,8 +3,23 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Zap, Package, LogOut, Menu } from "lucide-react";
-import CartButton from "./CartButton";
+import { motion } from "framer-motion";
+import {
+  Zap,
+  Search,
+  Heart,
+  User,
+  Menu,
+  X,
+  ChevronDown,
+  Package,
+  LogOut,
+  Settings,
+  LayoutGrid,
+} from "lucide-react";
+import { CartButton } from "@/components/CartButton";
+import { SearchModal } from "@/components/SearchModal";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,34 +27,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
-export interface NavUser {
-  name: string | null;
-  email: string | null;
+const CATEGORIES = [
+  "Electronics",
+  "Fashion",
+  "Home & Kitchen",
+  "Sports & Fitness",
+  "Beauty & Health",
+  "Books",
+  "Toys & Games",
+  "Grocery",
+  "Automotive",
+  "Deals",
+];
+
+interface NavUser {
+  name: string;
+  email: string;
 }
 
-function getInitials(user: NavUser): string {
-  const src = user.name ?? user.email ?? "";
-  return src
-    .split(/[\s@]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((s) => s[0].toUpperCase())
-    .join("");
+interface NavbarProps {
+  user: NavUser | null;
 }
 
-export default function Navbar({ user }: { user?: NavUser | null }) {
+export default function Navbar({ user }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
-  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -48,210 +63,259 @@ export default function Navbar({ user }: { user?: NavUser | null }) {
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    const q = query.trim();
-    if (q) router.push(`/products?search=${encodeURIComponent(q)}`);
-  }
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
-  async function handleLogout() {
+  const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/");
+    router.push("/login");
     router.refresh();
-  }
+  };
 
-  const displayName = user?.name ?? user?.email ?? null;
-  const initials = user ? getInitials(user) : "";
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map(n => n[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "?";
 
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-50 transition-all duration-300",
-        scrolled
-          ? "bg-[rgba(255,252,245,0.88)] backdrop-blur-md border-b border-[rgba(240,237,232,0.8)] shadow-[0_2px_20px_rgba(26,18,8,0.06)]"
-          : "bg-[#FFFCF5] border-b-[3px] border-[#FF2D78]"
-      )}
-    >
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
-        {/* Logo */}
-        <Link
-          href="/"
-          className="shrink-0 flex items-center gap-1 text-2xl font-extrabold tracking-tight leading-none group"
-          style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}
-        >
-          <Zap
-            size={22}
-            fill="#FF2D78"
-            stroke="#FF2D78"
-            className="transition-transform duration-200 group-hover:scale-110 group-hover:rotate-12"
-          />
-          <span style={{ color: "#FF2D78" }}>Zap</span>Market
-        </Link>
+    <>
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
 
-        {/* Search */}
-        <form onSubmit={handleSearch} className="flex-1 flex items-center max-w-2xl">
-          <div className="relative w-full flex items-center rounded-full overflow-hidden border-2 border-[#F0EDE8] bg-white shadow-[0_1px_4px_rgba(26,18,8,0.04)] focus-within:border-[#FF2D78] transition-colors duration-200">
-            <Input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Find anything…"
-              className="flex-1 border-0 rounded-full bg-transparent px-4 py-2.5 text-sm text-[#1A1208] placeholder:text-[#9e9287] focus-visible:ring-0 shadow-none"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              className="shrink-0 mr-1.5 rounded-full bg-[#00736A] hover:bg-[#005d54] text-white h-8 w-8"
-              aria-label="Search"
-            >
-              <Search size={15} />
-            </Button>
-          </div>
-        </form>
-
-        {/* Desktop nav */}
-        <nav className="hidden sm:flex items-center gap-3 shrink-0">
-          <Link
-            href="/account/orders"
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "sm" }),
-              "gap-1.5 text-[#1A1208] hover:text-[#FF2D78] hover:bg-transparent"
-            )}
-          >
-            <Package size={16} />
-            <span className="hidden md:inline">Orders</span>
-          </Link>
-
-          {displayName ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="rounded-full p-0 h-9 w-9 inline-flex items-center justify-center hover:ring-2 hover:ring-[#FF2D78] hover:ring-offset-1 transition-all outline-none cursor-pointer"
-                aria-label="Account menu"
-              >
-                <Avatar className="h-9 w-9">
-                  <AvatarFallback className="bg-[#FF2D78] text-white text-xs font-semibold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-44 rounded-2xl border border-[#F0EDE8] shadow-[0_8px_32px_rgba(26,18,8,0.1)] bg-white"
-              >
-                <div className="px-3 py-2 text-xs text-[#9e9287] truncate font-medium">
-                  {displayName}
-                </div>
-                <DropdownMenuSeparator className="bg-[#F0EDE8]" />
-                <DropdownMenuItem
-                  className="gap-2.5 cursor-pointer text-[#1A1208]"
-                  onClick={() => router.push("/account/orders")}
-                >
-                  <Package size={14} />
-                  My Orders
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-[#F0EDE8]" />
-                <DropdownMenuItem
-                  onClick={handleLogout}
-                  className="gap-2.5 cursor-pointer text-[#e0245f]"
-                >
-                  <LogOut size={14} />
-                  Sign Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
+      <motion.header
+        className={cn(
+          "sticky top-0 z-40 w-full transition-all duration-300",
+          scrolled
+            ? "bg-white/95 backdrop-blur-md shadow-[0_1px_0_rgba(15,10,4,0.06),0_4px_24px_rgba(15,10,4,0.04)]"
+            : "bg-white border-b border-[#EDE9E3]"
+        )}
+        initial={{ y: -4, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <div className="container-zap">
+          {/* Primary row */}
+          <div className="flex items-center gap-3 sm:gap-4 h-16">
+            {/* Logo */}
             <Link
-              href="/login"
-              className={cn(
-                buttonVariants({ variant: "ghost", size: "sm" }),
-                "text-[#1A1208] hover:text-[#FF2D78] hover:bg-transparent"
-              )}
+              href="/"
+              className="flex items-center gap-2 shrink-0 group"
+              aria-label="ZapMarket home"
             >
-              Sign in
+              <div className="h-8 w-8 bg-[#E91E8C] rounded-xl flex items-center justify-center shadow-[0_2px_8px_rgba(233,30,140,0.3)] group-hover:shadow-[0_4px_16px_rgba(233,30,140,0.4)] transition-shadow">
+                <Zap className="h-4 w-4 text-white" strokeWidth={2.5} />
+              </div>
+              <span className="font-display font-bold text-lg text-[#0F0A04] tracking-tight hidden sm:block">
+                Zap<span className="text-[#E91E8C]">Market</span>
+              </span>
             </Link>
-          )}
 
-          <CartButton />
-        </nav>
+            {/* Categories pill — desktop */}
+            <button className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold text-[#3D2E1A] hover:bg-[#F9F8F5] transition-colors shrink-0">
+              <LayoutGrid className="h-4 w-4 text-[#E91E8C]" />
+              Categories
+              <ChevronDown className="h-3.5 w-3.5 text-[#B8A898]" />
+            </button>
 
-        {/* Mobile */}
-        <div className="flex sm:hidden items-center gap-2 shrink-0 ml-auto">
-          <CartButton />
-          <Sheet>
-            <SheetTrigger
-              className={cn(
-                buttonVariants({ variant: "ghost", size: "icon" }),
-                "text-[#1A1208] hover:text-[#FF2D78] hover:bg-transparent"
-              )}
-              aria-label="Open menu"
+            {/* Search — desktop */}
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="hidden sm:flex flex-1 items-center gap-3 h-10 px-4 bg-[#F9F8F5] hover:bg-[#F3F0EB] border-2 border-transparent hover:border-[#EDE9E3] rounded-xl text-sm text-[#B8A898] transition-all max-w-lg"
+              aria-label="Open search"
             >
-              <Menu size={22} />
-            </SheetTrigger>
-            <SheetContent side="right" className="w-72 bg-[#FFFCF5] border-l border-[#F0EDE8] p-0">
-              <div className="flex flex-col h-full">
-                <div className="flex items-center gap-2 px-5 py-5 border-b border-[#F0EDE8]">
-                  <Zap size={18} fill="#FF2D78" stroke="#FF2D78" />
-                  <span className="text-lg font-extrabold tracking-tight" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>
-                    <span style={{ color: "#FF2D78" }}>Zap</span>Market
-                  </span>
-                </div>
+              <Search className="h-4 w-4 text-[#B8A898] shrink-0" />
+              <span className="flex-1 text-left">Search products, brands...</span>
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#EDE9E3] rounded text-xs text-[#7A6856] font-mono">
+                ⌘K
+              </kbd>
+            </button>
 
-                {user && displayName && (
-                  <div className="flex items-center gap-3 px-5 py-4 border-b border-[#F0EDE8]">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback className="bg-[#FF2D78] text-white text-sm font-semibold">
+            {/* Right actions */}
+            <div className="flex items-center gap-0.5 ml-auto sm:ml-0">
+              {/* Mobile search */}
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="sm:hidden p-2.5 rounded-xl hover:bg-[#F9F8F5] transition-colors"
+                aria-label="Search"
+              >
+                <Search className="h-5 w-5 text-[#3D2E1A]" />
+              </button>
+
+              {/* Wishlist */}
+              <Link
+                href="/account/wishlist"
+                className="hidden md:flex p-2.5 rounded-xl hover:bg-[#F9F8F5] transition-colors"
+                aria-label="Wishlist"
+              >
+                <Heart className="h-5 w-5 text-[#3D2E1A]" />
+              </Link>
+
+              {/* Cart */}
+              <CartButton />
+
+              {/* Profile */}
+              {user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-2 pl-1.5 pr-2.5 py-1.5 rounded-xl hover:bg-[#F9F8F5] transition-colors ml-1">
+                      <div className="h-7 w-7 bg-gradient-to-br from-[#E91E8C] to-[#FF5A35] rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-sm">
                         {initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[#1A1208] truncate">{user.name ?? "Account"}</p>
-                      {user.email && <p className="text-xs text-[#9e9287] truncate">{user.email}</p>}
+                      </div>
+                      <ChevronDown className="h-3.5 w-3.5 text-[#B8A898] hidden sm:block" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-52 mt-1 rounded-2xl border-[#EDE9E3] shadow-[0_8px_24px_rgba(15,10,4,0.12)] p-1.5"
+                  >
+                    <div className="px-3 py-2 mb-1">
+                      <p className="font-semibold text-sm text-[#0F0A04] truncate">{user.name}</p>
+                      <p className="text-xs text-[#7A6856] truncate">{user.email}</p>
+                    </div>
+                    <DropdownMenuSeparator className="bg-[#EDE9E3]" />
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href="/account/orders"
+                        className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-[#3D2E1A] cursor-pointer"
+                      >
+                        <Package className="h-4 w-4 text-[#7A6856]" />
+                        My Orders
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href="/account/settings"
+                        className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-[#3D2E1A] cursor-pointer"
+                      >
+                        <Settings className="h-4 w-4 text-[#7A6856]" />
+                        Settings
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-[#EDE9E3]" />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-600 cursor-pointer focus:bg-red-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <div className="flex items-center gap-2 ml-1">
+                  <Link
+                    href="/login"
+                    className="hidden sm:block px-4 py-2 text-sm font-semibold text-[#3D2E1A] hover:text-[#E91E8C] transition-colors"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="px-4 py-2 bg-[#E91E8C] hover:bg-[#B5166E] text-white text-sm font-semibold rounded-xl transition-colors shadow-[0_2px_8px_rgba(233,30,140,0.25)]"
+                  >
+                    Join free
+                  </Link>
+                </div>
+              )}
+
+              {/* Mobile hamburger */}
+              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                <SheetTrigger asChild>
+                  <button
+                    className="lg:hidden p-2.5 rounded-xl hover:bg-[#F9F8F5] transition-colors ml-0.5"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-5 w-5 text-[#3D2E1A]" />
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-72 p-0 border-r border-[#EDE9E3]">
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-[#EDE9E3]">
+                      <Link
+                        href="/"
+                        onClick={() => setMobileOpen(false)}
+                        className="flex items-center gap-2"
+                      >
+                        <div className="h-7 w-7 bg-[#E91E8C] rounded-lg flex items-center justify-center">
+                          <Zap className="h-4 w-4 text-white" strokeWidth={2.5} />
+                        </div>
+                        <span className="font-display font-bold text-[#0F0A04]">ZapMarket</span>
+                      </Link>
+                      <button
+                        onClick={() => setMobileOpen(false)}
+                        className="p-1.5 rounded-lg hover:bg-[#F9F8F5]"
+                      >
+                        <X className="h-4 w-4 text-[#7A6856]" />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-auto py-4 px-4">
+                      <p className="text-xs font-bold tracking-widest text-[#B8A898] uppercase px-2 mb-2">
+                        Browse
+                      </p>
+                      <nav className="space-y-0.5">
+                        {CATEGORIES.map(cat => (
+                          <Link
+                            key={cat}
+                            href={`/products?category=${encodeURIComponent(cat)}`}
+                            onClick={() => setMobileOpen(false)}
+                            className="flex items-center px-3 py-2.5 rounded-xl text-sm font-medium text-[#3D2E1A] hover:bg-[#F9F8F5] hover:text-[#E91E8C] transition-colors"
+                          >
+                            {cat}
+                          </Link>
+                        ))}
+                      </nav>
+                      <div className="border-t border-[#EDE9E3] mt-4 pt-4 space-y-0.5">
+                        <Link
+                          href="/account/orders"
+                          onClick={() => setMobileOpen(false)}
+                          className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-[#3D2E1A] hover:bg-[#F9F8F5]"
+                        >
+                          <Package className="h-4 w-4 text-[#7A6856]" />
+                          My Orders
+                        </Link>
+                        {!user && (
+                          <Link
+                            href="/login"
+                            onClick={() => setMobileOpen(false)}
+                            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-[#E91E8C] hover:bg-[#FDE8F4]"
+                          >
+                            <User className="h-4 w-4" />
+                            Sign in
+                          </Link>
+                        )}
+                      </div>
                     </div>
                   </div>
-                )}
+                </SheetContent>
+              </Sheet>
+            </div>
+          </div>
 
-                <nav className="flex flex-col gap-1 px-3 py-4 flex-1">
-                  <Link
-                    href="/account/orders"
-                    className={cn(
-                      buttonVariants({ variant: "ghost" }),
-                      "justify-start gap-3 text-[#1A1208] hover:text-[#FF2D78] hover:bg-[#fff5f8] rounded-xl h-11"
-                    )}
-                  >
-                    <Package size={18} />
-                    My Orders
-                  </Link>
-
-                  {!user && (
-                    <Link
-                      href="/login"
-                      className={cn(
-                        buttonVariants(),
-                        "mt-2 bg-[#FF2D78] hover:bg-[#e0245f] text-white rounded-xl h-11 justify-center"
-                      )}
-                    >
-                      Sign in
-                    </Link>
-                  )}
-                </nav>
-
-                {user && (
-                  <div className="px-3 py-4 border-t border-[#F0EDE8]">
-                    <Button
-                      variant="ghost"
-                      onClick={handleLogout}
-                      className="w-full justify-start gap-3 text-[#e0245f] hover:text-[#e0245f] hover:bg-red-50 rounded-xl h-11"
-                    >
-                      <LogOut size={18} />
-                      Sign Out
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </SheetContent>
-          </Sheet>
+          {/* Category strip — desktop */}
+          <div className="hidden lg:flex items-center gap-0.5 h-10 border-t border-[#EDE9E3] overflow-x-auto scrollbar-none -mx-12 px-12">
+            {CATEGORIES.map(cat => (
+              <Link
+                key={cat}
+                href={`/products?category=${encodeURIComponent(cat)}`}
+                className="shrink-0 px-3.5 py-1.5 text-xs font-semibold text-[#7A6856] hover:text-[#E91E8C] hover:bg-[#FDE8F4] rounded-lg transition-colors whitespace-nowrap"
+              >
+                {cat}
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
-    </header>
+      </motion.header>
+    </>
   );
 }

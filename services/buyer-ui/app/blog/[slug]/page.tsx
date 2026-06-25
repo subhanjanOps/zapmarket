@@ -45,7 +45,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         <section className="mt-12">
           <h2 className="text-xl font-bold mb-4">Related Products</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {relatedProducts.map((p) => <ProductCard key={p.id as string} product={p as { id: string; name: string; price_amount?: number; currency?: string; images?: { url: string }[] }} />)}
+            {relatedProducts.map((p) => <ProductCard key={p.id as string} product={p as { id: string; name: string; base_price: number; price_amount?: number; currency?: string; images?: { url: string }[] }} />)}
           </div>
         </section>
       )}

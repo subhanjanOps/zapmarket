@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { AnnouncementBar } from "@/components/AnnouncementBar";
 import { decodeJwtUser } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +34,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" className={cn(syne.variable, jakarta.variable, "font-sans", geist.variable)}>
-      <body className="min-h-screen flex flex-col" style={{ background: "#FFFCF5", color: "#1A1208" }}>
+      <body className="min-h-screen flex flex-col bg-[#F9F8F5] text-[#0F0A04]">
+        <AnnouncementBar />
         <Navbar user={user} />
         <main className="flex-1">{children}</main>
         <Footer />

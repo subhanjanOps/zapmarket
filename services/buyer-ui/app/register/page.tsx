@@ -1,12 +1,17 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Eye, EyeOff, ArrowRight } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { Zap, Eye, EyeOff, ArrowRight, Loader2, CheckCircle2 } from "lucide-react";
+
+const PERKS = [
+  "Free delivery on your first 3 orders",
+  "Exclusive member-only deals",
+  "Early access to flash sales",
+  "Hassle-free returns & refunds",
+];
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -26,7 +31,10 @@ export default function RegisterPage() {
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) { setError((data as Record<string, string>).error ?? "Registration failed"); return; }
+      if (!res.ok) {
+        setError((data as Record<string, string>).error ?? "Registration failed");
+        return;
+      }
       router.push("/login");
     } catch {
       setError("Network error. Please try again.");
@@ -36,150 +44,159 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-16" style={{ background: "#FFFCF5" }}>
-      <div className="w-full max-w-sm animate-scale-in">
-        <Card
-          className="rounded-3xl overflow-hidden border-0 p-0"
-          style={{ border: "1px solid #F0EDE8", background: "#fff", boxShadow: "0 8px 40px rgba(26,18,8,0.08)" }}
-        >
-          {/* Teal/green accent strip */}
-          <div className="h-1.5 bg-secondary" />
+    <div className="min-h-[calc(100vh-128px)] grid lg:grid-cols-2">
+      {/* Brand panel */}
+      <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-[#0F0A04] via-[#1C0F08] to-[#0F1A2A] p-12 relative overflow-hidden">
+        <div className="absolute top-0 right-0 h-64 w-64 bg-[#4F46E5]/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-48 w-48 bg-[#E91E8C]/8 rounded-full blur-3xl" />
 
-          <CardHeader className="px-8 pt-8 pb-0">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#00736A12" }}>
-                <Zap size={20} fill="#00736A" stroke="#00736A" />
-              </div>
-              <div>
-                <CardTitle
-                  className="text-xl font-extrabold leading-none"
-                  style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}
+        <Link href="/" className="flex items-center gap-2.5 relative z-10">
+          <div className="h-9 w-9 bg-[#E91E8C] rounded-xl flex items-center justify-center shadow-[0_2px_12px_rgba(233,30,140,0.4)]">
+            <Zap className="h-5 w-5 text-white" strokeWidth={2.5} />
+          </div>
+          <span className="font-display font-bold text-xl text-white">ZapMarket</span>
+        </Link>
+
+        <div className="relative z-10">
+          <h2 className="font-display font-bold text-white text-2xl mb-2 leading-tight">
+            Join 2 million+ smart shoppers
+          </h2>
+          <p className="text-white/50 text-sm mb-7 leading-relaxed">
+            Get access to the best deals, verified sellers, and a shopping experience unlike any other.
+          </p>
+          <ul className="space-y-3">
+            {PERKS.map(perk => (
+              <li key={perk} className="flex items-start gap-3">
+                <CheckCircle2 className="h-4 w-4 text-[#E91E8C] shrink-0 mt-0.5" />
+                <span className="text-white/70 text-sm">{perk}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* Form panel */}
+      <div className="flex items-center justify-center p-6 sm:p-12 bg-[#F9F8F5]">
+        <motion.div
+          className="w-full max-w-sm"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        >
+          {/* Mobile logo */}
+          <div className="flex items-center gap-2 mb-8 lg:hidden">
+            <div className="h-8 w-8 bg-[#E91E8C] rounded-xl flex items-center justify-center">
+              <Zap className="h-4 w-4 text-white" strokeWidth={2.5} />
+            </div>
+            <span className="font-display font-bold text-lg text-[#0F0A04]">ZapMarket</span>
+          </div>
+
+          <div className="mb-7">
+            <h1 className="font-display font-bold text-2xl text-[#0F0A04] mb-1.5">
+              Create your account
+            </h1>
+            <p className="text-[#7A6856] text-sm">Free forever · No credit card required</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="full_name" className="text-sm font-semibold text-[#3D2E1A]">
+                Full name
+              </label>
+              <input
+                id="full_name"
+                type="text"
+                autoComplete="name"
+                required
+                placeholder="Jane Doe"
+                value={form.full_name}
+                onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
+                className="input-zap"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="email" className="text-sm font-semibold text-[#3D2E1A]">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                className="input-zap"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="text-sm font-semibold text-[#3D2E1A]">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPw ? "text" : "password"}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  placeholder="Minimum 8 characters"
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  className="input-zap pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(v => !v)}
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-0.5 text-[#B8A898] hover:text-[#7A6856] transition-colors"
                 >
-                  Create Account
-                </CardTitle>
-                <p className="text-xs mt-0.5" style={{ color: "#9CA3AF" }}>Join ZapMarket today</p>
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
-          </CardHeader>
 
-          <CardContent className="px-8 pt-6 pb-8">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Full Name */}
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="full_name"
-                  className="text-xs font-bold uppercase tracking-wider"
-                  style={{ color: "#6B6052" }}
-                >
-                  Full Name
-                </Label>
-                <Input
-                  id="full_name"
-                  type="text"
-                  autoComplete="name"
-                  required
-                  value={form.full_name}
-                  onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-                  placeholder="Jane Doe"
-                  className="rounded-xl text-sm outline-none transition-all duration-150 focus-visible:ring-0 focus-visible:ring-offset-0"
-                  style={{ border: "2px solid #F0EDE8", background: "#FFFCF5", color: "#1A1208" }}
-                  onFocus={(e) => { e.target.style.borderColor = "#00736A"; e.target.style.boxShadow = "0 0 0 3px rgba(0,115,106,0.08)"; }}
-                  onBlur={(e) => { e.target.style.borderColor = "#F0EDE8"; e.target.style.boxShadow = "none"; }}
-                />
-              </div>
+            {error && (
+              <p className="text-sm text-[#DC2626] bg-red-50 border border-red-100 rounded-xl px-3 py-2" role="alert">
+                {error}
+              </p>
+            )}
 
-              {/* Email */}
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="email"
-                  className="text-xs font-bold uppercase tracking-wider"
-                  style={{ color: "#6B6052" }}
-                >
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  placeholder="you@example.com"
-                  className="rounded-xl text-sm outline-none transition-all duration-150 focus-visible:ring-0 focus-visible:ring-offset-0"
-                  style={{ border: "2px solid #F0EDE8", background: "#FFFCF5", color: "#1A1208" }}
-                  onFocus={(e) => { e.target.style.borderColor = "#00736A"; e.target.style.boxShadow = "0 0 0 3px rgba(0,115,106,0.08)"; }}
-                  onBlur={(e) => { e.target.style.borderColor = "#F0EDE8"; e.target.style.boxShadow = "none"; }}
-                />
-              </div>
-
-              {/* Password */}
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="password"
-                  className="text-xs font-bold uppercase tracking-wider"
-                  style={{ color: "#6B6052" }}
-                >
-                  Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPw ? "text" : "password"}
-                    autoComplete="new-password"
-                    required
-                    minLength={8}
-                    value={form.password}
-                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                    placeholder="••••••••"
-                    className="rounded-xl pr-11 text-sm outline-none transition-all duration-150 focus-visible:ring-0 focus-visible:ring-offset-0"
-                    style={{ border: "2px solid #F0EDE8", background: "#FFFCF5", color: "#1A1208" }}
-                    onFocus={(e) => { e.target.style.borderColor = "#00736A"; e.target.style.boxShadow = "0 0 0 3px rgba(0,115,106,0.08)"; }}
-                    onBlur={(e) => { e.target.style.borderColor = "#F0EDE8"; e.target.style.boxShadow = "none"; }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPw((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded cursor-pointer transition-opacity hover:opacity-60"
-                    style={{ color: "#9CA3AF" }}
-                    aria-label={showPw ? "Hide password" : "Show password"}
-                  >
-                    {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
-                <p className="text-xs" style={{ color: "#9CA3AF" }}>Minimum 8 characters</p>
-              </div>
-
-              {error && (
-                <div
-                  className="text-sm rounded-xl px-4 py-3 animate-slide-up-sm"
-                  style={{ background: "#FFF0F3", color: "#e0245f", border: "1px solid #FFD0DC" }}
-                  role="alert"
-                >
-                  {error}
-                </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-11 bg-[#E91E8C] hover:bg-[#B5166E] disabled:opacity-60 text-white font-bold rounded-xl transition-colors shadow-[0_2px_12px_rgba(233,30,140,0.25)] flex items-center justify-center gap-2 mt-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating account…
+                </>
+              ) : (
+                <>
+                  Create account
+                  <ArrowRight className="h-4 w-4" />
+                </>
               )}
+            </button>
 
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 font-bold py-3.5 rounded-xl text-white
-                           transition-all duration-200 hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]
-                           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer mt-2
-                           bg-secondary hover:bg-secondary/90"
-                style={{ fontFamily: "var(--font-syne)" }}
-              >
-                {loading ? "Creating account…" : (<>Create Account <ArrowRight size={16} /></>)}
-              </Button>
-            </form>
-
-            <p className="mt-6 text-sm text-center" style={{ color: "#6B6052" }}>
-              Already have an account?{" "}
-              <Link href="/login" className="font-bold hover:underline" style={{ color: "#FF2D78" }}>
-                Sign in
-              </Link>
+            <p className="text-xs text-[#B8A898] text-center leading-relaxed">
+              By creating an account you agree to our{" "}
+              <Link href="/terms" className="underline hover:text-[#7A6856]">Terms</Link>
+              {" "}and{" "}
+              <Link href="/privacy" className="underline hover:text-[#7A6856]">Privacy Policy</Link>.
             </p>
-          </CardContent>
-        </Card>
+          </form>
+
+          <p className="mt-5 text-sm text-center text-[#7A6856]">
+            Already have an account?{" "}
+            <Link href="/login" className="font-semibold text-[#E91E8C] hover:text-[#B5166E] transition-colors">
+              Sign in
+            </Link>
+          </p>
+        </motion.div>
       </div>
     </div>
   );
