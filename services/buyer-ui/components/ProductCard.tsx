@@ -16,7 +16,8 @@ interface Product {
   name: string;
   brand?: string;
   category_name?: string;
-  base_price: number;
+  base_price?: number;
+  price_amount?: number;
   sku_count?: number;
   images?: ProductImage[];
   rating?: number;
@@ -50,10 +51,11 @@ export default function ProductCard({ product, images, priority = false }: Produ
   const allImages = images?.length ? images : (product.images ?? []);
   const hasMultiple = allImages.length > 1;
 
+  const resolvedPrice = product.base_price ?? product.price_amount ?? 0;
   const discountedPrice =
     product.discount_percent && product.discount_percent > 0
-      ? Math.round(product.base_price * (1 - product.discount_percent / 100))
-      : product.base_price;
+      ? Math.round(resolvedPrice * (1 - product.discount_percent / 100))
+      : resolvedPrice;
 
   const handleMouseEnter = () => {
     setHovered(true);
@@ -225,7 +227,7 @@ export default function ProductCard({ product, images, priority = false }: Produ
             </span>
             {product.discount_percent && product.discount_percent > 0 && (
               <span className="text-xs text-[#B8A898] line-through tabular-nums">
-                {formatPrice(product.base_price)}
+                {formatPrice(resolvedPrice)}
               </span>
             )}
           </div>

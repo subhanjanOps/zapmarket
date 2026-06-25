@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Zap, Search } from "lucide-react";
 import ProductCard from "@/components/ProductCard";
 import Paginator from "@/components/Paginator";
 import AnimateIn from "@/components/AnimateIn";
@@ -7,9 +8,8 @@ import { publicImageUrl } from "@/lib/images";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Sheet,
   SheetContent,
@@ -73,22 +73,27 @@ function CategoryList({
 }) {
   return (
     <div className="space-y-1">
-      <Link href={buildFilterHref(sp, { category_id: undefined })}>
-        <Button
-          variant={!activeCategoryId ? "secondary" : "ghost"}
-          className="w-full justify-start rounded-xl text-sm font-medium"
-        >
-          All
-        </Button>
+      <Link
+        href={buildFilterHref(sp, { category_id: undefined })}
+        className={cn(
+          buttonVariants({ variant: !activeCategoryId ? "secondary" : "ghost" }),
+          "w-full justify-start rounded-xl text-sm font-medium"
+        )}
+      >
+        All
       </Link>
       {categories.map((c) => (
-        <Link key={c.id} href={buildFilterHref(sp, { category_id: c.id })}>
-          <Button
-            variant={activeCategoryId === c.id ? "secondary" : "ghost"}
-            className="w-full justify-start rounded-xl text-sm font-medium"
-          >
-            {c.name}
-          </Button>
+        <Link
+          key={c.id}
+          href={buildFilterHref(sp, { category_id: c.id })}
+          className={cn(
+            buttonVariants({
+              variant: activeCategoryId === c.id ? "secondary" : "ghost",
+            }),
+            "w-full justify-start rounded-xl text-sm font-medium"
+          )}
+        >
+          {c.name}
         </Link>
       ))}
     </div>
@@ -192,17 +197,17 @@ export default async function ProductsPage({
                         sort_by: opt.sort_by,
                         sort_order: opt.sort_order,
                       })}
+                      className={cn(
+                        buttonVariants({
+                          variant:
+                            activeSort?.label === opt.label
+                              ? "secondary"
+                              : "ghost",
+                        }),
+                        "w-full justify-start rounded-xl text-sm font-medium"
+                      )}
                     >
-                      <Button
-                        variant={
-                          activeSort?.label === opt.label
-                            ? "secondary"
-                            : "ghost"
-                        }
-                        className="w-full justify-start rounded-xl text-sm font-medium"
-                      >
-                        {opt.label}
-                      </Button>
+                      {opt.label}
                     </Link>
                   ))}
                 </div>
@@ -216,10 +221,13 @@ export default async function ProductsPage({
           {/* Header row */}
           <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-extrabold text-foreground">
+              <h1 className="text-2xl font-display font-bold text-foreground">
                 Products
               </h1>
-              <Badge variant="secondary" className="rounded-full px-2.5">
+              <Badge
+                className="rounded-full px-2.5 text-white"
+                style={{ backgroundColor: "#E91E8C" }}
+              >
                 {total} result{total !== 1 ? "s" : ""}
               </Badge>
 
@@ -286,6 +294,23 @@ export default async function ProductsPage({
             </div>
           </div>
 
+          {/* Search bar — shown when a search query is active */}
+          {sp.search && (
+            <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl border border-border bg-muted/40 w-full max-w-sm">
+              <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-sm text-foreground font-medium truncate">
+                {sp.search}
+              </span>
+              <Link
+                href={buildFilterHref(sp, { search: undefined })}
+                className="ml-auto text-muted-foreground hover:text-foreground transition-colors text-xs"
+                aria-label="Clear search"
+              >
+                Clear
+              </Link>
+            </div>
+          )}
+
           {/* Active filter badges */}
           {(sp.category_id || sp.search || (sp.sort_by && sp.sort_order)) && (
             <div className="flex flex-wrap gap-2 mb-5">
@@ -345,25 +370,28 @@ export default async function ProductsPage({
             </div>
           )}
 
-          {/* Search label */}
-          {sp.search && (
-            <p className="text-sm mb-4 text-muted-foreground">
-              Results for{" "}
-              <strong className="text-foreground">
-                &ldquo;{sp.search}&rdquo;
-              </strong>
-            </p>
-          )}
-
           {/* Product grid */}
           {products.length === 0 ? (
-            <div className="text-center py-20">
-              <p className="text-lg font-semibold mb-2 text-foreground">
+            <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+              <div className="rounded-full bg-muted p-5">
+                <Zap className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <p className="text-lg font-semibold text-foreground">
                 No products found
               </p>
-              <p className="text-sm text-muted-foreground">
-                Try a different category or search term.
+              <p className="text-sm text-muted-foreground max-w-xs">
+                Try adjusting your filters or search to find what you&apos;re
+                looking for.
               </p>
+              <Link
+                href="/products"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "rounded-xl mt-1"
+                )}
+              >
+                Reset filters
+              </Link>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -378,6 +406,7 @@ export default async function ProductsPage({
                       ...(p as {
                         id: string;
                         name: string;
+                        base_price?: number;
                         price_amount?: number;
                         currency?: string;
                         sku_count?: number;

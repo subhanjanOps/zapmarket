@@ -30,7 +30,8 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const jar = await cookies();
   const token = jar.get("buyer_token")?.value;
-  const user = token ? decodeJwtUser(token) : null;
+  const raw = token ? decodeJwtUser(token) : null;
+  const user = raw ? { name: raw.name ?? "", email: raw.email ?? "" } : null;
 
   return (
     <html lang="en" className={cn(syne.variable, jakarta.variable, "font-sans", geist.variable)}>

@@ -106,7 +106,7 @@ export default async function DealPage({ params }: { params: Promise<{ slug: str
               {products.map((p) => (
                 <ProductCard
                   key={p.id as string}
-                  product={p as { id: string; name: string; price_amount?: number; currency?: string; images?: { url: string }[] }}
+                  product={p as { id: string; name: string; base_price: number; price_amount?: number; currency?: string; images?: { url: string }[] }}
                 />
               ))}
             </div>

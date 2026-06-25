@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCartStore } from "@/lib/cart";
-import { ShoppingCart, Zap, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ShoppingCart, Loader2, CheckCircle2, Zap } from "lucide-react";
+import { motion } from "framer-motion";
 import type { Sku } from "./SkuSelector";
 
 interface Props {
@@ -16,10 +16,11 @@ interface Props {
 export default function AddToCartButton({ sku, productName, productImage, qty = 1 }: Props) {
   const addItem = useCartStore((s) => s.addItem);
   const router = useRouter();
-  const [added, setAdded] = useState(false);
+  const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
 
   function handleAdd() {
-    if (!sku) return;
+    if (!sku || status !== "idle") return;
+    setStatus("loading");
     for (let i = 0; i < qty; i++) {
       addItem({
         skuId: sku.id,
@@ -29,8 +30,10 @@ export default function AddToCartButton({ sku, productName, productImage, qty = 
         currency: sku.currency,
       });
     }
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1800);
+    setTimeout(() => {
+      setStatus("success");
+      setTimeout(() => setStatus("idle"), 1600);
+    }, 400);
   }
 
   function handleBuyNow() {
@@ -47,30 +50,64 @@ export default function AddToCartButton({ sku, productName, productImage, qty = 
     router.push("/checkout");
   }
 
+  const isDisabled = !sku || status !== "idle";
+
+  const addButtonClass = [
+    "relative flex-1 flex items-center justify-center gap-2",
+    "font-bold rounded-2xl h-12 w-full text-white text-sm",
+    "transition-colors duration-300",
+    status === "success"
+      ? "bg-green-600"
+      : "bg-[#E91E8C] hover:bg-[#c91878]",
+    isDisabled && status === "idle" ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+    // btn-shimmer: pseudo-element shimmer via Tailwind arbitrary variant not available here,
+    // so the shimmer is handled by the overlay span below
+  ].join(" ");
+
   return (
-    <div className="flex gap-3">
-      <Button
+    <div className="flex gap-3 w-full">
+      {/* Add to Cart */}
+      <motion.button
         onClick={handleAdd}
-        disabled={!sku}
-        size="lg"
-        className={
-          added
-            ? "flex-1 gap-2 bg-green-600 hover:bg-green-700 text-white"
-            : "flex-1 gap-2 bg-primary hover:bg-primary/90 text-white"
-        }
+        disabled={isDisabled}
+        whileTap={isDisabled ? undefined : { scale: 0.97 }}
+        className={addButtonClass}
+        style={{ background: status === "success" ? undefined : undefined }}
       >
-        {added ? <Check size={16} /> : <ShoppingCart size={16} />}
-        {added ? "Added to cart!" : "Add to Cart"}
-      </Button>
-      <Button
+        {/* Shimmer overlay */}
+        {status === "idle" && sku && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden"
+          >
+            <span className="absolute inset-0 -translate-x-full animate-[shimmer_2.4s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          </span>
+        )}
+
+        {status === "loading" && <Loader2 size={16} className="animate-spin" />}
+        {status === "success" && <CheckCircle2 size={16} />}
+        {status === "idle" && <ShoppingCart size={16} />}
+
+        {status === "loading" && "Adding…"}
+        {status === "success" && "Added to Cart!"}
+        {status === "idle" && "Add to Cart"}
+      </motion.button>
+
+      {/* Buy Now */}
+      <motion.button
         onClick={handleBuyNow}
         disabled={!sku}
-        size="lg"
-        className="flex-1 gap-2 bg-[#00736A] hover:bg-[#005c54] text-white"
+        whileTap={!sku ? undefined : { scale: 0.97 }}
+        className={[
+          "flex-1 flex items-center justify-center gap-2",
+          "font-bold rounded-2xl h-12 w-full text-white text-sm",
+          "bg-[#0F0A04] hover:bg-[#1f1408] transition-colors duration-300",
+          !sku ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+        ].join(" ")}
       >
         <Zap size={16} fill="#fff" stroke="#fff" />
         Buy Now
-      </Button>
+      </motion.button>
     </div>
   );
 }

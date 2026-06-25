@@ -17,7 +17,7 @@ import {
   Settings,
   LayoutGrid,
 } from "lucide-react";
-import { CartButton } from "@/components/CartButton";
+import CartButton from "@/components/CartButton";
 import { SearchModal } from "@/components/SearchModal";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -167,7 +167,7 @@ export default function Navbar({ user }: NavbarProps) {
               {/* Profile */}
               {user ? (
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+                  <DropdownMenuTrigger>
                     <button className="flex items-center gap-2 pl-1.5 pr-2.5 py-1.5 rounded-xl hover:bg-[#F9F8F5] transition-colors ml-1">
                       <div className="h-7 w-7 bg-gradient-to-br from-[#E91E8C] to-[#FF5A35] rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-sm">
                         {initials}
@@ -184,7 +184,7 @@ export default function Navbar({ user }: NavbarProps) {
                       <p className="text-xs text-[#7A6856] truncate">{user.email}</p>
                     </div>
                     <DropdownMenuSeparator className="bg-[#EDE9E3]" />
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem>
                       <Link
                         href="/account/orders"
                         className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-[#3D2E1A] cursor-pointer"
@@ -193,7 +193,7 @@ export default function Navbar({ user }: NavbarProps) {
                         My Orders
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem>
                       <Link
                         href="/account/settings"
                         className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-[#3D2E1A] cursor-pointer"
@@ -231,7 +231,7 @@ export default function Navbar({ user }: NavbarProps) {
 
               {/* Mobile hamburger */}
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-                <SheetTrigger asChild>
+                <SheetTrigger>
                   <button
                     className="lg:hidden p-2.5 rounded-xl hover:bg-[#F9F8F5] transition-colors ml-0.5"
                     aria-label="Open menu"

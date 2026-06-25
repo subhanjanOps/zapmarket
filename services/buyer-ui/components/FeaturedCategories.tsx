@@ -19,7 +19,7 @@ import {
 import { SectionHeader } from "@/components/SectionHeader";
 import { MotionWrapper, MotionChild } from "@/components/MotionWrapper";
 
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
   Electronics:        Laptop,
   Fashion:            Shirt,
   "Home & Kitchen":   Home,

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { HeroSection } from "@/components/HeroSection";
 import { FeaturedCategories } from "@/components/FeaturedCategories";
-import { ProductCard } from "@/components/ProductCard";
+import ProductCard from "@/components/ProductCard";
 import { TrustBanner } from "@/components/TrustBanner";
+import { Testimonials } from "@/components/Testimonials";
 import { SectionHeader } from "@/components/SectionHeader";
 import { MotionWrapper, MotionChild } from "@/components/MotionWrapper";
 import BlogCard from "@/components/BlogCard";
@@ -97,7 +98,7 @@ export default async function HomePage() {
             {deals.slice(0, 4).map((p, i) => (
               <MotionChild key={p.id as string}>
                 <ProductCard
-                  product={p as Parameters<typeof ProductCard>[0]["product"]}
+                  product={p as unknown as Parameters<typeof ProductCard>[0]["product"]}
                   priority={i < 2}
                 />
               </MotionChild>
@@ -108,6 +109,9 @@ export default async function HomePage() {
 
       {/* Trust Banner */}
       <TrustBanner />
+
+      {/* Testimonials */}
+      <Testimonials />
 
       {/* New Arrivals */}
       {newArrivals.length > 0 && (
@@ -122,7 +126,7 @@ export default async function HomePage() {
             {newArrivals.slice(0, 8).map((p, i) => (
               <MotionChild key={p.id as string}>
                 <ProductCard
-                  product={p as Parameters<typeof ProductCard>[0]["product"]}
+                  product={p as unknown as Parameters<typeof ProductCard>[0]["product"]}
                   priority={i < 4}
                 />
               </MotionChild>

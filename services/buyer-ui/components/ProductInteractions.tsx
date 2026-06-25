@@ -30,45 +30,45 @@ export default function ProductInteractions({ skus, productName, productImage }:
         <div>
           <p
             className="text-4xl font-extrabold leading-none"
-            style={{ color: "#FF2D78", fontFamily: "var(--font-syne)", fontVariantNumeric: "tabular-nums" }}
+            style={{ color: "#E91E8C", fontFamily: "var(--font-syne)", fontVariantNumeric: "tabular-nums" }}
           >
             {symbol} {price}
           </p>
-          <p className="text-xs mt-1.5" style={{ color: "#9CA3AF" }}>Inclusive of all taxes</p>
+          <p className="text-xs mt-1.5" style={{ color: "#B8A898" }}>Inclusive of all taxes</p>
         </div>
       )}
 
-      <div style={{ borderTop: "1px solid #F0EDE8" }} />
+      <div style={{ borderTop: "1px solid #EDE9E3" }} />
 
       {/* SKU Selector */}
       <SkuSelector skus={skus} onSelect={setSelectedSku} />
 
       {/* Quantity */}
       <div>
-        <p className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: "#6B6052" }}>
+        <p className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: "#7A6856" }}>
           Quantity
         </p>
         <div className="flex items-center gap-0">
           <button
             onClick={() => setQty((q) => Math.max(1, q - 1))}
             className="w-10 h-10 flex items-center justify-center rounded-l-xl cursor-pointer
-                       transition-all duration-150 hover:bg-gray-50 active:scale-90"
-            style={{ border: "2px solid #F0EDE8", borderRight: "none" }}
+                       transition-all duration-150 hover:bg-[#F3F0EB] active:scale-95"
+            style={{ border: "2px solid #EDE9E3", borderRight: "none" }}
             aria-label="Decrease quantity"
           >
             <Minus size={14} />
           </button>
           <div
             className="w-12 h-10 flex items-center justify-center text-sm font-bold"
-            style={{ border: "2px solid #F0EDE8", borderLeft: "none", borderRight: "none", color: "#1A1208", fontVariantNumeric: "tabular-nums" }}
+            style={{ border: "2px solid #EDE9E3", borderLeft: "none", borderRight: "none", color: "#0F0A04", fontVariantNumeric: "tabular-nums" }}
           >
             {qty}
           </div>
           <button
             onClick={() => setQty((q) => q + 1)}
             className="w-10 h-10 flex items-center justify-center rounded-r-xl cursor-pointer
-                       transition-all duration-150 hover:bg-gray-50 active:scale-90"
-            style={{ border: "2px solid #F0EDE8", borderLeft: "none" }}
+                       transition-all duration-150 hover:bg-[#F3F0EB] active:scale-95"
+            style={{ border: "2px solid #EDE9E3", borderLeft: "none" }}
             aria-label="Increase quantity"
           >
             <Plus size={14} />
@@ -80,14 +80,14 @@ export default function ProductInteractions({ skus, productName, productImage }:
       <AddToCartButton sku={selectedSku} productName={productName} productImage={productImage} qty={qty} />
 
       {/* Trust badges */}
-      <div className="grid grid-cols-3 gap-3 pt-4" style={{ borderTop: "1px solid #F0EDE8" }}>
+      <div className="grid grid-cols-3 gap-3 pt-4" style={{ borderTop: "1px solid #EDE9E3" }}>
         {TRUST.map(({ icon: Icon, label, sub }) => (
           <div key={label} className="flex flex-col items-center text-center gap-1.5">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#E6F4F2" }}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#F0FDF4" }}>
               <Icon size={16} style={{ color: "#00736A" }} />
             </div>
-            <p className="text-[11px] font-bold leading-tight" style={{ color: "#1A1208" }}>{label}</p>
-            <p className="text-[10px] leading-tight" style={{ color: "#9CA3AF" }}>{sub}</p>
+            <p className="text-[11px] font-bold leading-tight" style={{ color: "#0F0A04" }}>{label}</p>
+            <p className="text-[10px] leading-tight" style={{ color: "#B8A898" }}>{sub}</p>
           </div>
         ))}
       </div>

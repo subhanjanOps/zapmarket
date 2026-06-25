@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Truck, RotateCcw, ShieldCheck, Package } from "lucide-react";
+import { Truck, RotateCcw, ShieldCheck, Package, Shield, RefreshCw } from "lucide-react";
 
 import ProductInteractions from "@/components/ProductInteractions";
 import ProductImageGallery from "@/components/ProductImageGallery";
@@ -104,21 +104,21 @@ export default async function ProductDetailPage({
 
   if (!productRes) {
     return (
-      <div className="text-center py-24">
-        <div className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center bg-muted">
-          <Package size={28} className="text-muted-foreground" />
+      <div className="text-center py-24" style={{ background: "#F9F8F5" }}>
+        <div className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center bg-white border border-[#EDE9E3]">
+          <Package size={28} style={{ color: "#E91E8C" }} />
         </div>
         <p className="text-lg font-semibold mb-2">Product not found.</p>
         <p className="text-sm mb-6 text-muted-foreground">
           It may have been removed or the link is wrong.
         </p>
-        <Link
+        <a
           href="/products"
           className="inline-block font-bold px-6 py-3 rounded-xl text-white transition-all duration-200 hover:scale-105 active:scale-95"
-          style={{ background: "#FF2D78", fontFamily: "var(--font-syne)" }}
+          style={{ background: "#E91E8C", fontFamily: "var(--font-syne)" }}
         >
           Back to shopping
-        </Link>
+        </a>
       </div>
     );
   }
@@ -181,7 +181,10 @@ export default async function ProductDetailPage({
             {/* Category badge */}
             {productRes.category_name && (
               <div>
-                <Badge variant="secondary" className="uppercase tracking-widest text-[10px] font-bold">
+                <Badge
+                  className="uppercase tracking-widest text-[10px] font-bold border-0"
+                  style={{ background: "rgba(233,30,140,0.10)", color: "#E91E8C" }}
+                >
                   {productRes.category_name}
                 </Badge>
               </div>
@@ -224,18 +227,43 @@ export default async function ProductDetailPage({
 
             {/* Trust strip */}
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="flex items-center gap-1.5 py-1.5 px-3 text-xs font-medium">
-                <Truck size={13} className="text-primary" />
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#EDE9E3] text-xs font-medium text-[#3D2E1A]">
+                <Truck size={13} style={{ color: "#E91E8C" }} />
                 Free shipping over $50
-              </Badge>
-              <Badge variant="outline" className="flex items-center gap-1.5 py-1.5 px-3 text-xs font-medium">
-                <RotateCcw size={13} className="text-primary" />
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#EDE9E3] text-xs font-medium text-[#3D2E1A]">
+                <RotateCcw size={13} style={{ color: "#E91E8C" }} />
                 30-day returns
-              </Badge>
-              <Badge variant="outline" className="flex items-center gap-1.5 py-1.5 px-3 text-xs font-medium">
-                <ShieldCheck size={13} className="text-primary" />
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#EDE9E3] text-xs font-medium text-[#3D2E1A]">
+                <ShieldCheck size={13} style={{ color: "#E91E8C" }} />
                 Buyer protection
-              </Badge>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Why shop at ZapMarket? strip ── */}
+        <div className="mt-8 grid grid-cols-3 gap-3">
+          <div className="flex items-center gap-2.5 bg-white rounded-xl px-4 py-3 border border-[#EDE9E3]">
+            <Shield size={15} style={{ color: "#E91E8C" }} className="shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-[#3D2E1A]">Verified sellers</p>
+              <p className="text-[10px] text-[#7A6652] leading-tight mt-0.5">All merchants are reviewed</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 bg-white rounded-xl px-4 py-3 border border-[#EDE9E3]">
+            <Truck size={15} style={{ color: "#E91E8C" }} className="shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-[#3D2E1A]">Fast delivery</p>
+              <p className="text-[10px] text-[#7A6652] leading-tight mt-0.5">Express options available</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 bg-white rounded-xl px-4 py-3 border border-[#EDE9E3]">
+            <RefreshCw size={15} style={{ color: "#E91E8C" }} className="shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-[#3D2E1A]">Easy returns</p>
+              <p className="text-[10px] text-[#7A6652] leading-tight mt-0.5">Hassle-free 30-day policy</p>
             </div>
           </div>
         </div>
@@ -243,9 +271,19 @@ export default async function ProductDetailPage({
         {/* ── Details / Shipping tabs ── */}
         <AnimateIn animation="fade-up" delay={150} className="mt-12">
           <Tabs defaultValue="details">
-            <TabsList className="mb-4">
-              <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="shipping">Shipping</TabsTrigger>
+            <TabsList className="mb-4 bg-[#F3F0EB] rounded-2xl p-1">
+              <TabsTrigger
+                value="details"
+                className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                Details
+              </TabsTrigger>
+              <TabsTrigger
+                value="shipping"
+                className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                Shipping
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="details">
@@ -284,7 +322,7 @@ export default async function ProductDetailPage({
             <AnimateIn animation="slide-left">
               <div className="flex items-center justify-between mb-6">
                 <h2
-                  className="text-xl font-extrabold"
+                  className="font-display font-bold text-xl text-[#0F0A04]"
                   style={{ fontFamily: "var(--font-syne)" }}
                 >
                   You might also like
