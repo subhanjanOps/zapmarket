@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
-import { Syne, Plus_Jakarta_Sans } from "next/font/google";
+import { Syne, Plus_Jakarta_Sans, Geist } from "next/font/google";
+import { cookies } from "next/headers";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { decodeJwtUser } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 const syne = Syne({
   subsets: ["latin"],
@@ -21,11 +26,15 @@ export const metadata: Metadata = {
   description: "India's fastest online marketplace. Browse products, read guides, and shop deals.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const jar = await cookies();
+  const token = jar.get("buyer_token")?.value;
+  const user = token ? decodeJwtUser(token) : null;
+
   return (
-    <html lang="en" className={`${syne.variable} ${jakarta.variable}`}>
+    <html lang="en" className={cn(syne.variable, jakarta.variable, "font-sans", geist.variable)}>
       <body className="min-h-screen flex flex-col" style={{ background: "#FFFCF5", color: "#1A1208" }}>
-        <Navbar />
+        <Navbar user={user} />
         <main className="flex-1">{children}</main>
         <Footer />
       </body>

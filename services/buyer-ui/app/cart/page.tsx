@@ -1,35 +1,39 @@
 "use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/lib/cart";
 import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
 export default function CartPage() {
   const { items, removeItem, updateQty, total } = useCartStore();
 
   if (items.length === 0) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-24 text-center animate-fade-up">
-        <div
-          className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center"
-          style={{ background: "#FFF0F3" }}
-        >
-          <ShoppingBag size={32} style={{ color: "#FF2D78" }} />
-        </div>
-        <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>
-          Your cart is empty
-        </h1>
-        <p className="text-sm mb-8" style={{ color: "#6B6052" }}>
-          Looks like you haven&apos;t added anything yet.
-        </p>
-        <Link
-          href="/products"
-          className="inline-block font-bold px-8 py-3.5 rounded-xl text-white
-                     transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95"
-          style={{ background: "#FF2D78", fontFamily: "var(--font-syne)" }}
-        >
-          Start Shopping
-        </Link>
+      <div className="max-w-3xl mx-auto px-4 py-24 flex justify-center">
+        <Card className="w-full max-w-sm text-center shadow-sm">
+          <CardContent className="pt-10 pb-10 flex flex-col items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-pink-50 flex items-center justify-center">
+              <ShoppingBag size={28} className="text-pink-500" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold" style={{ fontFamily: "var(--font-syne)" }}>
+                Your cart is empty
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Looks like you haven&apos;t added anything yet.
+              </p>
+            </div>
+            <Link href="/products" className={cn(buttonVariants(), "mt-2 bg-[#FF2D78] hover:bg-[#e02068] text-white font-bold px-8")}>
+              Browse products
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -39,137 +43,134 @@ export default function CartPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
       <h1
-        className="text-2xl font-bold mb-7 animate-fade-up"
+        className="text-2xl font-bold mb-7"
         style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}
       >
         Shopping Cart
       </h1>
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Items */}
-        <div className="flex-1 space-y-3">
-          {items.map((item, i) => (
-            <div
-              key={item.skuId}
-              className="flex gap-4 rounded-2xl p-4 animate-fade-up"
-              style={{
-                background: "#fff",
-                border: "1px solid #F0EDE8",
-                boxShadow: "0 1px 4px rgba(26,18,8,0.04)",
-                animationDelay: `${i * 60}ms`,
-              }}
-            >
-              <div
-                className="w-20 h-20 relative shrink-0 rounded-xl overflow-hidden"
-                style={{ background: "#FFFCF5" }}
-              >
-                <Image
-                  src={item.image || "/placeholder-product.png"}
-                  alt={item.name}
-                  fill
-                  className="object-contain p-1"
-                  sizes="80px"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate" style={{ color: "#1A1208" }}>{item.name}</p>
-                <p
-                  className="text-sm font-extrabold mt-1"
-                  style={{ color: "#FF2D78", fontVariantNumeric: "tabular-nums", fontFamily: "var(--font-syne)" }}
-                >
-                  {item.currency} {(item.price / 100).toFixed(2)}
-                </p>
-                <div className="flex items-center gap-2 mt-2.5">
-                  <button
-                    onClick={() => updateQty(item.skuId, item.qty - 1)}
-                    className="p-1.5 rounded-lg transition-all duration-150 hover:bg-gray-100 active:scale-90 cursor-pointer"
-                    style={{ border: "1px solid #F0EDE8" }}
-                    aria-label="Decrease"
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Cart Items — lg:col-span-2 */}
+        <div className="lg:col-span-2 space-y-3">
+          {items.map((item) => (
+            <Card key={item.skuId} className="shadow-sm">
+              <CardContent className="p-4 flex gap-4 items-center">
+                {/* Image */}
+                <div className="w-12 h-12 relative shrink-0 rounded-lg overflow-hidden bg-[#FFFCF5] border border-[#F0EDE8]">
+                  <Image
+                    src={item.image || "/placeholder-product.png"}
+                    alt={item.name}
+                    fill
+                    className="object-contain p-1"
+                    sizes="48px"
+                  />
+                </div>
+
+                {/* Name + Price + Stepper */}
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <p className="text-sm font-medium truncate" style={{ color: "#1A1208" }}>
+                    {item.name}
+                  </p>
+                  <Badge
+                    variant="secondary"
+                    className="text-[#FF2D78] bg-pink-50 border-0 font-bold tabular-nums text-xs px-2 py-0.5"
                   >
-                    <Minus size={13} />
-                  </button>
+                    {item.currency} {(item.price / 100).toFixed(2)}
+                  </Badge>
+
+                  {/* Qty stepper */}
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label="Decrease quantity"
+                      onClick={() => updateQty(item.skuId, item.qty - 1)}
+                    >
+                      <Minus size={12} />
+                    </Button>
+                    <span className="text-sm w-6 text-center font-bold tabular-nums" style={{ color: "#1A1208" }}>
+                      {item.qty}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label="Increase quantity"
+                      onClick={() => updateQty(item.skuId, item.qty + 1)}
+                    >
+                      <Plus size={12} />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Line total + Remove */}
+                <div className="flex flex-col items-end gap-2 shrink-0">
                   <span
-                    className="text-sm w-7 text-center font-bold"
-                    style={{ color: "#1A1208", fontVariantNumeric: "tabular-nums" }}
+                    className="text-sm font-bold tabular-nums"
+                    style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}
                   >
-                    {item.qty}
+                    {item.currency} {((item.price * item.qty) / 100).toFixed(2)}
                   </span>
-                  <button
-                    onClick={() => updateQty(item.skuId, item.qty + 1)}
-                    className="p-1.5 rounded-lg transition-all duration-150 hover:bg-gray-100 active:scale-90 cursor-pointer"
-                    style={{ border: "1px solid #F0EDE8" }}
-                    aria-label="Increase"
-                  >
-                    <Plus size={13} />
-                  </button>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50"
+                    aria-label="Remove item"
                     onClick={() => removeItem(item.skuId)}
-                    className="ml-2 p-1.5 rounded-lg transition-all duration-150 hover:bg-red-50 text-red-400 hover:text-red-600 active:scale-90 cursor-pointer"
-                    aria-label="Remove"
                   >
                     <Trash2 size={13} />
-                  </button>
+                  </Button>
                 </div>
-              </div>
-              <p
-                className="text-sm font-bold shrink-0 self-center"
-                style={{ color: "#1A1208", fontVariantNumeric: "tabular-nums", fontFamily: "var(--font-syne)" }}
-              >
-                {item.currency} {((item.price * item.qty) / 100).toFixed(2)}
-              </p>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
-        {/* Summary */}
-        <div className="lg:w-72">
-          <div
-            className="rounded-2xl p-6 sticky top-20 animate-scale-in"
-            style={{ background: "#fff", border: "1px solid #F0EDE8", boxShadow: "0 2px 12px rgba(26,18,8,0.06)" }}
-          >
-            <h2
-              className="font-bold mb-5 text-base"
-              style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}
-            >
-              Order Summary
-            </h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span style={{ color: "#6B6052" }}>Subtotal</span>
-                <span className="font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>
+        {/* Order Summary — lg:col-span-1 */}
+        <div className="lg:col-span-1">
+          <Card className="sticky top-20 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base" style={{ fontFamily: "var(--font-syne)" }}>
+                Order Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="font-semibold tabular-nums">
                   ₹ {(subtotal / 100).toFixed(2)}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span style={{ color: "#6B6052" }}>Estimated tax</span>
-                <span style={{ color: "#9CA3AF" }}>Included</span>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Shipping</span>
+                <span className="font-semibold text-green-600">Free</span>
               </div>
-            </div>
-            <div
-              className="flex justify-between font-bold mt-4 pt-4 text-base"
-              style={{ borderTop: "1px solid #F0EDE8" }}
-            >
-              <span>Total</span>
-              <span style={{ color: "#FF2D78", fontVariantNumeric: "tabular-nums", fontFamily: "var(--font-syne)" }}>
-                ₹ {(subtotal / 100).toFixed(2)}
-              </span>
-            </div>
-            <Link
-              href="/checkout"
-              className="mt-5 block w-full text-center font-bold py-3.5 rounded-xl text-white
-                         transition-all duration-200 hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] cursor-pointer"
-              style={{ background: "#FF2D78", fontFamily: "var(--font-syne)" }}
-            >
-              Proceed to Checkout
-            </Link>
-            <Link
-              href="/products"
-              className="mt-3 block w-full text-center text-sm font-semibold py-2.5 rounded-xl
-                         transition-all duration-150 hover:bg-gray-50 cursor-pointer"
-              style={{ color: "#6B6052" }}
-            >
-              Continue shopping
-            </Link>
-          </div>
+
+              <Separator />
+
+              <div className="flex justify-between font-bold text-base">
+                <span>Total</span>
+                <span className="text-primary tabular-nums" style={{ fontFamily: "var(--font-syne)" }}>
+                  ₹ {(subtotal / 100).toFixed(2)}
+                </span>
+              </div>
+
+              <Link
+                href="/checkout"
+                className={cn(buttonVariants({ size: "lg" }), "w-full bg-[#FF2D78] hover:bg-[#e02068] text-white font-bold mt-1 justify-center")}
+              >
+                Checkout
+              </Link>
+
+              <Link
+                href="/products"
+                className={cn(buttonVariants({ variant: "ghost" }), "w-full text-muted-foreground text-sm justify-center")}
+              >
+                Continue shopping
+              </Link>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

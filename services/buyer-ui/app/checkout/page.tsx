@@ -2,6 +2,27 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCartStore } from "@/lib/cart";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+
+const FIELD_LABELS: Record<string, string> = {
+  name: "Full Name",
+  phone: "Phone",
+  line1: "Address Line 1",
+  city: "City",
+  pincode: "Pincode",
+};
+
+const FIELD_AUTOCOMPLETE: Record<string, string> = {
+  name: "name",
+  phone: "tel",
+  line1: "address-line1",
+  city: "address-level2",
+  pincode: "postal-code",
+};
 
 export default function CheckoutPage() {
   const { items, total, clearCart } = useCartStore();
@@ -18,7 +39,7 @@ export default function CheckoutPage() {
   async function handlePlaceOrder() {
     const missing = (["name", "phone", "line1", "city", "pincode"] as const).filter((f) => !address[f].trim());
     if (missing.length > 0) {
-      setError(`Please fill in: ${missing.join(", ")}`);
+      setError(`Please fill in: ${missing.map((f) => FIELD_LABELS[f]).join(", ")}`);
       return;
     }
     setError(null);
@@ -50,56 +71,93 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-5xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-8">Checkout</h1>
-      <div className="flex flex-col lg:flex-row gap-8">
-        <div className="flex-1 rounded-2xl p-6" style={{ background: "#fff", border: "1px solid #F0EDE8" }}>
-          <h2 className="font-bold mb-5" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>Shipping Address</h2>
-          <div className="space-y-3">
-            {(["name", "phone", "line1", "city", "pincode"] as const).map((field) => (
-              <div key={field}>
-                <label htmlFor={`field-${field}`} className="block text-xs font-semibold mb-1 uppercase tracking-wide" style={{ color: "#6B6052" }}>
-                  {field === "line1" ? "Address Line 1" : field.charAt(0).toUpperCase() + field.slice(1)}
-                </label>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left: form sections */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Shipping Address</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {(["name", "phone", "line1", "city", "pincode"] as const).map((field) => (
+                <div key={field} className="space-y-1.5">
+                  <Label htmlFor={`field-${field}`}>{FIELD_LABELS[field]}</Label>
+                  <Input
+                    id={`field-${field}`}
+                    type={field === "phone" ? "tel" : "text"}
+                    autoComplete={FIELD_AUTOCOMPLETE[field]}
+                    value={address[field]}
+                    onChange={(e) => setAddress((a) => ({ ...a, [field]: e.target.value }))}
+                    placeholder={FIELD_LABELS[field]}
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3 rounded-md border px-4 py-3 bg-muted/40">
                 <input
-                  id={`field-${field}`}
-                  type={field === "phone" ? "tel" : "text"}
-                  autoComplete={field === "name" ? "name" : field === "phone" ? "tel" : field === "line1" ? "address-line1" : field === "city" ? "address-level2" : "postal-code"}
-                  value={address[field]}
-                  onChange={(e) => setAddress((a) => ({ ...a, [field]: e.target.value }))}
-                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-                  style={{ border: "2px solid #F0EDE8", background: "#FFFCF5", color: "#1A1208" }}
-                  onFocus={(e) => { e.target.style.borderColor = "#FF2D78"; }}
-                  onBlur={(e) => { e.target.style.borderColor = "#F0EDE8"; }}
+                  type="radio"
+                  id="payment-cod"
+                  name="payment"
+                  defaultChecked
+                  className="accent-primary h-4 w-4"
                 />
+                <Label htmlFor="payment-cod" className="cursor-pointer font-medium">
+                  Cash on Delivery
+                </Label>
               </div>
-            ))}
-          </div>
+            </CardContent>
+          </Card>
         </div>
 
-        <div className="lg:w-72">
-          <div className="rounded-2xl p-6" style={{ background: "#fff", border: "1px solid #F0EDE8" }}>
-            <h2 className="font-bold mb-4" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>Order Review</h2>
-            {items.map((i) => (
-              <div key={i.skuId} className="flex justify-between text-sm mb-2">
-                <span className="text-gray-700 truncate max-w-[160px]">{i.name} ×{i.qty}</span>
-                <span>INR {((i.price * i.qty) / 100).toFixed(2)}</span>
+        {/* Right: order summary */}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {items.map((i) => (
+                <div key={i.skuId} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground truncate max-w-[160px]">
+                    {i.name} &times;{i.qty}
+                  </span>
+                  <span className="font-medium">INR {((i.price * i.qty) / 100).toFixed(2)}</span>
+                </div>
+              ))}
+
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Subtotal</span>
+                <span>INR {(total() / 100).toFixed(2)}</span>
               </div>
-            ))}
-            <div className="border-t mt-3 pt-3 flex justify-between font-bold">
-              <span>Total</span>
-              <span>INR {(total() / 100).toFixed(2)}</span>
-            </div>
-            {error && <p className="mt-3 text-red-500 text-sm">{error}</p>}
-            <button
-              onClick={handlePlaceOrder}
-              disabled={loading}
-              className="mt-4 w-full font-bold py-3 rounded-xl text-white transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-              style={{ background: "#FF2D78", fontFamily: "var(--font-syne)" }}
-            >
-              {loading ? "Placing Order…" : "Place Order"}
-            </button>
-          </div>
+
+              <Separator />
+
+              <div className="flex justify-between font-bold text-base">
+                <span>Total</span>
+                <span>INR {(total() / 100).toFixed(2)}</span>
+              </div>
+
+              {error && <p className="text-destructive text-sm">{error}</p>}
+
+              <Button
+                size="lg"
+                className="w-full bg-primary text-primary-foreground"
+                onClick={handlePlaceOrder}
+                disabled={loading}
+              >
+                {loading ? "Placing Order…" : "Place Order"}
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

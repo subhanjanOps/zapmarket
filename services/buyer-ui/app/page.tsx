@@ -29,7 +29,7 @@ async function fetchCampaigns() {
 
 async function fetchCategories() {
   try {
-    const r = await fetch(`${GW}/v1/categories`, { cache: "no-store" });
+    const r = await fetch(`${GW}/v1/categories`, { next: { revalidate: 300 } });
     if (!r.ok) return [];
     const d = await r.json();
     return d.data ?? d ?? [];
@@ -38,7 +38,7 @@ async function fetchCategories() {
 
 async function fetchNewArrivals() {
   try {
-    const r = await fetch(`${GW}/v1/products?limit=8&sort_by=created_at&sort_order=desc`, { cache: "no-store" });
+    const r = await fetch(`${GW}/v1/products?limit=8&sort_by=created_at&sort_order=desc`, { next: { revalidate: 300 } });
     if (!r.ok) return [];
     const d = await r.json();
     const products: Record<string, unknown>[] = d.data ?? d ?? [];

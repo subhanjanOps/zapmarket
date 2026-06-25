@@ -40,7 +40,7 @@ export default function AnimateIn({
   return (
     <div
       ref={ref}
-      className={`${className} ${visible ? `animate-${animation}` : "opacity-0"}`}
+      className={`${className}${visible ? ` animate-${animation}` : ""}`}
       style={visible && delay > 0 ? { animationDelay: `${delay}ms` } : undefined}
     >
       {children}

@@ -1,6 +1,9 @@
 "use client";
 import { useState } from "react";
 import { Check } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export interface Sku {
   id: string;
@@ -30,9 +33,8 @@ function isColorAttribute(key: string): boolean {
 export default function SkuSelector({ skus, onSelect }: SkuSelectorProps) {
   const [selectedId, setSelectedId] = useState<string>(skus[0]?.id ?? "");
 
-  const attributeKeys = skus.length > 0 && skus[0].attributes
-    ? Object.keys(skus[0].attributes)
-    : [];
+  const attributeKeys =
+    skus.length > 0 && skus[0].attributes ? Object.keys(skus[0].attributes) : [];
 
   function select(id: string) {
     setSelectedId(id);
@@ -40,48 +42,48 @@ export default function SkuSelector({ skus, onSelect }: SkuSelectorProps) {
     if (sku) onSelect(sku);
   }
 
-  if (attributeKeys.length === 0) {
-    return (
-      <div>
-        <p className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: "#6B6052" }}>
-          Option
-        </p>
-        <div className="flex gap-2 flex-wrap">
-          {skus.map((s) => {
-            const active = s.id === selectedId;
-            return (
-              <button
-                key={s.id}
-                onClick={() => select(s.id)}
-                disabled={!s.is_active}
-                className="relative px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer
-                           transition-all duration-150 hover:-translate-y-px active:scale-95
-                           disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                style={
-                  active
-                    ? { background: "#FF2D78", color: "#fff", border: "2px solid #FF2D78", boxShadow: "0 2px 8px rgba(255,45,120,0.3)" }
-                    : { background: "#fff", color: "#1A1208", border: "2px solid #F0EDE8" }
-                }
-              >
-                {active && <Check size={12} className="inline mr-1" />}
-                {s.sku_code}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
+  const selectedSku = skus.find((s) => s.id === selectedId);
 
-  return (
+  const renderNoAttributeSkus = () => (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wider mb-2.5 text-muted-foreground">
+        Option
+      </p>
+      <div className="flex gap-2 flex-wrap">
+        {skus.map((s) => {
+          const active = s.id === selectedId;
+          return (
+            <Button
+              key={s.id}
+              onClick={() => select(s.id)}
+              disabled={!s.is_active}
+              variant={active ? "default" : "outline"}
+              className={cn(
+                "rounded-xl text-sm font-semibold transition-all duration-150",
+                "hover:-translate-y-px active:scale-95",
+                "disabled:opacity-35 disabled:hover:translate-y-0"
+              )}
+            >
+              {active && <Check size={12} className="mr-1" />}
+              {s.sku_code}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderAttributeGroups = () => (
     <div className="space-y-4">
       {attributeKeys.map((key) => {
-        const values = [...new Set(skus.map((s) => s.attributes?.[key]).filter(Boolean))] as string[];
+        const values = [
+          ...new Set(skus.map((s) => s.attributes?.[key]).filter(Boolean)),
+        ] as string[];
         const isColor = isColorAttribute(key);
 
         return (
           <div key={key}>
-            <p className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: "#6B6052" }}>
+            <p className="text-xs font-bold uppercase tracking-wider mb-2.5 text-muted-foreground">
               {key}
             </p>
             <div className="flex gap-2 flex-wrap">
@@ -92,57 +94,71 @@ export default function SkuSelector({ skus, onSelect }: SkuSelectorProps) {
 
                 if (isColor) {
                   const hex = COLOR_MAP[val.toLowerCase()] ?? "#9CA3AF";
+                  const isLight = val.toLowerCase() === "white";
                   return (
-                    <button
+                    <Button
                       key={val}
+                      size="icon"
                       onClick={() => sku && select(sku.id)}
                       disabled={disabled}
                       title={val}
-                      className="w-9 h-9 rounded-full cursor-pointer transition-all duration-150
-                                 disabled:opacity-35 disabled:cursor-not-allowed hover:scale-110 active:scale-95"
-                      style={{
-                        background: hex,
-                        border: active ? "3px solid #FF2D78" : "3px solid transparent",
-                        boxShadow: active
-                          ? "0 0 0 2px #fff, 0 0 0 4px #FF2D78"
-                          : "0 0 0 2px #F0EDE8",
-                      }}
                       aria-label={val}
+                      className={cn(
+                        "rounded-full w-9 h-9 p-0 border-0 transition-all duration-150",
+                        "hover:scale-110 active:scale-95",
+                        "disabled:opacity-35 disabled:hover:scale-100",
+                        active && "ring-2 ring-offset-2 ring-primary"
+                      )}
+                      style={{ backgroundColor: hex }}
                     >
                       {active && (
                         <Check
                           size={14}
-                          className="mx-auto"
-                          style={{ color: val.toLowerCase() === "white" ? "#1A1208" : "#fff" }}
+                          style={{ color: isLight ? "#1A1208" : "#fff" }}
                         />
                       )}
-                    </button>
+                    </Button>
                   );
                 }
 
                 return (
-                  <button
+                  <Button
                     key={val}
                     onClick={() => sku && select(sku.id)}
                     disabled={disabled}
-                    className="px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer
-                               transition-all duration-150 hover:-translate-y-px active:scale-95
-                               disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                    style={
-                      active
-                        ? { background: "#FF2D78", color: "#fff", border: "2px solid #FF2D78", boxShadow: "0 2px 8px rgba(255,45,120,0.3)" }
-                        : { background: "#fff", color: "#1A1208", border: "2px solid #F0EDE8" }
-                    }
+                    variant={active ? "default" : "outline"}
+                    className={cn(
+                      "rounded-xl text-sm font-semibold transition-all duration-150",
+                      "hover:-translate-y-px active:scale-95",
+                      "disabled:opacity-35 disabled:hover:translate-y-0"
+                    )}
                   >
-                    {active && <Check size={12} className="inline mr-1" />}
+                    {active && <Check size={12} className="mr-1" />}
                     {val}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
           </div>
         );
       })}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {attributeKeys.length === 0 ? renderNoAttributeSkus() : renderAttributeGroups()}
+
+      {selectedSku && (
+        <div className="flex items-center gap-3 pt-1">
+          <span className="text-primary font-bold text-lg">
+            {selectedSku.currency} {selectedSku.price_amount.toFixed(2)}
+          </span>
+          <Badge variant={selectedSku.is_active ? "default" : "secondary"}>
+            {selectedSku.is_active ? "In Stock" : "Out of Stock"}
+          </Badge>
+        </div>
+      )}
     </div>
   );
 }
