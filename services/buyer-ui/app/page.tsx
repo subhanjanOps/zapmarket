@@ -4,6 +4,7 @@ import CategoryGrid from "@/components/CategoryGrid";
 import ProductCard from "@/components/ProductCard";
 import BlogCard from "@/components/BlogCard";
 import GlossaryEntry from "@/components/GlossaryEntry";
+import AnimateIn from "@/components/AnimateIn";
 import { getAllPosts, getAllTerms } from "@/lib/mdx";
 import Link from "next/link";
 import { publicImageUrl } from "@/lib/images";
@@ -50,7 +51,7 @@ async function fetchNewArrivals() {
           const imgs: { url: string; position: number }[] = id.data ?? [];
           if (imgs.length > 0) {
             imgs.sort((a, b) => a.position - b.position);
-            p.images = [{ url: publicImageUrl(imgs[0].url) }];
+            p.images = imgs.map((img) => ({ url: publicImageUrl(img.url) }));
           }
         } catch { /* keep placeholder */ }
       })
@@ -61,7 +62,7 @@ async function fetchNewArrivals() {
 
 function SectionHeader({ title, href, label }: { title: string; href: string; label: string }) {
   return (
-    <div className="flex items-center justify-between mb-5">
+    <div className="flex items-center justify-between mb-6">
       <h2
         className="text-xl font-extrabold"
         style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}
@@ -70,11 +71,23 @@ function SectionHeader({ title, href, label }: { title: string; href: string; la
       </h2>
       <Link
         href={href}
-        className="text-sm font-semibold transition-colors hover:opacity-70"
+        className="text-sm font-semibold transition-all duration-150 hover:gap-2 hover:opacity-80 flex items-center gap-1"
         style={{ color: "#FF2D78" }}
       >
         {label} →
       </Link>
+    </div>
+  );
+}
+
+function ProductGrid({ products }: { products: Record<string, unknown>[] }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {products.map((p, i) => (
+        <AnimateIn key={p.id as string} animation="scale-in" delay={i * 50}>
+          <ProductCard product={p as { id: string; name: string; price_amount?: number; currency?: string; images?: { url: string }[] }} />
+        </AnimateIn>
+      ))}
     </div>
   );
 }
@@ -95,41 +108,49 @@ export default async function HomePage() {
       <CategoryGrid categories={categories} />
 
       {newArrivals.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 py-8">
-          <SectionHeader title="Today's Deals" href="/deals/summer-sale" label="See all deals" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {newArrivals.slice(0, 4).map((p: Record<string, unknown>) => (
-              <ProductCard key={p.id as string} product={p as { id: string; name: string; price_amount?: number; currency?: string; images?: { url: string }[] }} />
-            ))}
-          </div>
+        <section className="max-w-7xl mx-auto px-4 py-10">
+          <AnimateIn animation="slide-left">
+            <SectionHeader title="Today's Deals" href="/deals/summer-sale" label="See all deals" />
+          </AnimateIn>
+          <ProductGrid products={newArrivals.slice(0, 4)} />
         </section>
       )}
 
       {newArrivals.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 py-8">
-          <SectionHeader title="New Arrivals" href="/products?sort_by=created_at&sort_order=desc" label="See all" />
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {newArrivals.map((p: Record<string, unknown>) => (
-              <ProductCard key={p.id as string} product={p as { id: string; name: string; price_amount?: number; currency?: string; images?: { url: string }[] }} />
-            ))}
-          </div>
+        <section className="max-w-7xl mx-auto px-4 py-10">
+          <AnimateIn animation="slide-left">
+            <SectionHeader title="New Arrivals" href="/products?sort_by=created_at&sort_order=desc" label="See all" />
+          </AnimateIn>
+          <ProductGrid products={newArrivals} />
         </section>
       )}
 
       {posts.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 py-8">
-          <SectionHeader title="From the blog" href="/blog" label="All posts" />
+        <section className="max-w-7xl mx-auto px-4 py-10">
+          <AnimateIn animation="slide-left">
+            <SectionHeader title="From the blog" href="/blog" label="All posts" />
+          </AnimateIn>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {posts.map((p) => <BlogCard key={p.slug} post={p} />)}
+            {posts.map((p, i) => (
+              <AnimateIn key={p.slug} animation="fade-up" delay={i * 80}>
+                <BlogCard post={p} />
+              </AnimateIn>
+            ))}
           </div>
         </section>
       )}
 
       {featuredTerms.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 py-8">
-          <SectionHeader title="Browse the glossary" href="/glossary" label="Full glossary" />
+        <section className="max-w-7xl mx-auto px-4 py-10">
+          <AnimateIn animation="slide-left">
+            <SectionHeader title="Browse the glossary" href="/glossary" label="Full glossary" />
+          </AnimateIn>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-            {featuredTerms.map((t) => <GlossaryEntry key={t.slug} term={t} />)}
+            {featuredTerms.map((t, i) => (
+              <AnimateIn key={t.slug} animation="scale-in" delay={i * 40}>
+                <GlossaryEntry term={t} />
+              </AnimateIn>
+            ))}
           </div>
         </section>
       )}

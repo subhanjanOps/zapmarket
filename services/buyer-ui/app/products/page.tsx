@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import ProductCard from "@/components/ProductCard";
 import Paginator from "@/components/Paginator";
+import AnimateIn from "@/components/AnimateIn";
 import Link from "next/link";
 import { publicImageUrl } from "@/lib/images";
 
@@ -32,8 +33,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const total: number = productsRes.total ?? productsRes.pagination?.total ?? products.length;
   const categories: { id: string; name: string }[] = categoriesRes.data ?? categoriesRes ?? [];
 
-  // Fetch images for all products in parallel
-  const imagesMap: Record<string, string> = {};
+  // Fetch ALL images for each product (enables card slider)
+  const imagesMap: Record<string, { url: string }[]> = {};
   await Promise.all(
     products.map(async (p) => {
       try {
@@ -43,7 +44,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         const imgs: { url: string; position: number }[] = d.data ?? [];
         if (imgs.length > 0) {
           imgs.sort((a, b) => a.position - b.position);
-          imagesMap[p.id as string] = publicImageUrl(imgs[0].url);
+          imagesMap[p.id as string] = imgs.map((img) => ({ url: publicImageUrl(img.url) }));
         }
       } catch { /* keep placeholder */ }
     })
@@ -51,56 +52,97 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
   const baseUrl = `/products${sp.category_id ? `?category_id=${sp.category_id}` : ""}`;
 
+  const SORT_OPTIONS = [
+    ["created_at", "desc", "Newest"],
+    ["price_amount", "asc", "Price: Low to High"],
+    ["price_amount", "desc", "Price: High to Low"],
+  ] as const;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
-      <aside className="hidden md:block w-56 shrink-0">
-        <h3 className="font-semibold mb-3">Categories</h3>
-        <ul className="space-y-1 text-sm">
-          <li><Link href="/products" className="text-gray-700 hover:text-[#FF2D78]">All</Link></li>
-          {categories.map((c) => (
-            <li key={c.id}>
-              <Link href={`/products?category_id=${c.id}`}
-                className={`hover:text-[#FF2D78] ${sp.category_id === c.id ? "text-[#FF2D78] font-semibold" : "text-gray-700"}`}>
-                {c.name}
+    <div className="max-w-7xl mx-auto px-4 py-8 flex gap-7">
+      {/* Sidebar */}
+      <aside className="hidden md:block w-52 shrink-0">
+        <div
+          className="rounded-2xl p-5 sticky top-24"
+          style={{ background: "#fff", border: "1px solid #F0EDE8", boxShadow: "0 1px 6px rgba(26,18,8,0.04)" }}
+        >
+          <h3 className="font-extrabold text-sm mb-3" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>
+            Categories
+          </h3>
+          <ul className="space-y-1.5 text-sm">
+            <li>
+              <Link
+                href="/products"
+                className={`block px-3 py-1.5 rounded-lg transition-all duration-150 font-semibold hover:text-[#FF2D78] ${!sp.category_id ? "text-[#FF2D78] bg-[#FF2D7808]" : "text-gray-600"}`}
+              >
+                All
               </Link>
             </li>
-          ))}
-        </ul>
-        <div className="mt-6">
-          <h3 className="font-semibold mb-3">Sort</h3>
-          <ul className="space-y-1 text-sm">
-            {[["created_at", "desc", "Newest"], ["price_amount", "asc", "Price: Low to High"], ["price_amount", "desc", "Price: High to Low"]].map(([sb, so, label]) => (
-              <li key={label}>
-                <Link href={`/products?sort_by=${sb}&sort_order=${so}${sp.category_id ? `&category_id=${sp.category_id}` : ""}`}
-                  className={`hover:text-[#FF2D78] ${sp.sort_by === sb && sp.sort_order === so ? "text-[#FF2D78] font-semibold" : "text-gray-700"}`}>
-                  {label}
+            {categories.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/products?category_id=${c.id}`}
+                  className={`block px-3 py-1.5 rounded-lg transition-all duration-150 hover:text-[#FF2D78] ${sp.category_id === c.id ? "text-[#FF2D78] font-semibold bg-[#FF2D7808]" : "text-gray-600"}`}
+                >
+                  {c.name}
                 </Link>
               </li>
             ))}
           </ul>
+
+          <div style={{ borderTop: "1px solid #F0EDE8" }} className="mt-5 pt-5">
+            <h3 className="font-extrabold text-sm mb-3" style={{ fontFamily: "var(--font-syne)", color: "#1A1208" }}>
+              Sort by
+            </h3>
+            <ul className="space-y-1.5 text-sm">
+              {SORT_OPTIONS.map(([sb, so, label]) => (
+                <li key={label}>
+                  <Link
+                    href={`/products?sort_by=${sb}&sort_order=${so}${sp.category_id ? `&category_id=${sp.category_id}` : ""}`}
+                    className={`block px-3 py-1.5 rounded-lg transition-all duration-150 hover:text-[#FF2D78] ${sp.sort_by === sb && sp.sort_order === so ? "text-[#FF2D78] font-semibold bg-[#FF2D7808]" : "text-gray-600"}`}
+                  >
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </aside>
 
-      <div className="flex-1">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-gray-600">{total} products</p>
-          {sp.search && <p className="text-sm">Results for <strong>&ldquo;{sp.search}&rdquo;</strong></p>}
+      {/* Main content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-sm font-medium" style={{ color: "#6B6052" }}>
+            {total} product{total !== 1 ? "s" : ""}
+          </p>
+          {sp.search && (
+            <p className="text-sm" style={{ color: "#1A1208" }}>
+              Results for <strong>&ldquo;{sp.search}&rdquo;</strong>
+            </p>
+          )}
         </div>
+
         {products.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">No products found.</div>
+          <div className="text-center py-20" style={{ color: "#9CA3AF" }}>
+            <p className="text-lg font-semibold mb-2" style={{ color: "#1A1208" }}>No products found</p>
+            <p className="text-sm">Try a different category or search term.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {products.map((p) => (
-              <ProductCard
-                key={p.id as string}
-                product={{
-                  ...(p as { id: string; name: string; price_amount?: number; currency?: string }),
-                  images: imagesMap[p.id as string] ? [{ url: imagesMap[p.id as string] }] : undefined,
-                }}
-              />
+            {products.map((p, i) => (
+              <AnimateIn key={p.id as string} animation="scale-in" delay={Math.min(i * 40, 300)}>
+                <ProductCard
+                  product={{
+                    ...(p as { id: string; name: string; price_amount?: number; currency?: string; sku_count?: number }),
+                    images: imagesMap[p.id as string] ?? undefined,
+                  }}
+                />
+              </AnimateIn>
             ))}
           </div>
         )}
+
         <Paginator page={page} total={total} limit={PAGE_SIZE} baseUrl={baseUrl} />
       </div>
     </div>
