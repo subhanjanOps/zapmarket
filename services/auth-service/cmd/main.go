@@ -194,7 +194,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:            fmt.Sprintf(":%d", cfg.HTTPPort),
-		Handler:         httpx.LimitBody(httpx.MaxBodyBytes)(mux),
+		Handler:         m.Middleware()(httpx.LimitBody(httpx.MaxBodyBytes)(mux)),
 		ReadTimeout:     15 * time.Second,
 		WriteTimeout:    15 * time.Second,
 		IdleTimeout:     60 * time.Second,
