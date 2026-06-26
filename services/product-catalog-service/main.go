@@ -137,6 +137,7 @@ func main() {
 
 	// ── HTTP router ────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
+	r.Use(m.Middleware())
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.RequestID)
