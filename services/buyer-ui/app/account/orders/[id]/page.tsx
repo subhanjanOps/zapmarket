@@ -108,7 +108,7 @@ export default async function OrderDetailPage({
           style={{
             background: isCancelled
               ? "#e0245f"
-              : "linear-gradient(90deg, #FF2D78, #00736A)",
+              : "linear-gradient(90deg, #E91E8C, #00736A)",
           }}
         />
         <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
@@ -140,15 +140,15 @@ export default async function OrderDetailPage({
                     <div
                       className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all"
                       style={{
-                        background: i <= stepIndex ? "#FF2D78" : "#F0EDE8",
-                        color: i <= stepIndex ? "#fff" : "#9CA3AF",
+                        background: i <= stepIndex ? "#E91E8C" : "#EDE9E3",
+                        color: i <= stepIndex ? "#fff" : "#B8A898",
                       }}
                     >
                       {i <= stepIndex ? <CheckCircle2 size={14} /> : i + 1}
                     </div>
                     <p
                       className="text-[9px] font-semibold mt-1 uppercase tracking-wider"
-                      style={{ color: i <= stepIndex ? "#FF2D78" : "#9CA3AF" }}
+                      style={{ color: i <= stepIndex ? "#E91E8C" : "#B8A898" }}
                     >
                       {step}
                     </p>
@@ -157,7 +157,7 @@ export default async function OrderDetailPage({
                     <div
                       className="flex-1 h-0.5 mx-1 mb-4 rounded-full transition-all"
                       style={{
-                        background: i < stepIndex ? "#FF2D78" : "#F0EDE8",
+                        background: i < stepIndex ? "#E91E8C" : "#EDE9E3",
                       }}
                     />
                   )}
@@ -172,7 +172,7 @@ export default async function OrderDetailPage({
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-bold">
-            <Package size={16} className="text-[#FF2D78]" />
+            <Package size={16} className="text-[#E91E8C]" />
             Items
           </CardTitle>
         </CardHeader>
@@ -219,7 +219,7 @@ export default async function OrderDetailPage({
           <p className="font-bold text-foreground">Total</p>
           <p
             className="text-xl font-extrabold tabular-nums"
-            style={{ color: "#FF2D78", fontFamily: "var(--font-syne)" }}
+            style={{ color: "#E91E8C", fontFamily: "var(--font-syne)" }}
           >
             ₹{((order.total_amount as number ?? 0) / 100).toFixed(2)}
           </p>

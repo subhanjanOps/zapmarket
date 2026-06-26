@@ -1,34 +1,54 @@
-import { Truck, Shield, RefreshCw, Headphones, Award, CreditCard } from "lucide-react";
+"use client";
+
+import { motion } from "framer-motion";
+import { Truck, RefreshCw, ShieldCheck, Headphones } from "lucide-react";
 
 const TRUST_ITEMS = [
-  { icon: Truck,       title: "Free Delivery",      desc: "On orders above ₹499" },
-  { icon: Shield,      title: "Secure Payments",    desc: "256-bit SSL encryption" },
-  { icon: RefreshCw,   title: "Easy Returns",       desc: "15-day hassle-free" },
-  { icon: Headphones,  title: "24/7 Support",       desc: "Always here to help" },
-  { icon: Award,       title: "Authentic Products", desc: "100% verified sellers" },
-  { icon: CreditCard,  title: "EMI Available",      desc: "No-cost EMI on ₹3000+" },
+  { icon: Truck,        title: "Free Delivery",    sub: "On orders above ₹499" },
+  { icon: RefreshCw,    title: "Easy Returns",     sub: "30-day hassle-free" },
+  { icon: ShieldCheck,  title: "Secure Payments",  sub: "256-bit SSL encrypted" },
+  { icon: Headphones,   title: "24/7 Support",     sub: "Always here to help" },
 ];
+
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden:  { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] as const } },
+};
 
 export function TrustBanner() {
   return (
-    <section className="bg-[#0F0A04] py-8 sm:py-10">
-      <div className="container-zap">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-y lg:divide-y-0 divide-white/8 border border-white/8 rounded-2xl overflow-hidden">
-          {TRUST_ITEMS.map(({ icon: Icon, title, desc }) => (
-            <div
+    <section className="bg-white border-y border-[#E8E8E8] py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div
+          className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-[#E8E8E8]"
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-60px" }}
+        >
+          {TRUST_ITEMS.map(({ icon: Icon, title, sub }) => (
+            <motion.div
               key={title}
-              className="flex flex-col items-center text-center px-4 py-6 gap-3 hover:bg-white/5 transition-colors"
+              variants={itemVariants}
+              className="flex flex-col items-center text-center px-6 py-4 gap-2"
             >
-              <div className="h-10 w-10 rounded-xl bg-[#E91E8C]/10 flex items-center justify-center shrink-0">
-                <Icon className="h-5 w-5 text-[#E91E8C]" />
-              </div>
+              <Icon className="h-6 w-6 text-[#E91E8C]" strokeWidth={1.75} />
               <div>
-                <p className="text-white font-semibold text-sm leading-tight">{title}</p>
-                <p className="text-white/40 text-xs mt-0.5">{desc}</p>
+                <p className="text-sm font-semibold text-[#111111] leading-snug">{title}</p>
+                <p className="text-xs text-[#555555] mt-0.5">{sub}</p>
               </div>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
     </section>
   );

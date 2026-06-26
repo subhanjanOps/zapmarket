@@ -1,6 +1,12 @@
 /** @type {import('next-sitemap').IConfig} */
 module.exports = {
-  siteUrl: process.env.SITE_URL ?? "https://zapmarket.com",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://zapmarket.in",
   generateRobotsTxt: true,
-  exclude: ["/checkout", "/account/*", "/api/*"],
+  exclude: ["/api/*", "/account/*", "/checkout", "/cart"],
+  robotsTxtOptions: {
+    policies: [
+      { userAgent: "*", allow: "/" },
+      { userAgent: "*", disallow: ["/api/", "/account/", "/checkout", "/cart"] },
+    ],
+  },
 };

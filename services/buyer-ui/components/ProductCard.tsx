@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
-import { Heart, ShoppingCart, Star, Truck, Zap, Eye, BadgeCheck } from "lucide-react";
+import { motion } from "framer-motion";
+import { Heart, ShoppingCart, Star, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ProductImage {
@@ -48,6 +48,12 @@ export default function ProductCard({ product, images, priority = false }: Produ
   const [hovered, setHovered] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (hoverTimer.current) clearInterval(hoverTimer.current);
+    };
+  }, []);
+
   const allImages = images?.length ? images : (product.images ?? []);
   const hasMultiple = allImages.length > 1;
 
@@ -77,65 +83,73 @@ export default function ProductCard({ product, images, priority = false }: Produ
 
   return (
     <motion.div
-      className="group bg-white rounded-2xl overflow-hidden shadow-[0_1px_3px_rgba(15,10,4,0.06),0_4px_12px_rgba(15,10,4,0.04)] hover:shadow-[0_8px_24px_rgba(15,10,4,0.12),0_2px_6px_rgba(15,10,4,0.06)] transition-shadow duration-300"
+      className={cn(
+        "bg-white border border-[#E8E8E8] rounded-lg overflow-hidden transition-shadow duration-300",
+        hovered
+          ? "shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+          : "shadow-sm"
+      )}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -3 }}
+      transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <Link href={`/products/${product.id}`} className="block">
-        {/* Image container */}
-        <div className="relative bg-[#F9F8F5] overflow-hidden" style={{ aspectRatio: "4/5" }}>
+        {/* Image area — square aspect ratio */}
+        <div className="relative bg-[#F6F6F6] overflow-hidden" style={{ aspectRatio: "1/1" }}>
           {allImages[0] ? (
             <Image
               src={allImages[imgIdx]?.url ?? allImages[0].url}
               alt={product.name}
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              className="object-cover transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
+              className={cn(
+                "object-contain transition-transform duration-300",
+                hovered ? "scale-[1.04]" : "scale-100"
+              )}
               priority={priority}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center">
-              <Zap className="h-12 w-12 text-[#EDE9E3]" />
+              <Zap className="h-10 w-10 text-[#D0D0D0]" />
             </div>
           )}
 
-          {/* Top badges */}
-          <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
+          {/* Top-left badges */}
+          <div className="absolute top-2 left-2 flex flex-col gap-1">
             {product.discount_percent && product.discount_percent > 0 && (
-              <span className="px-2 py-0.5 bg-[#E91E8C] text-white text-xs font-bold rounded-lg shadow-sm tabular-nums">
+              <span className="px-1.5 py-0.5 bg-[#E91E8C] text-white text-[10px] font-bold rounded-sm tabular-nums leading-none">
                 -{product.discount_percent}%
               </span>
             )}
             {product.is_new && (
-              <span className="px-2 py-0.5 bg-[#0F0A04] text-white text-xs font-bold rounded-lg">
+              <span className="px-1.5 py-0.5 bg-[#111111] text-white text-[10px] font-bold rounded-sm leading-none">
                 NEW
               </span>
             )}
           </div>
 
-          {/* Wishlist button */}
+          {/* Wishlist button — always visible */}
           <motion.button
             onClick={e => {
               e.preventDefault();
               setWishlist(w => !w);
             }}
-            className="absolute top-2.5 right-2.5 h-8 w-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-            whileTap={{ scale: 0.8 }}
+            className="absolute top-2 right-2 h-7 w-7 rounded-full bg-white border border-[#E8E8E8] flex items-center justify-center shadow-sm"
+            whileTap={{ scale: 0.9 }}
             aria-label={wishlist ? "Remove from wishlist" : "Add to wishlist"}
           >
             <Heart
               className={cn(
-                "h-4 w-4 transition-colors",
-                wishlist ? "fill-[#E91E8C] text-[#E91E8C]" : "text-[#7A6856]"
+                "h-3.5 w-3.5 transition-colors",
+                wishlist ? "fill-[#E91E8C] text-[#E91E8C]" : "text-[#999999]"
               )}
             />
           </motion.button>
 
           {/* Image indicator dots */}
           {hasMultiple && hovered && (
-            <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1">
               {allImages.slice(0, 5).map((_, i) => (
                 <button
                   key={i}
@@ -152,110 +166,74 @@ export default function ProductCard({ product, images, priority = false }: Produ
               ))}
             </div>
           )}
-
-          {/* Quick view overlay */}
-          <AnimatePresence>
-            {hovered && (
-              <motion.div
-                className="absolute bottom-0 left-0 right-0 p-2.5"
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 10, opacity: 0 }}
-                transition={{ duration: 0.18 }}
-              >
-                <div className="flex items-center justify-center gap-1.5 bg-white/95 backdrop-blur-sm rounded-xl py-2 px-3 shadow-sm">
-                  <Eye className="h-3.5 w-3.5 text-[#7A6856]" />
-                  <span className="text-xs font-semibold text-[#3D2E1A]">Quick view</span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* Card body */}
-        <div className="px-4 pt-3.5 pb-2">
-          {/* Brand + verified */}
-          <div className="flex items-center gap-1.5 mb-1">
-            {product.brand && (
-              <span className="text-xs font-bold text-[#E91E8C] tracking-wide uppercase leading-none">
-                {product.brand}
-              </span>
-            )}
-            {product.is_verified && (
-              <BadgeCheck className="h-3.5 w-3.5 text-[#12845F] shrink-0" />
-            )}
-            {product.category_name && (
-              <span className="text-xs text-[#B8A898] truncate leading-none">
-                {product.brand ? `· ${product.category_name}` : product.category_name}
-              </span>
-            )}
-          </div>
+        <div className="px-3 pt-3 pb-3.5">
+          {/* Category / Brand */}
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#999999] leading-none truncate">
+            {product.brand ?? product.category_name ?? ""}
+          </p>
 
-          {/* Name */}
-          <h3 className="text-sm font-semibold text-[#0F0A04] leading-snug line-clamp-2 mb-2">
+          {/* Product name */}
+          <h3 className="text-sm font-medium text-[#111111] line-clamp-2 leading-snug mt-1">
             {product.name}
           </h3>
 
           {/* Rating */}
           {product.rating !== undefined && (
-            <div className="flex items-center gap-1.5 mb-2">
-              <div className="flex items-center gap-0.5">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star
-                    key={i}
-                    className={cn(
-                      "h-3 w-3",
-                      i < Math.round(product.rating!)
-                        ? "fill-[#D97706] text-[#D97706]"
-                        : "text-[#EDE9E3] fill-[#EDE9E3]"
-                    )}
-                  />
-                ))}
-              </div>
+            <div className="flex items-center gap-1 mt-1.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star
+                  key={i}
+                  className={cn(
+                    "h-3 w-3",
+                    i < Math.round(product.rating!)
+                      ? "fill-[#D97706] text-[#D97706]"
+                      : "fill-[#E8E8E8] text-[#E8E8E8]"
+                  )}
+                />
+              ))}
               {product.review_count !== undefined && (
-                <span className="text-xs text-[#B8A898]">
+                <span className="text-[10px] text-[#999999] ml-0.5">
                   ({product.review_count.toLocaleString("en-IN")})
                 </span>
               )}
             </div>
           )}
 
-          {/* Price */}
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-base font-bold text-[#0F0A04] font-display tabular-nums">
+          {/* Price row */}
+          <div className="flex items-baseline gap-1.5 mt-2">
+            <span className="text-base font-bold text-[#111111] tabular-nums">
               {formatPrice(discountedPrice)}
             </span>
             {product.discount_percent && product.discount_percent > 0 && (
-              <span className="text-xs text-[#B8A898] line-through tabular-nums">
+              <span className="text-xs text-[#999999] line-through tabular-nums">
                 {formatPrice(resolvedPrice)}
               </span>
             )}
           </div>
 
           {/* Delivery */}
-          <div className="flex items-center gap-1.5">
+          <p className="mt-1 text-[11px] leading-none">
             {product.free_shipping ? (
-              <>
-                <Truck className="h-3 w-3 text-[#12845F]" />
-                <span className="text-xs text-[#12845F] font-medium">Free delivery</span>
-              </>
+              <span className="text-[#16A34A]">Free delivery</span>
             ) : (
-              <span className="text-xs text-[#B8A898]">Delivery by tomorrow</span>
+              <span className="text-[#999999]">Delivery charges apply</span>
             )}
-          </div>
+          </p>
+
+          {/* Add to cart button */}
+          <motion.button
+            onClick={e => e.preventDefault()}
+            className="w-full h-8 mt-2.5 border border-[#E8E8E8] rounded-md text-xs font-medium text-[#111111] hover:bg-[#111111] hover:text-white hover:border-[#111111] transition-all duration-200 flex items-center justify-center gap-1.5"
+            whileTap={{ scale: 0.97 }}
+          >
+            <ShoppingCart className="h-3.5 w-3.5" />
+            + Add to cart
+          </motion.button>
         </div>
       </Link>
-
-      {/* Add to cart */}
-      <div className="px-4 pb-4 pt-2">
-        <motion.button
-          className="w-full flex items-center justify-center gap-2 h-9 bg-[#F9F8F5] hover:bg-[#E91E8C] text-[#3D2E1A] hover:text-white text-xs font-semibold rounded-xl transition-all group/btn"
-          whileTap={{ scale: 0.97 }}
-        >
-          <ShoppingCart className="h-3.5 w-3.5 transition-transform group-hover/btn:scale-110" />
-          Add to cart
-        </motion.button>
-      </div>
     </motion.div>
   );
 }

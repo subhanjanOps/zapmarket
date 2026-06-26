@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const GW = process.env.GATEWAY_URL ?? process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+import { GW } from "@/lib/gateway";
 
 async function proxy(req: NextRequest, pathSegments: string[]) {
   // Reject path traversal attempts.
@@ -8,10 +7,34 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
 
+  const joinedPath = "/" + pathSegments.join("/");
+  const ALLOWED_PREFIXES = [
+    "/v1/orders",
+    "/v1/products",
+    "/v1/skus",
+    "/v1/categories",
+    "/v1/campaigns",
+    "/v1/users",
+    "/v1/cart",
+    "/v1/images",
+    "/v1/reviews",
+    "/v1/wishlist",
+    "/v1/search",
+  ];
+  if (!ALLOWED_PREFIXES.some(p => joinedPath.startsWith(p))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const token = req.cookies.get("buyer_token")?.value;
   const upstreamUrl = `${GW}/${pathSegments.join("/")}${req.nextUrl.search}`;
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const FORWARDED_HEADERS = ["idempotency-key", "x-request-id", "accept-language", "x-correlation-id"];
+  for (const h of FORWARDED_HEADERS) {
+    const v = req.headers.get(h);
+    if (v) headers[h] = v;
+  }
   const ct = req.headers.get("content-type") ?? "";
   const hasBody = req.method !== "GET" && req.method !== "HEAD";
   let body: BodyInit | undefined;

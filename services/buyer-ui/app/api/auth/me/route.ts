@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const GW = process.env.GATEWAY_URL ?? process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+import { GW } from "@/lib/gateway";
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get("buyer_token")?.value;

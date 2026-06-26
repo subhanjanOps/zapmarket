@@ -8,36 +8,34 @@
 @theme {
   /* Brand */
   --color-zap:         #E91E8C;
-  --color-zap-light:   #FDE8F4;
-  --color-zap-dark:    #B5166E;
-  --color-coral:       #FF5A35;
-  --color-coral-light: #FFF0EC;
+  --color-zap-dark:    #C2187A;
+  --color-zap-light:   #FCE7F3;
 
   /* Neutrals */
-  --color-ink:         #0F0A04;
-  --color-ink-700:     #3D2E1A;
-  --color-ink-500:     #7A6856;
-  --color-ink-300:     #B8A898;
-  --color-ink-100:     #EDE9E3;
-  --color-sand:        #F3F0EB;
-  --color-surface:     #F9F8F5;
+  --color-ink:         #111111;
+  --color-ink-600:     #333333;
+  --color-ink-400:     #555555;
+  --color-ink-200:     #999999;
+  --color-ink-100:     #E8E8E8;
+  --color-surface:     #F6F6F6;
+  --color-alt:         #F0F0F0;
 
   /* Semantic */
-  --color-success:     #12845F;
+  --color-success:     #16A34A;
   --color-warning:     #D97706;
   --color-error:       #DC2626;
 
   /* Typography */
-  --font-display: var(--font-syne), system-ui, sans-serif;
-  --font-body:    var(--font-jakarta), system-ui, sans-serif;
+  --font-display: var(--font-roboto), system-ui, sans-serif;
+  --font-body:    var(--font-roboto), system-ui, sans-serif;
 }
 
 /* ── Body ──────────────────────────────────────────────────────────────── */
 
 body {
-  font-family: var(--font-body);
-  background: #F9F8F5;
-  color: #0F0A04;
+  font-family: var(--font-roboto), system-ui, sans-serif;
+  background: #FFFFFF;
+  color: #111111;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

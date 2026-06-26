@@ -1,4 +1,16 @@
 import type { Metadata } from "next";
+
+function toProductCardProps(p: Record<string, unknown>) {
+  return {
+    id: p.id as string,
+    name: p.name as string,
+    price_amount: p.price_amount as number | undefined,
+    images: p.images as { url: string }[] | undefined,
+    sku_count: p.sku_count as number | undefined,
+    category_name: p.category_name as string | undefined,
+    brand: p.brand as string | undefined,
+  };
+}
 import { HeroSection } from "@/components/HeroSection";
 import { FeaturedCategories } from "@/components/FeaturedCategories";
 import ProductCard from "@/components/ProductCard";
@@ -91,14 +103,13 @@ export default async function HomePage() {
             subtitle="Handpicked savings, updated daily"
             href="/products"
             viewAllLabel="All deals"
-            accent
             className="mb-6 sm:mb-8"
           />
           <MotionWrapper stagger className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {deals.slice(0, 4).map((p, i) => (
               <MotionChild key={p.id as string}>
                 <ProductCard
-                  product={p as unknown as Parameters<typeof ProductCard>[0]["product"]}
+                  product={toProductCardProps(p)}
                   priority={i < 2}
                 />
               </MotionChild>
@@ -126,7 +137,7 @@ export default async function HomePage() {
             {newArrivals.slice(0, 8).map((p, i) => (
               <MotionChild key={p.id as string}>
                 <ProductCard
-                  product={p as unknown as Parameters<typeof ProductCard>[0]["product"]}
+                  product={toProductCardProps(p)}
                   priority={i < 4}
                 />
               </MotionChild>

@@ -1,16 +1,25 @@
 export function ProductCardSkeleton() {
   return (
-    <div className="bg-white rounded-2xl overflow-hidden shadow-[0_1px_3px_rgba(15,10,4,0.06)]">
-      <div className="skeleton" style={{ aspectRatio: "4/5" }} />
-      <div className="p-4 space-y-2.5">
-        <div className="skeleton h-3 w-1/3 rounded-full" />
-        <div className="skeleton h-4 w-4/5 rounded-full" />
-        <div className="skeleton h-4 w-2/3 rounded-full" />
-        <div className="flex items-center gap-2 pt-1">
-          <div className="skeleton h-5 w-16 rounded-full" />
-          <div className="skeleton h-4 w-12 rounded-full" />
-        </div>
-        <div className="skeleton h-9 w-full rounded-xl mt-1" />
+    <div className="bg-white border border-[#E8E8E8] rounded-lg overflow-hidden">
+      {/* Image area */}
+      <div className="aspect-square bg-[#F6F6F6] animate-pulse" />
+
+      {/* Body */}
+      <div className="px-3 pt-3 pb-3.5">
+        {/* Category */}
+        <div className="h-3 w-16 bg-[#F0F0F0] rounded animate-pulse" />
+
+        {/* Name line 1 */}
+        <div className="h-4 w-full bg-[#F0F0F0] rounded animate-pulse mt-2" />
+
+        {/* Name line 2 */}
+        <div className="h-4 w-2/3 bg-[#F0F0F0] rounded animate-pulse mt-1.5" />
+
+        {/* Price */}
+        <div className="h-5 w-20 bg-[#F0F0F0] rounded animate-pulse mt-2.5" />
+
+        {/* Button */}
+        <div className="h-8 w-full bg-[#F0F0F0] rounded-md animate-pulse mt-2.5" />
       </div>
     </div>
   );

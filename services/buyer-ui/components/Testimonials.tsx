@@ -1,80 +1,96 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Star } from "lucide-react";
-import { SectionHeader } from "@/components/SectionHeader";
 
 const TESTIMONIALS = [
   {
     quote:
-      "Received my order in 2 days! Quality is exactly as described. Will definitely shop again.",
-    author: "Priya M.",
+      "Ordered a laptop for my daughter and it arrived the very next day. The seller was responsive and packaging was excellent. Will definitely shop again.",
+    author: "Priya Sharma",
     city: "Mumbai",
-    rating: 5,
-    initials: "PM",
+    initials: "PS",
   },
   {
     quote:
-      "Best prices I've found anywhere. The seller response was instant and packaging was immaculate.",
-    author: "Arjun K.",
-    city: "Bengaluru",
-    rating: 5,
-    initials: "AK",
-  },
-  {
-    quote:
-      "Returned a product hassle-free. Customer support resolved my issue in under an hour.",
-    author: "Sneha R.",
+      "Returns process was so smooth. I returned a defective phone and got my refund in 3 days. Customer support was great throughout.",
+    author: "Rahul Verma",
     city: "Delhi",
-    rating: 5,
-    initials: "SR",
+    initials: "RV",
+  },
+  {
+    quote:
+      "Found exactly what I was looking for at a price 30% cheaper than other sites. ZapMarket has become my go-to shopping destination.",
+    author: "Anjali Patel",
+    city: "Bangalore",
+    initials: "AP",
   },
 ];
 
+const cardVariants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: (delay: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35, delay, ease: [0.25, 0.1, 0.25, 1] as const },
+  }),
+};
+
 export function Testimonials() {
   return (
-    <section className="bg-[#F3F0EB] py-10 sm:py-14">
-      <div className="container-zap">
-        <SectionHeader
-          title="What our customers say"
-          subtitle="Over 2 million verified reviews"
-        />
+    <section className="bg-[#F6F6F6] py-14">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Section heading */}
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-[#111111] tracking-tight">
+            What our customers say
+          </h2>
+          <p className="text-sm text-[#555555] mt-2">
+            Trusted by over 2 million shoppers across India
+          </p>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-8">
+        {/* Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-10">
           {TESTIMONIALS.map((t, i) => (
             <motion.div
               key={t.author}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              custom={i * 0.1}
+              variants={cardVariants}
+              initial="hidden"
+              whileInView="visible"
               viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.4, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
-              className="bg-white rounded-2xl p-6 shadow-[0_1px_3px_rgba(15,10,4,0.06),0_4px_12px_rgba(15,10,4,0.04)]"
+              whileHover={{ y: -4 }}
+              className="bg-white border border-[#E8E8E8] rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow duration-200"
             >
+              {/* Quote icon */}
+              <div className="text-[#E91E8C] text-4xl font-serif leading-none select-none">
+                &ldquo;
+              </div>
+
+              {/* Review text */}
+              <p className="text-sm text-[#555555] leading-relaxed italic mt-2">
+                {t.quote}
+              </p>
+
               {/* Stars */}
-              <div className="flex items-center gap-0.5">
-                {Array.from({ length: t.rating }).map((_, si) => (
-                  <Star
-                    key={si}
-                    className="h-4 w-4 fill-[#D97706] text-[#D97706]"
-                  />
+              <div className="flex items-center gap-0.5 mt-3">
+                {Array.from({ length: 5 }).map((_, si) => (
+                  <span key={si} className="text-[#F59E0B] text-xs">
+                    &#9733;
+                  </span>
                 ))}
               </div>
 
-              {/* Quote */}
-              <p className="text-sm text-[#3D2E1A] leading-relaxed italic mt-3 mb-4">
-                &ldquo;{t.quote}&rdquo;
-              </p>
-
-              {/* Author */}
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[#E91E8C] to-[#FF5A35] flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {/* Author row */}
+              <div className="flex items-center gap-3 mt-4">
+                <div className="h-7 w-7 rounded-full bg-[#111111] flex items-center justify-center text-white text-xs font-bold shrink-0">
                   {t.initials}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-[#0F0A04]">
+                  <p className="text-sm font-semibold text-[#111111] leading-tight">
                     {t.author}
                   </p>
-                  <p className="text-xs text-[#8B7355]">{t.city}</p>
+                  <p className="text-xs text-[#999999]">{t.city}</p>
                 </div>
               </div>
             </motion.div>

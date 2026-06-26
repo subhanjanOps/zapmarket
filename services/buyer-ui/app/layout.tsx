@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Syne, Plus_Jakarta_Sans, Geist } from "next/font/google";
+import { Roboto } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
@@ -7,19 +7,13 @@ import Footer from "@/components/Footer";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
 import { decodeJwtUser } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Toaster } from "sonner";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
-
-const syne = Syne({
+const roboto = Roboto({
   subsets: ["latin"],
-  variable: "--font-syne",
-  weight: ["400", "600", "700", "800"],
-});
-
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  variable: "--font-jakarta",
-  weight: ["400", "500", "600", "700"],
+  variable: "--font-roboto",
+  weight: ["300", "400", "500", "700", "900"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -34,12 +28,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const user = raw ? { name: raw.name ?? "", email: raw.email ?? "" } : null;
 
   return (
-    <html lang="en" className={cn(syne.variable, jakarta.variable, "font-sans", geist.variable)}>
-      <body className="min-h-screen flex flex-col bg-[#F9F8F5] text-[#0F0A04]">
+    <html lang="en" className={roboto.variable}>
+      <body className="min-h-screen flex flex-col" style={{ fontFamily: "var(--font-roboto), system-ui, sans-serif" }}>
         <AnnouncementBar />
         <Navbar user={user} />
         <main className="flex-1">{children}</main>
         <Footer />
+        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   );

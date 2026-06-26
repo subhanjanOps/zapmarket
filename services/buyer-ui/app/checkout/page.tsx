@@ -6,9 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  MapPin,
-  CreditCard,
   Wallet,
+  CreditCard,
   Lock,
   AlertCircle,
   Loader2,
@@ -38,10 +37,9 @@ const FIELD_AUTOCOMPLETE: Record<string, string> = {
 };
 
 const STEPS = [
-  { id: 1, label: "Bag" },
-  { id: 2, label: "Shipping" },
-  { id: 3, label: "Payment" },
-  { id: 4, label: "Done" },
+  { id: 1, label: "Address" },
+  { id: 2, label: "Payment" },
+  { id: 3, label: "Done" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -50,22 +48,21 @@ const STEPS = [
 
 function StepIndicator({ current }: { current: number }) {
   return (
-    <div className="flex items-center gap-0 mb-8">
+    <div className="flex items-start gap-0 mb-8">
       {STEPS.map((step, idx) => {
         const isActive = step.id === current;
         const isDone = step.id < current;
         return (
           <div key={step.id} className="flex items-center">
-            {/* dot + label */}
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-center">
               <div
                 className={cn(
                   "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all",
                   isDone
-                    ? "bg-[#E91E8C] text-white"
+                    ? "bg-[#111111] text-white"
                     : isActive
-                    ? "bg-[#E91E8C] text-white ring-4 ring-[#E91E8C]/20"
-                    : "border-2 border-[#EDE9E3] text-[#B8A898] bg-white"
+                    ? "bg-[#E91E8C] text-white"
+                    : "bg-[#F0F0F0] text-[#999999]"
                 )}
               >
                 {isDone ? (
@@ -84,19 +81,18 @@ function StepIndicator({ current }: { current: number }) {
               </div>
               <span
                 className={cn(
-                  "text-[10px] font-medium whitespace-nowrap",
-                  isActive ? "text-[#E91E8C]" : isDone ? "text-[#3D2E1A]" : "text-[#B8A898]"
+                  "text-xs mt-1 whitespace-nowrap",
+                  isActive || isDone ? "text-[#555555]" : "text-[#999999]"
                 )}
               >
                 {step.label}
               </span>
             </div>
-            {/* connector line */}
             {idx < STEPS.length - 1 && (
               <div
                 className={cn(
-                  "h-px w-10 sm:w-16 mx-1 mb-4 transition-colors",
-                  step.id < current ? "bg-[#E91E8C]" : "bg-[#EDE9E3]"
+                  "h-px w-12 sm:w-20 mx-1 mb-4 transition-colors",
+                  step.id < current ? "bg-[#111111]" : "bg-[#E8E8E8]"
                 )}
               />
             )}
@@ -114,6 +110,7 @@ function FormInput({
   value,
   onChange,
   placeholder,
+  required = false,
 }: {
   id: string;
   type?: string;
@@ -121,6 +118,7 @@ function FormInput({
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  required?: boolean;
 }) {
   return (
     <input
@@ -130,8 +128,10 @@ function FormInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full h-11 border border-[#EDE9E3] rounded-xl px-4 text-sm text-[#0F0A04] bg-white
-        focus:outline-none focus:border-[#E91E8C] transition-colors placeholder:text-[#B8A898]"
+      required={required}
+      aria-required={required ? "true" : undefined}
+      className="w-full h-10 border border-[#E8E8E8] rounded-md px-3 text-sm text-[#111111] bg-white
+        focus:outline-none focus:border-[#111111] transition-colors placeholder:text-[#999999]"
     />
   );
 }
@@ -153,6 +153,7 @@ export default function CheckoutPage() {
   });
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "upi">("cod");
   const [promoCode, setPromoCode] = useState("");
+  const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -172,8 +173,16 @@ export default function CheckoutPage() {
     setLoading(true);
     try {
       const body = {
+        idempotency_key: idempotencyKey.current,
         items: items.map((i) => ({ sku_id: i.skuId, quantity: i.qty, unit_price: i.price })),
-        notes: `Shipping: ${address.name}, ${address.line1}, ${address.city} ${address.pincode}, Phone: ${address.phone}`,
+        shipping_address: {
+          full_name: address.name,
+          phone: address.phone,
+          address_line1: address.line1,
+          city: address.city,
+          pincode: address.pincode,
+          country: "IN",
+        },
       };
       const res = await fetch("/api/proxy/v1/orders", {
         method: "POST",
@@ -206,34 +215,37 @@ export default function CheckoutPage() {
   const subtotal = total() / 100;
 
   return (
-    <div className="min-h-screen bg-[#F9F8F5]">
-      <div className="max-w-5xl mx-auto px-4 py-10">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+      className="min-h-screen bg-white"
+    >
+      <div className="max-w-4xl mx-auto px-4 py-10">
+        {/* Back link */}
+        <Link
+          href="/cart"
+          className="inline-block text-sm text-[#555555] hover:text-[#111111] transition-colors mb-6"
+        >
+          &larr; Back to cart
+        </Link>
+
         {/* Page heading */}
-        <div className="mb-8">
-          <Link
-            href="/cart"
-            className="inline-flex items-center gap-1.5 text-xs text-[#7A6856] hover:text-[#E91E8C] transition-colors mb-4"
-          >
-            <ShoppingBag size={14} />
-            Back to cart
-          </Link>
-          <h1 className="text-3xl font-display font-bold text-[#0F0A04] tracking-tight">
-            Checkout
-          </h1>
-        </div>
+        <h1 className="text-2xl font-bold text-[#111111] tracking-tight mb-6">Checkout</h1>
 
         {/* Step indicator */}
-        <StepIndicator current={2} />
+        <StepIndicator current={1} />
 
-        {/* Error pill */}
+        {/* Error banner */}
         <AnimatePresence>
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
               className="mb-6 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700
-                rounded-full px-4 py-2.5 text-sm font-medium"
+                rounded-md px-4 py-3 text-sm"
             >
               <AlertCircle size={15} className="shrink-0" />
               {error}
@@ -242,20 +254,18 @@ export default function CheckoutPage() {
         </AnimatePresence>
 
         {/* Two-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
           {/* ---- LEFT COLUMN ---- */}
-          <div className="flex flex-col gap-5">
-            {/* Delivery address card */}
-            <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(15,10,4,0.06),0_4px_12px_rgba(15,10,4,0.04)] p-6">
-              <div className="flex items-center gap-2 mb-5">
-                <MapPin size={18} className="text-[#E91E8C]" />
-                <h2 className="text-base font-semibold text-[#0F0A04]">Delivery address</h2>
-              </div>
-
+          <div className="flex flex-col gap-8">
+            {/* Delivery address section */}
+            <div>
+              <p className="text-sm font-semibold text-[#111111] uppercase tracking-wider mb-4 pb-3 border-b border-[#E8E8E8]">
+                Delivery Address
+              </p>
               <div className="flex flex-col gap-4">
                 {/* Full Name */}
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-name" className="text-xs font-medium text-[#3D2E1A]">
+                  <label htmlFor="field-name" className="text-xs font-medium text-[#555555]">
                     Full Name
                   </label>
                   <FormInput
@@ -264,12 +274,13 @@ export default function CheckoutPage() {
                     value={address.name}
                     onChange={(v) => setAddress((a) => ({ ...a, name: v }))}
                     placeholder="Jane Doe"
+                    required={true}
                   />
                 </div>
 
                 {/* Phone */}
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-phone" className="text-xs font-medium text-[#3D2E1A]">
+                  <label htmlFor="field-phone" className="text-xs font-medium text-[#555555]">
                     Phone
                   </label>
                   <FormInput
@@ -279,12 +290,13 @@ export default function CheckoutPage() {
                     value={address.phone}
                     onChange={(v) => setAddress((a) => ({ ...a, phone: v }))}
                     placeholder="+91 98765 43210"
+                    required={true}
                   />
                 </div>
 
                 {/* Address Line 1 */}
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="field-line1" className="text-xs font-medium text-[#3D2E1A]">
+                  <label htmlFor="field-line1" className="text-xs font-medium text-[#555555]">
                     Address Line 1
                   </label>
                   <FormInput
@@ -293,13 +305,14 @@ export default function CheckoutPage() {
                     value={address.line1}
                     onChange={(v) => setAddress((a) => ({ ...a, line1: v }))}
                     placeholder="House no., Street, Area"
+                    required={true}
                   />
                 </div>
 
-                {/* City + Pincode — 2-col grid */}
+                {/* City + Pincode */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor="field-city" className="text-xs font-medium text-[#3D2E1A]">
+                    <label htmlFor="field-city" className="text-xs font-medium text-[#555555]">
                       City
                     </label>
                     <FormInput
@@ -308,10 +321,11 @@ export default function CheckoutPage() {
                       value={address.city}
                       onChange={(v) => setAddress((a) => ({ ...a, city: v }))}
                       placeholder="Mumbai"
+                      required={true}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor="field-pincode" className="text-xs font-medium text-[#3D2E1A]">
+                    <label htmlFor="field-pincode" className="text-xs font-medium text-[#555555]">
                       Pincode
                     </label>
                     <FormInput
@@ -320,224 +334,186 @@ export default function CheckoutPage() {
                       value={address.pincode}
                       onChange={(v) => setAddress((a) => ({ ...a, pincode: v }))}
                       placeholder="400001"
+                      required={true}
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Payment method card */}
-            <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(15,10,4,0.06),0_4px_12px_rgba(15,10,4,0.04)] p-6">
-              <div className="flex items-center gap-2 mb-5">
-                <CreditCard size={18} className="text-[#E91E8C]" />
-                <h2 className="text-base font-semibold text-[#0F0A04]">Payment method</h2>
-              </div>
-
+            {/* Payment method section */}
+            <div>
+              <p className="text-sm font-semibold text-[#111111] uppercase tracking-wider mb-4 pb-3 border-b border-[#E8E8E8]">
+                Payment Method
+              </p>
               <div className="flex flex-col gap-3">
                 {/* COD option */}
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("cod")}
                   className={cn(
-                    "border rounded-2xl px-5 py-4 flex items-center gap-3 w-full text-left transition-all",
+                    "border rounded-md px-4 py-3 flex items-center gap-3 w-full text-left transition-all",
                     paymentMethod === "cod"
-                      ? "border-[#E91E8C] bg-[#FDE8F4]/30"
-                      : "border-[#EDE9E3] bg-white hover:border-[#B8A898]"
+                      ? "border-[#111111] bg-[#F6F6F6]"
+                      : "border-[#E8E8E8] bg-white hover:border-[#D0D0D0]"
                   )}
                 >
-                  <div
-                    className={cn(
-                      "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
-                      paymentMethod === "cod" ? "bg-[#E91E8C]/10" : "bg-[#F9F8F5]"
-                    )}
-                  >
-                    <Wallet
-                      size={18}
-                      className={paymentMethod === "cod" ? "text-[#E91E8C]" : "text-[#7A6856]"}
-                    />
-                  </div>
+                  <Wallet
+                    size={17}
+                    className={paymentMethod === "cod" ? "text-[#111111]" : "text-[#999999]"}
+                  />
                   <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        "text-sm font-semibold",
-                        paymentMethod === "cod" ? "text-[#E91E8C]" : "text-[#0F0A04]"
-                      )}
-                    >
-                      Cash on Delivery
-                    </p>
-                    <p className="text-xs text-[#7A6856] mt-0.5">Pay when your order arrives</p>
+                    <p className="text-sm font-medium text-[#111111]">Cash on Delivery</p>
+                    <p className="text-xs text-[#999999] mt-0.5">Pay when your order arrives</p>
                   </div>
                   <div
                     className={cn(
                       "w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center",
-                      paymentMethod === "cod" ? "border-[#E91E8C]" : "border-[#B8A898]"
+                      paymentMethod === "cod" ? "border-[#111111]" : "border-[#D0D0D0]"
                     )}
                   >
                     {paymentMethod === "cod" && (
-                      <div className="w-2 h-2 rounded-full bg-[#E91E8C]" />
+                      <div className="w-2 h-2 rounded-full bg-[#111111]" />
                     )}
                   </div>
                 </button>
 
-                {/* UPI option (visual only) */}
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("upi")}
-                  className={cn(
-                    "border rounded-2xl px-5 py-4 flex items-center gap-3 w-full text-left transition-all",
-                    paymentMethod === "upi"
-                      ? "border-[#E91E8C] bg-[#FDE8F4]/30"
-                      : "border-[#EDE9E3] bg-white hover:border-[#B8A898]"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
-                      paymentMethod === "upi" ? "bg-[#E91E8C]/10" : "bg-[#F9F8F5]"
-                    )}
-                  >
-                    <CreditCard
-                      size={18}
-                      className={paymentMethod === "upi" ? "text-[#E91E8C]" : "text-[#7A6856]"}
-                    />
-                  </div>
+                {/* UPI option (coming soon) */}
+                <div className="border border-[#E8E8E8] rounded-md px-4 py-3 flex items-center gap-3 w-full opacity-50 cursor-not-allowed">
+                  <CreditCard size={17} className="text-[#999999]" />
                   <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        "text-sm font-semibold",
-                        paymentMethod === "upi" ? "text-[#E91E8C]" : "text-[#0F0A04]"
-                      )}
-                    >
+                    <p className="text-sm font-medium text-[#111111] flex items-center gap-2">
                       UPI
+                      <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#F0F0F0] text-[#999999]">
+                        Soon
+                      </span>
                     </p>
-                    <p className="text-xs text-[#7A6856] mt-0.5">GPay, PhonePe, Paytm &amp; more</p>
+                    <p className="text-xs text-[#999999] mt-0.5">GPay, PhonePe, Paytm &amp; more</p>
                   </div>
-                  <div
-                    className={cn(
-                      "w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center",
-                      paymentMethod === "upi" ? "border-[#E91E8C]" : "border-[#B8A898]"
-                    )}
-                  >
-                    {paymentMethod === "upi" && (
-                      <div className="w-2 h-2 rounded-full bg-[#E91E8C]" />
-                    )}
-                  </div>
-                </button>
+                  <div className="w-4 h-4 rounded-full border-2 shrink-0 border-[#D0D0D0]" />
+                </div>
               </div>
             </div>
           </div>
 
           {/* ---- RIGHT COLUMN: Order Summary ---- */}
           <div className="lg:sticky lg:top-24 h-fit">
-            <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(15,10,4,0.06),0_4px_12px_rgba(15,10,4,0.04)] p-6 flex flex-col gap-5">
-              <h2 className="font-display text-lg font-bold text-[#0F0A04]">Order Summary</h2>
+            <div className="bg-[#F6F6F6] rounded-lg p-5 border border-[#E8E8E8] flex flex-col gap-4">
+              <p className="text-sm font-semibold text-[#111111] uppercase tracking-wider">
+                Order Summary
+              </p>
 
               {/* Items list */}
               <div className="flex flex-col gap-3">
                 {items.map((item) => (
                   <div key={item.skuId} className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-[#F9F8F5] shrink-0 overflow-hidden flex items-center justify-center">
+                    <div className="w-11 h-11 rounded-md bg-white border border-[#E8E8E8] shrink-0 overflow-hidden flex items-center justify-center">
                       {item.image ? (
                         <Image
                           src={item.image}
                           alt={item.name}
-                          width={48}
-                          height={48}
+                          width={44}
+                          height={44}
                           className="object-contain w-full h-full"
                         />
                       ) : (
-                        <ShoppingBag size={20} className="text-[#B8A898]" />
+                        <ShoppingBag size={18} className="text-[#D0D0D0]" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[#0F0A04] font-medium truncate leading-snug">
+                      <p className="text-sm text-[#111111] font-medium truncate leading-snug">
                         {item.name}
                       </p>
-                      <p className="text-xs text-[#7A6856] mt-0.5">Qty: {item.qty}</p>
+                      <p className="text-xs text-[#999999] mt-0.5">Qty: {item.qty}</p>
                     </div>
-                    <span className="text-sm font-semibold text-[#0F0A04] shrink-0">
+                    <span className="text-sm font-bold text-[#111111] shrink-0 tabular-nums">
                       ₹{((item.price * item.qty) / 100).toFixed(2)}
                     </span>
                   </div>
                 ))}
               </div>
 
-              {/* Divider */}
-              <div className="h-px bg-[#EDE9E3]" />
+              <div className="h-px bg-[#E8E8E8]" />
 
               {/* Promo code */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder="Promo code"
-                  className="flex-1 h-10 border border-[#EDE9E3] rounded-xl px-3 text-sm text-[#0F0A04] bg-white
-                    focus:outline-none focus:border-[#E91E8C] transition-colors placeholder:text-[#B8A898]"
-                />
-                <button
-                  type="button"
-                  className="h-10 px-4 rounded-xl border border-[#EDE9E3] text-xs font-semibold text-[#3D2E1A]
-                    hover:border-[#E91E8C] hover:text-[#E91E8C] transition-colors"
-                >
-                  Apply
-                </button>
+              <div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    placeholder="Promo code"
+                    className="flex-1 h-10 border border-[#E8E8E8] rounded-md px-3 text-sm text-[#111111] bg-white
+                      focus:outline-none focus:border-[#111111] transition-colors placeholder:text-[#999999]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPromoMsg("Promo codes coming soon")}
+                    className="h-10 px-4 rounded-md border border-[#E8E8E8] text-xs font-medium text-[#111111]
+                      hover:bg-white transition-colors bg-white"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {promoMsg && (
+                  <p className="mt-1.5 text-xs text-[#999999]">{promoMsg}</p>
+                )}
               </div>
 
-              {/* Divider */}
-              <div className="h-px bg-[#EDE9E3]" />
+              <div className="h-px bg-[#E8E8E8]" />
 
               {/* Totals */}
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#7A6856]">Subtotal</span>
-                  <span className="text-[#3D2E1A] font-medium">₹{subtotal.toFixed(2)}</span>
+                  <span className="text-[#555555]">Subtotal</span>
+                  <span className="text-[#111111] font-medium tabular-nums">
+                    ₹{subtotal.toFixed(2)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#7A6856]">Delivery</span>
-                  <span className="text-emerald-600 font-semibold">Free</span>
+                  <span className="text-[#555555]">Delivery</span>
+                  <span className="text-[#16A34A] font-semibold">Free</span>
                 </div>
               </div>
 
-              {/* Divider */}
-              <div className="h-px bg-[#EDE9E3]" />
+              <div className="h-px bg-[#E8E8E8]" />
 
               {/* Total */}
               <div className="flex items-center justify-between">
-                <span className="font-display font-bold text-[#0F0A04] text-base">Total</span>
-                <span className="font-display font-bold text-[#0F0A04] text-xl">
+                <span className="text-sm font-semibold text-[#111111]">Total</span>
+                <span className="text-lg font-bold text-[#111111] tabular-nums">
                   ₹{subtotal.toFixed(2)}
                 </span>
               </div>
 
               {/* Place Order button */}
-              <button
+              <motion.button
                 type="button"
                 onClick={handlePlaceOrder}
                 disabled={loading}
-                className="w-full h-12 bg-[#E91E8C] hover:bg-[#B5166E] disabled:opacity-60 disabled:cursor-not-allowed
-                  text-white font-bold rounded-2xl transition-colors
-                  shadow-[0_4px_20px_rgba(233,30,140,0.25)] flex items-center justify-center gap-2"
+                whileTap={{ scale: 0.97 }}
+                className="w-full h-11 bg-[#E91E8C] hover:bg-[#C2187A] disabled:opacity-60 disabled:cursor-not-allowed
+                  text-white font-medium rounded-md text-sm transition-colors flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Placing Order…
+                    <Loader2 size={15} className="animate-spin" />
+                    Placing Order...
                   </>
                 ) : (
                   "Place Order"
                 )}
-              </button>
+              </motion.button>
 
               {/* SSL badge */}
-              <div className="flex items-center justify-center gap-1.5">
-                <Lock size={11} className="text-[#B8A898]" />
-                <span className="text-xs text-[#B8A898]">Secure 256-bit SSL encrypted checkout</span>
+              <div className="flex items-center justify-center gap-1.5 mt-1">
+                <Lock size={11} className="text-[#999999]" />
+                <span className="text-xs text-[#999999]">Secure 256-bit encrypted checkout</span>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

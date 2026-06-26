@@ -2,44 +2,41 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCartStore } from "@/lib/cart";
-import { Minus, Plus, Trash2, ShoppingBag, Tag } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
-const CARD_SHADOW =
-  "shadow-[0_1px_3px_rgba(15,10,4,0.06),0_4px_12px_rgba(15,10,4,0.04)]";
+import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react";
 
 export default function CartPage() {
   const { items, removeItem, updateQty, total } = useCartStore();
+  const [promoCode, setPromoCode] = useState("");
 
   /* ── Empty state ── */
   if (items.length === 0) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center bg-[#F9F8F5] px-4">
-        <div className="flex flex-col items-center gap-5 text-center">
-          <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-[0_1px_3px_rgba(15,10,4,0.06),0_4px_12px_rgba(15,10,4,0.04)]">
-            <ShoppingBag size={40} className="text-[#EDE9E3]" />
-          </div>
-          <div className="space-y-1.5">
-            <h2
-              className="text-2xl font-bold text-[#0F0A04]"
-              style={{ fontFamily: "var(--font-syne)" }}
-            >
+      <div className="min-h-[60vh] flex items-center justify-center px-4">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+          className="flex flex-col items-center gap-4 text-center"
+        >
+          <ShoppingBag className="h-12 w-12 text-[#E8E8E8]" />
+          <div>
+            <h2 className="text-xl font-semibold text-[#111111]">
               Your cart is empty
             </h2>
-            <p className="text-sm text-[#7A6856]">
-              Looks like you haven&apos;t added anything yet.
+            <p className="text-sm text-[#555555] mt-1">
+              Add some products to continue shopping.
             </p>
           </div>
           <Link
             href="/products"
-            className="inline-flex items-center justify-center h-11 px-8 rounded-2xl bg-[#E91E8C] hover:bg-[#B5166E] text-white text-sm font-bold transition-colors shadow-[0_4px_20px_rgba(233,30,140,0.25)]"
+            className="inline-flex items-center justify-center h-10 px-8 rounded-md bg-[#E91E8C] hover:bg-[#C2187A] text-white text-sm font-medium transition-colors"
           >
-            Shop now
+            Start Shopping
           </Link>
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -47,74 +44,68 @@ export default function CartPage() {
   const subtotal = total();
 
   return (
-    <div className="min-h-screen bg-[#F9F8F5]">
+    <div className="bg-white min-h-screen">
       <div className="max-w-5xl mx-auto px-4 py-10">
         {/* ── Page heading ── */}
-        <div className="flex items-center gap-3 mb-8">
-          <h1
-            className="text-2xl font-bold text-[#0F0A04]"
-            style={{ fontFamily: "var(--font-syne)" }}
-          >
-            Shopping Cart
-          </h1>
-          <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-2 rounded-full bg-[#E91E8C] text-white text-xs font-bold">
-            {items.length}
-          </span>
-        </div>
+        <motion.h1
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+          className="text-2xl font-bold text-[#111111] mb-8"
+        >
+          Cart ({items.length} {items.length === 1 ? "item" : "items"})
+        </motion.h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
           {/* ── Cart items ── */}
-          <div className="lg:col-span-2 space-y-3">
+          <div>
             <AnimatePresence initial={false}>
-              {items.map((item, i) => (
+              {items.map((item) => (
                 <motion.div
                   key={item.skuId}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 8, height: 0, marginBottom: 0 }}
-                  transition={{ duration: 0.22, delay: i * 0.04 }}
-                  className={cn(
-                    "bg-white rounded-2xl px-5 py-4 flex items-center gap-4",
-                    CARD_SHADOW
-                  )}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+                  className="flex items-center gap-4 py-5 border-b border-[#E8E8E8]"
                 >
                   {/* Product image */}
-                  <div className="relative w-[72px] h-[72px] shrink-0 rounded-xl overflow-hidden bg-[#F9F8F5] border border-[#EDE9E3]">
+                  <div className="relative w-20 h-20 shrink-0 rounded-md border border-[#E8E8E8] bg-[#F6F6F6] overflow-hidden">
                     <Image
                       src={item.image || "/placeholder-product.png"}
                       alt={item.name}
                       fill
-                      className="object-contain p-1.5"
-                      sizes="72px"
+                      className="object-contain p-2"
+                      sizes="80px"
                     />
                   </div>
 
-                  {/* Info + stepper */}
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <p className="text-sm font-semibold text-[#0F0A04] line-clamp-2 leading-snug">
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#111111] line-clamp-2 leading-snug">
                       {item.name}
                     </p>
-                    <p className="text-xs text-[#7A6856]">
+                    <p className="text-xs text-[#555555] mt-1">
                       {item.currency}&nbsp;
                       {(item.price / 100).toFixed(2)} / unit
                     </p>
 
                     {/* Qty stepper */}
-                    <div className="inline-flex items-center border border-[#EDE9E3] rounded-xl overflow-hidden">
+                    <div className="inline-flex items-center gap-0 border border-[#E8E8E8] rounded-md overflow-hidden h-8 mt-3">
                       <button
                         aria-label="Decrease quantity"
                         onClick={() => updateQty(item.skuId, item.qty - 1)}
-                        className="h-8 w-8 flex items-center justify-center text-[#3D2E1A] hover:bg-[#F3F0EB] transition-colors"
+                        className="h-8 w-8 flex items-center justify-center text-[#555555] hover:bg-[#F6F6F6] transition-colors"
                       >
                         <Minus size={13} />
                       </button>
-                      <span className="w-10 text-center text-sm font-bold text-[#0F0A04] tabular-nums select-none">
+                      <span className="w-9 text-center text-sm font-medium text-[#111111] select-none tabular-nums">
                         {item.qty}
                       </span>
                       <button
                         aria-label="Increase quantity"
                         onClick={() => updateQty(item.skuId, item.qty + 1)}
-                        className="h-8 w-8 flex items-center justify-center text-[#3D2E1A] hover:bg-[#F3F0EB] transition-colors"
+                        className="h-8 w-8 flex items-center justify-center text-[#555555] hover:bg-[#F6F6F6] transition-colors"
                       >
                         <Plus size={13} />
                       </button>
@@ -123,19 +114,16 @@ export default function CartPage() {
 
                   {/* Line total + remove */}
                   <div className="flex flex-col items-end gap-2 shrink-0">
-                    <span
-                      className="text-sm font-bold text-[#0F0A04] tabular-nums"
-                      style={{ fontFamily: "var(--font-syne)" }}
-                    >
+                    <span className="text-sm font-bold text-[#111111] tabular-nums">
                       {item.currency}&nbsp;
                       {((item.price * item.qty) / 100).toFixed(2)}
                     </span>
                     <button
                       aria-label="Remove item"
                       onClick={() => removeItem(item.skuId)}
-                      className="h-8 w-8 rounded-xl flex items-center justify-center text-[#B8A898] hover:text-[#E91E8C] hover:bg-[#FDE8F4] transition-colors"
+                      className="flex items-center justify-center text-[#999999] hover:text-[#DC2626] transition-colors"
                     >
-                      <Trash2 size={15} />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </motion.div>
@@ -144,70 +132,55 @@ export default function CartPage() {
           </div>
 
           {/* ── Order Summary ── */}
-          <div className="lg:col-span-1">
-            <div
-              className={cn(
-                "bg-white rounded-2xl p-6 sticky top-24 space-y-5",
-                CARD_SHADOW
-              )}
-            >
-              <h2
-                className="text-lg font-bold text-[#0F0A04]"
-                style={{ fontFamily: "var(--font-syne)" }}
-              >
+          <div>
+            <div className="sticky top-24 bg-[#F6F6F6] rounded-lg p-6 border border-[#E8E8E8]">
+              <h2 className="text-base font-semibold text-[#111111] mb-4">
                 Order Summary
               </h2>
+
+              {/* Promo code */}
+              <div className="flex gap-2 mb-5">
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value)}
+                  placeholder="Promo code"
+                  className="flex-1 h-9 bg-white border border-[#E8E8E8] rounded-md text-sm px-3 placeholder:text-[#999999] text-[#111111] focus:outline-none focus:border-[#D0D0D0] transition-colors"
+                />
+                <button className="h-9 px-4 border border-[#E8E8E8] rounded-md text-sm text-[#111111] bg-white hover:bg-white transition-colors shrink-0">
+                  Apply
+                </button>
+              </div>
 
               {/* Line rows */}
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-[#7A6856]">Subtotal</span>
-                  <span className="font-semibold text-[#0F0A04] tabular-nums">
+                  <span className="text-[#555555]">Subtotal</span>
+                  <span className="font-medium text-[#111111] tabular-nums">
                     ₹&nbsp;{(subtotal / 100).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#7A6856]">Shipping</span>
-                  <span className="font-semibold text-[#12845F]">Free</span>
+                  <span className="text-[#555555]">Shipping</span>
+                  <span className="font-medium text-[#16A34A]">Free</span>
                 </div>
               </div>
 
               {/* Divider */}
-              <div className="border-t border-[#EDE9E3]" />
+              <div className="border-t border-[#E8E8E8] my-4" />
 
               {/* Total */}
-              <div className="flex justify-between items-baseline">
-                <span className="text-sm font-bold text-[#0F0A04]">Total</span>
-                <span
-                  className="text-xl font-bold text-[#0F0A04] tabular-nums"
-                  style={{ fontFamily: "var(--font-syne)" }}
-                >
+              <div className="flex justify-between items-center">
+                <span className="text-base font-bold text-[#111111]">Total</span>
+                <span className="text-base font-bold text-[#111111] tabular-nums">
                   ₹&nbsp;{(subtotal / 100).toFixed(2)}
                 </span>
-              </div>
-
-              {/* Promo code */}
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Tag
-                    size={14}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#B8A898]"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Promo code"
-                    className="w-full h-10 pl-8 pr-3 text-sm border border-[#EDE9E3] rounded-xl bg-[#F9F8F5] placeholder:text-[#B8A898] text-[#0F0A04] focus:outline-none focus:border-[#E91E8C] transition-colors"
-                  />
-                </div>
-                <button className="h-10 px-4 rounded-xl bg-[#F3F0EB] text-sm font-semibold text-[#3D2E1A] hover:bg-[#EDE9E3] transition-colors shrink-0">
-                  Apply
-                </button>
               </div>
 
               {/* Checkout CTA */}
               <Link
                 href="/checkout"
-                className="flex items-center justify-center w-full h-12 rounded-2xl bg-[#E91E8C] hover:bg-[#B5166E] text-white text-sm font-bold transition-colors shadow-[0_4px_20px_rgba(233,30,140,0.25)]"
+                className="flex items-center justify-center w-full h-11 bg-[#E91E8C] hover:bg-[#C2187A] text-white font-medium rounded-md text-sm mt-4 transition-colors"
               >
                 Proceed to Checkout
               </Link>
@@ -215,7 +188,7 @@ export default function CartPage() {
               {/* Continue shopping */}
               <Link
                 href="/products"
-                className="flex items-center justify-center w-full text-sm text-[#7A6856] hover:text-[#3D2E1A] transition-colors font-medium"
+                className="block text-sm text-[#555555] hover:text-[#111111] mt-3 text-center transition-colors"
               >
                 Continue Shopping
               </Link>

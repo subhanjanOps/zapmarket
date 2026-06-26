@@ -15,7 +15,9 @@ export async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T |
 /** Decode the display name from a JWT payload (no verification — display only). */
 export function decodeJwtUser(token: string): { name: string | null; email: string | null } {
   try {
-    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+    const parts = token.split(".");
+    if (parts.length !== 3) return { name: null, email: null };
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
     return {
       name: payload.full_name ?? payload.name ?? null,
       email: payload.email ?? null,
