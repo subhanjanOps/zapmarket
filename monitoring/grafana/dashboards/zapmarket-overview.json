@@ -18,6 +18,17 @@
         "includeAll": true,
         "current": { "text": "All", "value": "$__all" },
         "refresh": 2
+      },
+      {
+        "name": "log_service",
+        "label": "Log Service",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "zapmarket-loki" },
+        "query": "label_values(service)",
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2
       }
     ]
   },
@@ -323,6 +334,39 @@
         {
           "expr": "rate(currency_cache_misses_total[2m])",
           "legendFormat": "misses"
+        }
+      ]
+    }
+  ,
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Logs",
+      "gridPos": { "x": 0, "y": 39, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 41,
+      "type": "logs",
+      "title": "Service Logs — $log_service",
+      "datasource": { "type": "loki", "uid": "zapmarket-loki" },
+      "gridPos": { "x": 0, "y": 40, "w": 24, "h": 12 },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "zapmarket-loki" },
+          "expr": "{service=~\"$log_service\"}",
+          "legendFormat": "",
+          "refId": "A"
         }
       ]
     }

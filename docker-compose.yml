@@ -365,6 +365,7 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - REDIS_URL=zapmarket-redis:6379
       - APP_ENV=development
+      - HTTP_PORT=8085
     ports:
       - "8085:8085"
     networks:
@@ -483,11 +484,38 @@ services:
       - zapnet
     restart: unless-stopped
 
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: zapmarket-loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./monitoring/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: zapmarket-promtail
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./monitoring/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:latest
     container_name: zapmarket-grafana
     depends_on:
       - prometheus
+      - loki
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=zapmarket
@@ -530,3 +558,4 @@ volumes:
   elasticsearch-data:
   prometheus-data:
   grafana-data:
+  loki-data:
