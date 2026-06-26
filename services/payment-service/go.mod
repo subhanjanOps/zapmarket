@@ -11,6 +11,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/database v0.0.0
 	github.com/zapmarket/zapmarket/pkg/errors v0.0.0
 	github.com/zapmarket/zapmarket/pkg/grpcx v0.0.0
+	github.com/zapmarket/zapmarket/pkg/httpx v0.0.0-00010101000000-000000000000
 	github.com/zapmarket/zapmarket/pkg/kafka v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
 	github.com/zapmarket/zapmarket/pkg/metrics v0.0.0
@@ -50,13 +51,12 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/database => ../../pkg/database
 	github.com/zapmarket/zapmarket/pkg/errors => ../../pkg/errors
 	github.com/zapmarket/zapmarket/pkg/grpcx => ../../pkg/grpcx
+	github.com/zapmarket/zapmarket/pkg/httpx => ../../pkg/httpx
 	github.com/zapmarket/zapmarket/pkg/kafka => ../../pkg/kafka
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
+	github.com/zapmarket/zapmarket/pkg/metrics => ../../pkg/metrics
 	github.com/zapmarket/zapmarket/pkg/migrate => ../../pkg/migrate
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 	github.com/zapmarket/zapmarket/pkg/registry => ../../pkg/registry
+	github.com/zapmarket/zapmarket/pkg/relay => ../../pkg/relay
 )
-
-replace github.com/zapmarket/zapmarket/pkg/relay => ../../pkg/relay
-
-replace github.com/zapmarket/zapmarket/pkg/metrics => ../../pkg/metrics

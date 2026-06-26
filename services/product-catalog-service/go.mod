@@ -16,6 +16,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/grpcx v0.0.0
 	github.com/zapmarket/zapmarket/pkg/httpx v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
+	github.com/zapmarket/zapmarket/pkg/metrics v0.0.0-00010101000000-000000000000
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
@@ -27,6 +28,7 @@ require (
 
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -53,7 +55,12 @@ require (
 	github.com/minio/crc64nvme v1.0.2 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go/v7 v7.0.95 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/prometheus/client_golang v1.22.0 // indirect
+	github.com/prometheus/client_model v0.6.1 // indirect
+	github.com/prometheus/common v0.62.0 // indirect
+	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
@@ -86,6 +93,7 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/grpcx => ../../pkg/grpcx
 	github.com/zapmarket/zapmarket/pkg/httpx => ../../pkg/httpx
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
+	github.com/zapmarket/zapmarket/pkg/metrics => ../../pkg/metrics
 	github.com/zapmarket/zapmarket/pkg/migrate => ../../pkg/migrate
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 	github.com/zapmarket/zapmarket/pkg/registry => ../../pkg/registry
