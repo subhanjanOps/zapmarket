@@ -24,6 +24,9 @@ type StockCachePort interface {
 	// RunIncrIfExistsScript increments by delta only if key exists.
 	// Returns -1 if the key was absent.
 	RunIncrIfExistsScript(ctx context.Context, key string, delta int) (int64, error)
+	// Delete removes the key from the cache. Used as a last-resort rollback
+	// when an increment fails, so the next read falls through to Postgres.
+	Delete(ctx context.Context, key string) error
 	// StockKey returns the cache key for a given SKU ID.
 	StockKey(skuID uuid.UUID) string
 }

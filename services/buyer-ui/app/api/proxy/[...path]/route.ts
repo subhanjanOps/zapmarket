@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GW } from "@/lib/gateway";
 
+const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
+
 async function proxy(req: NextRequest, pathSegments: string[]) {
   // Reject path traversal attempts.
   if (pathSegments.some((s) => s === ".." || s === ".")) {
@@ -44,6 +46,9 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
     } else {
       headers["Content-Type"] = ct;
       const buf = await req.arrayBuffer();
+      if (buf.byteLength > MAX_BODY_BYTES) {
+        return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+      }
       if (buf.byteLength > 0) body = buf;
     }
   }

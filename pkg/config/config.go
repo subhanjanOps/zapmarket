@@ -62,6 +62,7 @@ type Config struct {
 	AuthServiceAddr      string
 	InventoryServiceAddr string
 	PaymentServiceAddr   string
+	CatalogServiceAddr   string
 
 	// Service
 	HTTPPort int
@@ -143,6 +144,7 @@ func Load() (*Config, error) {
 		AuthServiceAddr:      getEnv("AUTH_SERVICE_ADDR", "localhost:50051"),
 		InventoryServiceAddr: getEnv("INVENTORY_SERVICE_ADDR", "localhost:50053"),
 		PaymentServiceAddr:   getEnv("PAYMENT_SERVICE_ADDR", "localhost:50054"),
+		CatalogServiceAddr:   getEnv("CATALOG_SERVICE_ADDR", "localhost:50052"),
 
 		// Service
 		HTTPPort: getEnvInt("HTTP_PORT", 8080),

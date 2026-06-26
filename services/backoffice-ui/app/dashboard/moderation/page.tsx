@@ -112,7 +112,7 @@ export default function ModerationPage() {
                         className="btn btn-success"
                         style={{ padding: "0.25rem 0.75rem", fontSize: "0.75rem" }}
                         onClick={() => approve(p)}
-                        disabled={updating === p.id}
+                        disabled={updating !== null}
                       >
                         {updating === p.id ? "…" : "Approve"}
                       </button>
@@ -120,7 +120,7 @@ export default function ModerationPage() {
                         className="btn btn-danger"
                         style={{ padding: "0.25rem 0.75rem", fontSize: "0.75rem" }}
                         onClick={() => reject(p)}
-                        disabled={updating === p.id}
+                        disabled={updating !== null}
                       >
                         {updating === p.id ? "…" : "Reject"}
                       </button>

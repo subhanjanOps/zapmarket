@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain/contracts"
-	"github.com/zapmarket/zapmarket/services/inventory-service/internal/infrastructure/cache"
 )
 
 // InventoryService defines the interface for inventory operations.
@@ -104,17 +102,11 @@ func (s *inventoryService) ReserveStock(ctx context.Context, skuID, orderID uuid
 	// Redis gate passed — now write the durable Postgres record.
 	reservation, dbErr := s.repo.ReserveStock(ctx, skuID, orderID, qty)
 	if dbErr != nil {
-		if _, incrErr := s.cache.IncrBy(ctx, key, int64(qty)); incrErr != nil && !errors.Is(incrErr, cache.ErrCacheMiss) { //nolint:gosec
-			s.logger.Error("CRITICAL: redis rollback failed after db reserve failure",
-				"sku_id", skuID, "qty", qty, "error", incrErr)
-		}
+		s.rollbackRedisReserve(ctx, key, skuID, qty)
 		return nil, dbErr
 	}
 	if reservation == nil {
-		if _, incrErr := s.cache.IncrBy(ctx, key, int64(qty)); incrErr != nil && !errors.Is(incrErr, cache.ErrCacheMiss) { //nolint:gosec
-			s.logger.Error("CRITICAL: redis rollback failed after nil reservation",
-				"sku_id", skuID, "qty", qty, "error", incrErr)
-		}
+		s.rollbackRedisReserve(ctx, key, skuID, qty)
 		return nil, pkgerrors.NewConflict("INSUFFICIENT_STOCK", "not enough stock available")
 	}
 
@@ -170,4 +162,19 @@ func (s *inventoryService) GetStock(ctx context.Context, skuID uuid.UUID) (*doma
 	}
 
 	return s.repo.GetStock(ctx, skuID)
+}
+
+// rollbackRedisReserve attempts to undo a Redis reservation by incrementing
+// qty back. If the increment fails, it deletes the key entirely so the next
+// read falls back to Postgres — this prevents Redis from over-committing
+// stock due to a stale decremented value.
+func (s *inventoryService) rollbackRedisReserve(ctx context.Context, key string, skuID uuid.UUID, qty int) {
+	if _, err := s.cache.IncrBy(ctx, key, int64(qty)); err != nil { //nolint:gosec
+		s.logger.Error("redis rollback failed; deleting key to force cache miss",
+			"sku_id", skuID, "qty", qty, "error", err)
+		if delErr := s.cache.Delete(ctx, key); delErr != nil {
+			s.logger.Error("redis key delete also failed — stock counter may be stale until TTL expiry",
+				"sku_id", skuID, "error", delErr)
+		}
+	}
 }

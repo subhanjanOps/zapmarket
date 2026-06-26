@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const GW = process.env.GATEWAY_URL ?? "http://localhost:8000";
+const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const ALLOWED_PREFIXES = [
   "v1/products",
@@ -25,10 +26,14 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
   }
 
   const token = req.cookies.get("seller_token")?.value;
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const upstreamUrl = `${GW}/${pathSegments.join("/")}${req.nextUrl.search}`;
 
   const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  headers["Authorization"] = `Bearer ${token}`;
 
   const ct = req.headers.get("content-type") ?? "";
   const hasBody = req.method !== "GET" && req.method !== "HEAD";
@@ -44,6 +49,9 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
     } else {
       headers["Content-Type"] = ct;
       const buf = await req.arrayBuffer();
+      if (buf.byteLength > MAX_BODY_BYTES) {
+        return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+      }
       if (buf.byteLength > 0) body = buf;
     }
   }

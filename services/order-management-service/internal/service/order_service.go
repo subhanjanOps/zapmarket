@@ -27,6 +27,11 @@ type paymentGateway interface {
 	ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (uuid.UUID, string, error)
 }
 
+// catalogGateway fetches authoritative SKU prices to prevent client-supplied price injection.
+type catalogGateway interface {
+	GetSKUPrice(ctx context.Context, skuID uuid.UUID) (int64, error)
+}
+
 // OrderService defines the public interface for order operations.
 type OrderService interface {
 	Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency string) (*domain.Order, error)
@@ -59,6 +64,7 @@ type orderService struct {
 	repo      contracts.OrderRepository
 	inventory inventoryGateway
 	payment   paymentGateway
+	catalog   catalogGateway
 	cache     contracts.OrderCache
 	logger    *slog.Logger
 }
@@ -67,10 +73,11 @@ func NewOrderService(
 	repo contracts.OrderRepository,
 	inventory inventoryGateway,
 	payment paymentGateway,
+	catalog catalogGateway,
 	cache contracts.OrderCache,
 	logger *slog.Logger,
 ) OrderService {
-	return &orderService{repo: repo, inventory: inventory, payment: payment, cache: cache, logger: logger}
+	return &orderService{repo: repo, inventory: inventory, payment: payment, catalog: catalog, cache: cache, logger: logger}
 }
 
 func idempCacheKey(key uuid.UUID) string {
@@ -95,18 +102,23 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		return existing, err
 	}
 
-	// Build domain items + total and persist PENDING order.
+	// Build domain items + total. Prices are fetched from the authoritative
+	// catalog to prevent client-supplied price injection.
 	var totalAmount int64
 	domainItems := make([]*domain.OrderItem, len(items))
 	for i, it := range items {
 		if it.Quantity <= 0 {
 			return nil, pkgerrors.NewValidation("INVALID_DATA", "item quantity must be greater than zero")
 		}
-		if it.UnitPrice <= 0 {
-			return nil, pkgerrors.NewValidation("INVALID_DATA", "item unit_price must be greater than zero")
+		authPrice, err := s.catalog.GetSKUPrice(ctx, it.SKUID)
+		if err != nil {
+			return nil, pkgerrors.NewValidation("INVALID_SKU", fmt.Sprintf("SKU %s not found or unavailable: %v", it.SKUID, err))
 		}
-		totalAmount += int64(it.Quantity) * it.UnitPrice
-		domainItems[i] = &domain.OrderItem{SKUID: it.SKUID, SellerID: it.SellerID, Quantity: it.Quantity, UnitPrice: it.UnitPrice}
+		if authPrice <= 0 {
+			return nil, pkgerrors.NewValidation("INVALID_SKU", fmt.Sprintf("SKU %s has no valid price configured", it.SKUID))
+		}
+		totalAmount += int64(it.Quantity) * authPrice
+		domainItems[i] = &domain.OrderItem{SKUID: it.SKUID, SellerID: it.SellerID, Quantity: it.Quantity, UnitPrice: authPrice}
 	}
 
 	order := &domain.Order{UserID: userID, IdempotencyKey: idempotencyKey, Status: domain.OrderPending, TotalAmount: totalAmount, Currency: currency}

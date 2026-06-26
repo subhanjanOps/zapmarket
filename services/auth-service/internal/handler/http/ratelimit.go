@@ -1,26 +1,46 @@
 package http
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 )
 
 const (
-	// sensitiveRateLimit is the max requests per IP per window on auth endpoints.
-	sensitiveRateLimit = 10
-	// sensitiveRateWindow is the sliding window duration.
+	sensitiveRateLimit  = 10
 	sensitiveRateWindow = time.Minute
 )
 
-// IPRateLimit returns a middleware that limits requests from a single IP to
-// sensitiveRateLimit per sensitiveRateWindow using Redis INCR/EXPIRE.
-// When Redis is unavailable the middleware passes through (fail-open) so the
-// service remains functional.
+// slidingWindowScript is the same Lua sliding-window used by the api-gateway.
+// Returns the request count in the current window; rejected requests are not
+// recorded so an abuser cannot hold themselves permanently locked out.
+var slidingWindowScript = goredis.NewScript(`
+local key    = KEYS[1]
+local now    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local ttl    = tonumber(ARGV[3])
+local limit  = tonumber(ARGV[4])
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+local count = redis.call('ZCARD', key)
+
+if count >= limit then
+	return count + 1
+end
+
+redis.call('ZADD', key, now, ARGV[5])
+redis.call('EXPIRE', key, ttl)
+return count + 1
+`)
+
+// IPRateLimit limits requests from a single IP to sensitiveRateLimit per
+// sensitiveRateWindow using a Redis sliding-window counter. Fails open on
+// Redis errors so the service stays functional.
 func IPRateLimit(rdb *goredis.Client, endpoint string) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -34,24 +54,31 @@ func IPRateLimit(rdb *goredis.Client, endpoint string) func(http.HandlerFunc) ht
 				ip = r.RemoteAddr
 			}
 
-			windowSec := int(sensitiveRateWindow.Seconds())
-			key := fmt.Sprintf("rl:ip:%s:%s:%d", endpoint, ip, time.Now().Unix()/int64(windowSec))
+			key := fmt.Sprintf("rl:auth:%s:%s", endpoint, ip)
+			nowMS := time.Now().UnixMilli()
+			windowMS := sensitiveRateWindow.Milliseconds()
+			ttlSecs := int(sensitiveRateWindow.Seconds()) + 1
+			member := uuid.New().String()
 
-			ctx, cancel := context.WithTimeout(r.Context(), 200*time.Millisecond)
-			defer cancel()
+			ctx := r.Context()
+			count, scriptErr := slidingWindowScript.Run(ctx, rdb,
+				[]string{key},
+				nowMS, windowMS, ttlSecs, sensitiveRateLimit, member,
+			).Int64()
 
-			count, err := rdb.Incr(ctx, key).Result()
-			if err != nil {
-				// Redis error — fail open.
+			if scriptErr != nil {
 				next(w, r)
 				return
 			}
-			if count == 1 {
-				rdb.Expire(ctx, key, sensitiveRateWindow) //nolint:errcheck
-			}
+
 			if count > sensitiveRateLimit {
-				w.Header().Set("Retry-After", fmt.Sprintf("%d", windowSec))
-				http.Error(w, `{"error":"rate limit exceeded","code":429}`, http.StatusTooManyRequests)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(sensitiveRateWindow.Seconds())))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"success": false,
+					"error":   map[string]string{"code": "RATE_LIMITED", "message": "too many requests, please slow down"},
+				})
 				return
 			}
 

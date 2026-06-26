@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+const MAX_CART_ITEMS = 50;
+
 export interface CartItem {
   skuId: string;
   name: string;
@@ -34,6 +36,7 @@ export const useCartStore = create<CartStore>()(
               ),
             };
           }
+          if (s.items.length >= MAX_CART_ITEMS) return s; // hard cap to bound localStorage size
           return { items: [...s.items, { ...item, qty }] };
         }),
       removeItem: (skuId) =>

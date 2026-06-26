@@ -131,6 +131,17 @@ func (m *mockPayment) ChargeCard(ctx context.Context, orderID, userID uuid.UUID,
 	return uuid.New(), "CAPTURED", nil
 }
 
+type mockCatalog struct {
+	getPriceFn func(ctx context.Context, skuID uuid.UUID) (int64, error)
+}
+
+func (m *mockCatalog) GetSKUPrice(ctx context.Context, skuID uuid.UUID) (int64, error) {
+	if m.getPriceFn != nil {
+		return m.getPriceFn(ctx, skuID)
+	}
+	return 500, nil
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func newTestRedis(t *testing.T) *redis.Client {
@@ -141,14 +152,13 @@ func newTestRedis(t *testing.T) *redis.Client {
 
 func newTestService(t *testing.T, repo contracts.OrderRepository, inv inventoryGateway, pay paymentGateway, rdb *redis.Client) OrderService {
 	t.Helper()
-	return NewOrderService(repo, inv, pay, cache.NewRedisCache(rdb), slog.Default())
+	return NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
 }
 
 func defaultItems() []CheckoutItem {
 	return []CheckoutItem{{
-		SKUID:     uuid.New(),
-		Quantity:  2,
-		UnitPrice: 500,
+		SKUID:    uuid.New(),
+		Quantity: 2,
 	}}
 }
 
@@ -198,15 +208,11 @@ func TestCheckout_ValidationErrors(t *testing.T) {
 		assertValidationError(t, err)
 	})
 	t.Run("zero quantity", func(t *testing.T) {
-		items := []CheckoutItem{{SKUID: uuid.New(), Quantity: 0, UnitPrice: 100}}
+		items := []CheckoutItem{{SKUID: uuid.New(), Quantity: 0}}
 		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), items, "INR")
 		assertValidationError(t, err)
 	})
-	t.Run("zero unit price", func(t *testing.T) {
-		items := []CheckoutItem{{SKUID: uuid.New(), Quantity: 1, UnitPrice: 0}}
-		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), items, "INR")
-		assertValidationError(t, err)
-	})
+	// unit_price is now fetched from catalog; client-supplied value is ignored
 }
 
 func TestCheckout_InventoryFailure(t *testing.T) {

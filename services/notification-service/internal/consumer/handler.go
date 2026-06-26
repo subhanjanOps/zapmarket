@@ -141,13 +141,14 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 
 	if err := h.notifier.Send(ctx, notif); err != nil {
 		h.logger.Error("failed to send notification", "event_type", eventType, "user_id", notif.UserID, "error", err)
-		// Release the dedup claim so the next retry can reclaim it.
-		if dedupEnabled {
-			if delErr := h.dedup.Del(ctx, dedupKey); delErr != nil {
-				h.logger.Warn("failed to release dedup key after send failure", "outbox_id", outboxID, "error", delErr)
-			}
-		}
-		return err // Retry.
+		// Do NOT release the dedup claim. If the notifier partially succeeded
+		// (e.g. SMTP accepted the message but then returned a transient error),
+		// releasing the claim would cause a duplicate delivery on the next Kafka
+		// retry. We prefer potential message loss over guaranteed double-delivery.
+		// The Kafka consumer will retry; if the dedup key is still held those
+		// retries will be skipped. Operators can manually delete the Redis key
+		// to force a re-send if needed.
+		return err
 	}
 
 	h.logger.Info("notification sent", "event_type", eventType, "user_id", notif.UserID)

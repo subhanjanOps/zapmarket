@@ -103,6 +103,14 @@ func main() {
 	defer paymentClient.Close()
 	log.Info("connected to payment-service", "addr", cfg.PaymentServiceAddr)
 
+	catalogClient, err := clients.NewCatalogClient(cfg.CatalogServiceAddr)
+	if err != nil {
+		log.Error("failed to connect to catalog-service", "addr", cfg.CatalogServiceAddr, "error", err)
+		os.Exit(1)
+	}
+	defer catalogClient.Close()
+	log.Info("connected to catalog-service", "addr", cfg.CatalogServiceAddr)
+
 	// ── Auth middleware ───────────────────────────────────────────────────────
 	authMW, err := authmw.NewAuthMiddleware(cfg.AuthServiceAddr, log)
 	if err != nil {
@@ -122,7 +130,7 @@ func main() {
 	} else {
 		orderCache = cache.NewNoopCache()
 	}
-	svc := service.NewOrderService(repo, inventoryClient, paymentClient, orderCache, log)
+	svc := service.NewOrderService(repo, inventoryClient, paymentClient, catalogClient, orderCache, log)
 	handler := httphandler.NewOrderHandler(svc)
 	adminHandler := httphandler.NewAdminOrderHandler(svc)
 

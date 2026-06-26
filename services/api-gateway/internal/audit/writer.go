@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"sync/atomic"
 	"time"
 )
 
@@ -31,13 +32,18 @@ type Entry struct {
 // Writer buffers audit entries and batch-inserts them to Postgres.
 // Writes are fire-and-forget — the gateway never blocks on audit IO.
 type Writer struct {
-	db     *sql.DB
-	ch     chan Entry
-	logger *slog.Logger
-	done   chan struct{}
+	db       *sql.DB
+	ch       chan Entry
+	logger   *slog.Logger
+	done     chan struct{}
+	dropped  atomic.Int64
 }
 
-const bufSize = 512
+// DroppedTotal returns the cumulative count of events dropped due to buffer
+// overflow. Expose this via a Prometheus counter in the metrics handler.
+func (w *Writer) DroppedTotal() int64 { return w.dropped.Load() }
+
+const bufSize = 4096
 
 func NewWriter(db *sql.DB, logger *slog.Logger) *Writer {
 	return &Writer{
@@ -54,12 +60,13 @@ func (w *Writer) Done() <-chan struct{} {
 	return w.done
 }
 
-// Log enqueues an entry. Drops silently if the buffer is full (backpressure).
+// Log enqueues an entry. Drops with a counter increment if the buffer is full.
 func (w *Writer) Log(e Entry) {
 	select {
 	case w.ch <- e:
 	default:
-		w.logger.Warn("audit buffer full, dropping event", "event", e.Event)
+		w.dropped.Add(1)
+		w.logger.Warn("audit buffer full, dropping event", "event", e.Event, "total_dropped", w.dropped.Load())
 	}
 }
 

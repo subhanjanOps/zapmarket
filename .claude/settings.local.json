@@ -210,7 +210,8 @@
       "Bash(obsidian version *)",
       "mcp__shadcn__list_items_in_registries",
       "Bash(py \".claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.5.0/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"marketplace seller dashboard e-commerce product management\" --design-system -p \"ZapMarket Seller\")",
-      "Bash(py *)"
+      "Bash(py *)",
+      "Bash(go test *)"
     ]
   },
   "enableAllProjectMcpServers": true,

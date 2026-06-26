@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const GW = process.env.GATEWAY_URL ?? "http://localhost:8000";
+const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const ALLOWED_PREFIXES = [
   "v1/products",
@@ -46,6 +47,9 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
     } else {
       headers["Content-Type"] = ct;
       const buf = await req.arrayBuffer();
+      if (buf.byteLength > MAX_BODY_BYTES) {
+        return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+      }
       if (buf.byteLength > 0) body = buf;
     }
   }

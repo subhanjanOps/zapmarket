@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -129,7 +132,46 @@ func (ab *AutoBinder) reconcile(ctx context.Context) {
 	}
 }
 
+// isAddrAllowed returns true when addr is a safe upstream to fetch from.
+// It rejects link-local (169.254.*), loopback, and unroutable addresses to
+// prevent SSRF via a poisoned Redis registry entry.
+// When GATEWAY_AUTO_BIND_ALLOW_LOOPBACK=true (development only), loopback is permitted.
+func isAddrAllowed(rawAddr string) bool {
+	u, err := url.Parse(rawAddr)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		return false
+	}
+	allowLoopback := os.Getenv("GATEWAY_AUTO_BIND_ALLOW_LOOPBACK") == "true" ||
+		os.Getenv("APP_ENV") == "development"
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			return false
+		}
+		if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return false // 169.254.x.x — cloud metadata endpoints
+		}
+		if ip.IsLoopback() && !allowLoopback {
+			return false
+		}
+		if ip.IsUnspecified() {
+			return false
+		}
+	}
+	return true
+}
+
 func (ab *AutoBinder) processService(ctx context.Context, serviceName, addr string) {
+	if !isAddrAllowed(addr) {
+		ab.logger.Warn("auto-bind: addr failed SSRF allowlist check, skipping",
+			"service", serviceName, "addr", addr)
+		return
+	}
 	specURL := addr + "/v1/docs/swagger.json"
 	doc, err := ab.fetchSwagger(ctx, specURL)
 	if err != nil {

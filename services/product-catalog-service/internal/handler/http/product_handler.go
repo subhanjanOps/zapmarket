@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -116,6 +117,10 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 func attributesToRawMessage(v interface{}) (json.RawMessage, error) {
 	if v == nil {
 		return json.RawMessage("{}"), nil
+	}
+	// Only JSON objects are valid — reject arrays, strings, numbers etc.
+	if _, ok := v.(map[string]interface{}); !ok {
+		return nil, fmt.Errorf("attributes must be a JSON object")
 	}
 	b, err := json.Marshal(v)
 	if err != nil {

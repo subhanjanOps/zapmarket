@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const GATEWAY = process.env.GATEWAY_URL ?? "http://localhost:8000";
+const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const ALLOWED_PREFIXES = [
   "gateway/v1/stats",
@@ -48,7 +49,11 @@ async function proxy(req: NextRequest, { params }: Params) {
       body = await req.formData();
     } else {
       if (ct) headers["Content-Type"] = ct;
-      body = await req.text();
+      const text = await req.text();
+      if (text.length > MAX_BODY_BYTES) {
+        return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+      }
+      body = text;
     }
   }
 

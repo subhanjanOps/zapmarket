@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
@@ -143,7 +143,17 @@ function FormInput({
 export default function CheckoutPage() {
   const { items, total, clearCart } = useCartStore();
   const router = useRouter();
-  const idempotencyKey = useRef(crypto.randomUUID());
+  // Stable across re-mounts and Back navigation for a given cart session.
+  const idempotencyKey = useRef<string>("");
+  const getIdempotencyKey = useCallback(() => {
+    if (idempotencyKey.current) return idempotencyKey.current;
+    const stored = sessionStorage.getItem("checkout_idempotency_key");
+    if (stored) { idempotencyKey.current = stored; return stored; }
+    const fresh = crypto.randomUUID();
+    sessionStorage.setItem("checkout_idempotency_key", fresh);
+    idempotencyKey.current = fresh;
+    return fresh;
+  }, []);
   const [address, setAddress] = useState({
     name: "",
     phone: "",
@@ -172,8 +182,9 @@ export default function CheckoutPage() {
     setError(null);
     setLoading(true);
     try {
+      const idemKey = getIdempotencyKey();
       const body = {
-        idempotency_key: idempotencyKey.current,
+        idempotency_key: idemKey,
         items: items.map((i) => ({ sku_id: i.skuId, quantity: i.qty, unit_price: i.price })),
         payment_method: paymentMethod,
         shipping_address: {
@@ -189,13 +200,14 @@ export default function CheckoutPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey.current,
+          "Idempotency-Key": idemKey,
         },
         body: JSON.stringify(body),
       });
       if (res.status === 201 || res.status === 409) {
         const data = await res.json();
         const orderId = data.data?.id ?? data.id;
+        sessionStorage.removeItem("checkout_idempotency_key");
         clearCart();
         router.push(`/account/orders/${orderId}?new=1`);
         return;

@@ -79,3 +79,7 @@ func (c *RedisStockCache) RunIncrIfExistsScript(ctx context.Context, key string,
 	}
 	return result, err
 }
+
+func (c *RedisStockCache) Delete(ctx context.Context, key string) error {
+	return c.rdb.Del(ctx, key).Err()
+}
