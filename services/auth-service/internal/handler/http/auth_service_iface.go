@@ -1,0 +1,29 @@
+package http
+
+//go:generate mockgen -source=auth_service_iface.go -destination=../../mocks/auth_service_mock.go -package=mocks
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
+)
+
+// AuthServicer is the subset of service.AuthService the HTTP handlers depend on.
+// Holding an interface instead of the concrete struct enables testing with mocks.
+type AuthServicer interface {
+	RegisterUserPassword(ctx context.Context, email, password, fullName, role string) (*domain.User, *domain.RefreshToken, error)
+	BootstrapAdmin(ctx context.Context, email, password, fullName string) (*domain.User, *domain.RefreshToken, error)
+	LoginPassword(ctx context.Context, email, password string) (*domain.User, *domain.RefreshToken, error)
+	RefreshAccessToken(ctx context.Context, refreshTokenString string) (string, error)
+	ValidateAccessToken(ctx context.Context, tokenString string) (*domain.User, error)
+	Logout(ctx context.Context, userID uuid.UUID, accessToken string) error
+	BlacklistToken(ctx context.Context, tokenString string, ttl time.Duration)
+	StoreOAuthState(ctx context.Context, state string) error
+	ValidateAndConsumeOAuthState(ctx context.Context, state string) (bool, error)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
+	RequestPasswordReset(ctx context.Context, userEmail string) error
+	ResetPassword(ctx context.Context, rawToken, newPassword string) error
+}

@@ -1,5 +1,7 @@
 package contracts
 
+//go:generate mockgen -source=repositories.go -destination=../../mocks/repository_mocks.go -package=mocks
+
 import (
 	"context"
 	"time"

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	goredis "github.com/redis/go-redis/v9"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain/contracts"
@@ -24,12 +23,8 @@ type PaymentService interface {
 	GetTransaction(ctx context.Context, paymentID uuid.UUID) (*domain.Payment, error)
 
 	// HandleCaptureWebhook and HandleFailureWebhook process a payment
-	// gateway's async callback. They exist for when a real (non-Fake)
-	// gateway is wired in — FakePaymentGateway resolves synchronously
-	// inside ChargeCard, so nothing calls these yet outside of manual
-	// testing. Both are idempotent: re-processing an already-resolved
-	// payment is a no-op, not an error, since gateways commonly retry
-	// webhook delivery.
+	// gateway's async callback. Both are idempotent: re-processing an
+	// already-resolved payment is a no-op since gateways commonly retry.
 	HandleCaptureWebhook(ctx context.Context, paymentID uuid.UUID, gatewayTxnID string) error
 	HandleFailureWebhook(ctx context.Context, paymentID uuid.UUID, reason string) error
 }
@@ -37,12 +32,12 @@ type PaymentService interface {
 type paymentService struct {
 	repo    contracts.PaymentRepository
 	gateway contracts.PaymentGateway
-	rdb     *goredis.Client
+	cache   contracts.IdempotencyCache
 	logger  *slog.Logger
 }
 
-func NewPaymentService(repo contracts.PaymentRepository, gateway contracts.PaymentGateway, rdb *goredis.Client, logger *slog.Logger) PaymentService {
-	return &paymentService{repo: repo, gateway: gateway, rdb: rdb, logger: logger}
+func NewPaymentService(repo contracts.PaymentRepository, gateway contracts.PaymentGateway, cache contracts.IdempotencyCache, logger *slog.Logger) PaymentService {
+	return &paymentService{repo: repo, gateway: gateway, cache: cache, logger: logger}
 }
 
 func paymentIdempKey(key uuid.UUID) string {
@@ -66,11 +61,11 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "idempotency_key is required")
 	}
 
-	// Redis-first idempotency check (24h TTL), then DB with a NX lock to
+	// Cache-first idempotency check (24h TTL), then DB with a NX lock to
 	// prevent duplicate payment creation under concurrent requests.
 	cacheKey := paymentIdempKey(idempotencyKey)
 	lockKey := cacheKey + ":lock"
-	if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+	if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
 		var p domain.Payment
 		if json.Unmarshal(cached, &p) == nil {
 			s.logger.Info("idempotent replay from cache", "payment_id", p.ID)
@@ -79,19 +74,19 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 	}
 
 	const lockTTL = 10 * time.Second
-	acquired, lockErr := s.rdb.SetNX(ctx, lockKey, "1", lockTTL).Result()
+	acquired, lockErr := s.cache.SetNX(ctx, lockKey, "1", lockTTL)
 	if lockErr != nil {
 		s.logger.Warn("idempotency lock unavailable, proceeding without lock", "error", lockErr)
 	}
 	if !acquired && lockErr == nil {
 		// Another request is already creating a payment for this idempotency key.
 		// Return 409 immediately — the client should retry after a short delay
-		// rather than us spinning and burning Redis connections.
+		// rather than us spinning and burning cache connections.
 		return nil, pkgerrors.NewConflict("IDEMPOTENCY_CONFLICT", "payment creation already in progress for this idempotency key; retry after a moment")
 	}
 	defer func() {
 		if acquired {
-			_ = s.rdb.Del(ctx, lockKey).Err()
+			_ = s.cache.Del(ctx, lockKey)
 		}
 	}()
 
@@ -100,7 +95,7 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 	if err == nil {
 		s.logger.Info("idempotent replay from db", "payment_id", existing.ID, "status", existing.Status)
 		if b, err := json.Marshal(existing); err == nil {
-			_ = s.rdb.Set(ctx, cacheKey, b, paymentIdempotencyTTL).Err()
+			_ = s.cache.Set(ctx, cacheKey, b, paymentIdempotencyTTL)
 		}
 		return existing, nil
 	}
@@ -159,7 +154,7 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 
 	// Cache captured payment for 24h.
 	if b, err := json.Marshal(payment); err == nil {
-		_ = s.rdb.Set(ctx, cacheKey, b, paymentIdempotencyTTL).Err()
+		_ = s.cache.Set(ctx, cacheKey, b, paymentIdempotencyTTL)
 	}
 	return payment, nil
 }

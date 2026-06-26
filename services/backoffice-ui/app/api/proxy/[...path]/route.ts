@@ -34,17 +34,24 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
   const upstreamUrl = `${GW}/${pathSegments.join("/")}${req.nextUrl.search}`;
 
   const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  headers["Authorization"] = `Bearer ${token}`;
 
-  const ct = req.headers.get("content-type");
-  let body: ArrayBuffer | undefined;
-  if (ct) {
-    headers["Content-Type"] = ct;
-    body = await req.arrayBuffer();
+  const ct = req.headers.get("content-type") ?? "";
+  const hasBody = req.method !== "GET" && req.method !== "HEAD";
+  let body: BodyInit | undefined;
+  if (hasBody) {
+    if (ct.includes("multipart/form-data")) {
+      // Let fetch set Content-Type with the correct boundary for the new stream.
+      body = await req.formData();
+    } else {
+      headers["Content-Type"] = ct;
+      const buf = await req.arrayBuffer();
+      if (buf.byteLength > 0) body = buf;
+    }
   }
 
   const options: RequestInit = { method: req.method, headers };
-  if (body !== undefined && body.byteLength > 0) options.body = body;
+  if (body !== undefined) options.body = body;
 
   let upstream: Response;
   try {

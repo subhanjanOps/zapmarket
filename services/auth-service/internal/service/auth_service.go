@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	goredis "github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/crypto"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
@@ -26,11 +25,11 @@ type AuthService struct {
 	resetRepo     contracts.PasswordResetRepository
 	emailer       email.Emailer
 	cfg           *config.Config
-	rdb           *goredis.Client // nil if Redis unavailable
+	blacklist     contracts.TokenBlacklist
+	oauthState    contracts.OAuthStateStore
 }
 
-// NewAuthService creates a new auth service. rdb may be nil when Redis is
-// unavailable; the service degrades gracefully (no token blacklist).
+// NewAuthService creates a new auth service.
 func NewAuthService(
 	userRepo contracts.UserRepository,
 	oauthRepo contracts.OAuthRepository,
@@ -38,16 +37,18 @@ func NewAuthService(
 	resetRepo contracts.PasswordResetRepository,
 	emailer email.Emailer,
 	cfg *config.Config,
-	rdb *goredis.Client,
+	blacklist contracts.TokenBlacklist,
+	oauthState contracts.OAuthStateStore,
 ) *AuthService {
 	return &AuthService{
-		userRepo:  userRepo,
-		oauthRepo: oauthRepo,
-		tokenRepo: tokenRepo,
-		resetRepo: resetRepo,
-		emailer:   emailer,
-		cfg:       cfg,
-		rdb:       rdb,
+		userRepo:   userRepo,
+		oauthRepo:  oauthRepo,
+		tokenRepo:  tokenRepo,
+		resetRepo:  resetRepo,
+		emailer:    emailer,
+		cfg:        cfg,
+		blacklist:  blacklist,
+		oauthState: oauthState,
 	}
 }
 
@@ -165,12 +166,10 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshTokenString
 
 // ValidateAccessToken verifies an access token and returns the user
 func (s *AuthService) ValidateAccessToken(ctx context.Context, tokenString string) (*domain.User, error) {
-	// Check Redis blacklist first (logout / token revocation).
-	if s.rdb != nil {
-		key := fmt.Sprintf("auth:blacklist:%x", sha256.Sum256([]byte(tokenString)))
-		if exists, _ := s.rdb.Exists(ctx, key).Result(); exists > 0 {
-			return nil, pkgerrors.NewUnauthorized("INVALID_TOKEN", "token has been revoked")
-		}
+	// Check blacklist first (logout / token revocation).
+	tokenHash := fmt.Sprintf("%x", sha256.Sum256([]byte(tokenString)))
+	if revoked, _ := s.blacklist.IsRevoked(ctx, tokenHash); revoked {
+		return nil, pkgerrors.NewUnauthorized("INVALID_TOKEN", "token has been revoked")
 	}
 
 	claims, err := crypto.ValidateAccessToken(tokenString, s.cfg.JWTSecretKey)
@@ -208,38 +207,21 @@ func (s *AuthService) Logout(ctx context.Context, userID uuid.UUID, accessToken 
 	return nil
 }
 
-// BlacklistToken adds a token to the Redis blacklist with the given TTL.
-// If Redis is unavailable, the call is a no-op (short-lived tokens expire naturally).
+// BlacklistToken adds a token to the blacklist with the given TTL.
 func (s *AuthService) BlacklistToken(ctx context.Context, tokenString string, ttl time.Duration) {
-	if s.rdb == nil {
-		return
-	}
-	key := fmt.Sprintf("auth:blacklist:%x", sha256.Sum256([]byte(tokenString)))
-	_ = s.rdb.Set(ctx, key, 1, ttl).Err()
+	tokenHash := fmt.Sprintf("%x", sha256.Sum256([]byte(tokenString)))
+	_ = s.blacklist.Add(ctx, tokenHash, ttl)
 }
 
-// StoreOAuthState stores a one-time OAuth state in Redis with a 10-minute TTL.
-// If Redis is unavailable, the state is not stored and CSRF protection is degraded.
+// StoreOAuthState stores a one-time OAuth state with a 10-minute TTL.
 func (s *AuthService) StoreOAuthState(ctx context.Context, state string) error {
-	if s.rdb == nil {
-		return nil
-	}
-	key := fmt.Sprintf("auth:oauth:state:%s", state)
-	return s.rdb.Set(ctx, key, 1, 10*time.Minute).Err()
+	return s.oauthState.Store(ctx, state, 10*time.Minute)
 }
 
-// ValidateAndConsumeOAuthState verifies a state token exists in Redis and deletes it
+// ValidateAndConsumeOAuthState verifies a state token exists and deletes it
 // atomically so it cannot be reused.
 func (s *AuthService) ValidateAndConsumeOAuthState(ctx context.Context, state string) (bool, error) {
-	if s.rdb == nil {
-		return false, pkgerrors.NewInternal("OAUTH_STATE_UNAVAILABLE", "Redis is required for OAuth CSRF protection", nil)
-	}
-	key := fmt.Sprintf("auth:oauth:state:%s", state)
-	n, err := s.rdb.Del(ctx, key).Result()
-	if err != nil {
-		return false, fmt.Errorf("validate oauth state: %w", err)
-	}
-	return n > 0, nil
+	return s.oauthState.ConsumeAndValidate(ctx, state)
 }
 
 // generateRefreshToken creates and stores a refresh token

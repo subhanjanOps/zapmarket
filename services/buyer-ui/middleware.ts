@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PROTECTED = ["/checkout", "/account/"];
-const PUBLIC_API = ["/api/auth/", "/api/proxy/v1/auth/"];
+// Routes that require a valid session cookie.
+const PROTECTED = ["/checkout", "/account"];
+// Routes that are always public (no auth check).
+const PUBLIC_PREFIXES = ["/login", "/register", "/api/auth/", "/api/proxy/v1/auth/", "/products", "/blog", "/deals", "/glossary", "/cart"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC_API.some((p) => pathname.startsWith(p))) return NextResponse.next();
-  if (PROTECTED.some((p) => pathname.startsWith(p))) {
+  if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname === p)) return NextResponse.next();
+  if (PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p))) {
     const token = req.cookies.get("buyer_token");
     if (!token) {
       if (pathname.startsWith("/api/")) {

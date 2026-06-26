@@ -29,6 +29,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/database"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
@@ -37,6 +38,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/order-management-service/docs"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
 	httphandler "github.com/zapmarket/zapmarket/services/order-management-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/infrastructure/cache"
 	authmw "github.com/zapmarket/zapmarket/services/order-management-service/internal/middleware"
@@ -73,13 +75,16 @@ func main() {
 	}
 
 	// ── Redis ─────────────────────────────────────────────────────────────────
+	// Redis is used for idempotency caching only — not for correctness. The service
+	// degrades to DB-only idempotency checks when Redis is unavailable.
 	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisURL})
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		log.Error("failed to connect to Redis", "addr", cfg.RedisURL, "error", err)
-		os.Exit(1)
+		log.Warn("Redis unavailable, running without cache (DB-only idempotency)", "addr", cfg.RedisURL, "error", err)
+		rdb = nil
+	} else {
+		defer rdb.Close()
+		log.Info("connected to Redis", "addr", cfg.RedisURL)
 	}
-	defer rdb.Close()
-	log.Info("connected to Redis", "addr", cfg.RedisURL)
 
 	// ── Downstream clients ────────────────────────────────────────────────────
 	inventoryClient, err := clients.NewInventoryClient(cfg.InventoryServiceAddr)
@@ -111,7 +116,12 @@ func main() {
 
 	// ── Repository / Service / Handler ───────────────────────────────────────
 	repo := repository.NewOrderRepository(db)
-	orderCache := cache.NewRedisCache(rdb)
+	var orderCache contracts.OrderCache
+	if rdb != nil {
+		orderCache = cache.NewRedisCache(rdb)
+	} else {
+		orderCache = cache.NewNoopCache()
+	}
 	svc := service.NewOrderService(repo, inventoryClient, paymentClient, orderCache, log)
 	handler := httphandler.NewOrderHandler(svc)
 	adminHandler := httphandler.NewAdminOrderHandler(svc)
@@ -120,6 +130,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	r.Use(httpx.LimitBody(httpx.MaxBodyBytes))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httphandler.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -175,8 +186,12 @@ func main() {
 
 	instanceID := uuid.New().String()
 	addr := fmt.Sprintf("http://zapmarket-order-management-service:%d", cfg.HTTPPort)
-	go registry.Heartbeat(relayCtx, rdb, "order-management-service", instanceID, addr, log)
-	log.Info("registered with gateway registry", "addr", addr)
+	if rdb != nil {
+		go registry.Heartbeat(relayCtx, rdb, "order-management-service", instanceID, addr, log)
+		log.Info("registered with gateway registry", "addr", addr)
+	} else {
+		log.Warn("skipping gateway registry heartbeat — Redis unavailable")
+	}
 
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)

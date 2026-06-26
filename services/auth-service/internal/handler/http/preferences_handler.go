@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
-	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 )
 
 var validCurrencyCode = regexp.MustCompile(`^[A-Z]{3}$`)
@@ -25,12 +24,12 @@ var PrefsUserIDKey prefsUserIDKeyType
 // PreferencesHandler handles GET/PUT /v1/users/me/preferences.
 type PreferencesHandler struct {
 	repo    contracts.PreferencesRepository
-	authSvc *service.AuthService
+	authSvc AuthServicer
 }
 
 // NewPreferencesHandler creates a new PreferencesHandler.
 // authSvc may be nil only in unit tests that inject a user via PrefsUserIDKey.
-func NewPreferencesHandler(repo contracts.PreferencesRepository, authSvc *service.AuthService) *PreferencesHandler {
+func NewPreferencesHandler(repo contracts.PreferencesRepository, authSvc AuthServicer) *PreferencesHandler {
 	return &PreferencesHandler{repo: repo, authSvc: authSvc}
 }
 

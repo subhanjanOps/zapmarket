@@ -46,8 +46,9 @@ type checkoutRequest struct {
 //	@Accept			json
 //	@Produce		json
 //	@Security		BearerAuth
-//	@Param			body	body		checkoutRequest	true	"Checkout payload"
-//	@Success		201		{object}	Response{data=domain.Order}
+//	@Param			Idempotency-Key	header		string			true	"Client-generated UUID to deduplicate concurrent checkout requests"
+//	@Param			body			body		checkoutRequest	true	"Checkout payload"
+//	@Success		201				{object}	Response{data=domain.Order}
 //	@Failure		400		{object}	Response
 //	@Failure		401		{object}	Response
 //	@Failure		409		{object}	Response

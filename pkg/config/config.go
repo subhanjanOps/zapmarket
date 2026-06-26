@@ -89,6 +89,10 @@ type Config struct {
 	SMTPUser     string
 	SMTPPassword string
 	SMTPFrom     string
+
+	// OTLPEndpoint is the gRPC address of an OpenTelemetry collector
+	// (e.g. "localhost:4317"). Empty string disables tracing.
+	OTLPEndpoint string
 }
 
 // Load reads configuration from environment variables
@@ -156,6 +160,8 @@ func Load() (*Config, error) {
 		SMTPUser:     getEnv("SMTP_USER", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:     getEnv("SMTP_FROM", "noreply@zapmarket.com"),
+
+		OTLPEndpoint: getEnv("OTLP_ENDPOINT", ""),
 	}
 
 	// Validate required fields

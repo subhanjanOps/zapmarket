@@ -41,6 +41,8 @@ import (
 
 	httpSwagger "github.com/swaggo/http-swagger"
 	"github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
+	"github.com/zapmarket/zapmarket/pkg/telemetry"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
 	"github.com/zapmarket/zapmarket/pkg/logger"
@@ -52,7 +54,9 @@ import (
 	_ "github.com/zapmarket/zapmarket/services/auth-service/docs"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/email"
 	grpcHandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/grpc"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
 	httphandler "github.com/zapmarket/zapmarket/services/auth-service/internal/handler/http"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/infrastructure/redisstore"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 )
@@ -86,6 +90,14 @@ func main() {
 		slog.Info("Migrations applied")
 	}
 
+	// ── Telemetry ─────────────────────────────────────────────────────────────
+	shutdownTracing, err := telemetry.Setup(context.Background(), "auth-service", cfg.OTLPEndpoint)
+	if err != nil {
+		slog.Warn("tracing unavailable", "error", err)
+	} else {
+		defer func() { _ = shutdownTracing(context.Background()) }()
+	}
+
 	// ── Metrics ───────────────────────────────────────────────────────────────
 	m := pkgmetrics.New("auth")
 
@@ -116,12 +128,23 @@ func main() {
 		emailer = email.NewLogEmailer()
 	}
 
+	// Wire Redis-backed or no-op stores depending on Redis availability.
+	var blacklist contracts.TokenBlacklist
+	var oauthStateStore contracts.OAuthStateStore
+	if rdb != nil {
+		blacklist = redisstore.NewTokenBlacklist(rdb)
+		oauthStateStore = redisstore.NewOAuthStateStore(rdb)
+	} else {
+		blacklist = &redisstore.NoopTokenBlacklist{}
+		oauthStateStore = &redisstore.NoopOAuthStateStore{}
+	}
+
 	// Initialize services
-	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, emailer, cfg, rdb)
+	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, emailer, cfg, blacklist, oauthStateStore)
 	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, authService, cfg)
 
 	// Initialize HTTP handlers
-	httpHandler := httphandler.NewHandler(authService, oauthService, cfg, rdb)
+	httpHandler := httphandler.NewHandler(authService, oauthService, cfg)
 	adminSvc := service.NewAdminService(userRepo)
 	adminHandler := httphandler.NewAdminHandler(adminSvc, authService, cfg)
 	prefsHandler := httphandler.NewPreferencesHandler(prefsRepo, authService)
@@ -170,8 +193,11 @@ func main() {
 	mux.Handle("/metrics", m.Handler())
 
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
-		Handler: mux,
+		Addr:            fmt.Sprintf(":%d", cfg.HTTPPort),
+		Handler:         httpx.LimitBody(httpx.MaxBodyBytes)(mux),
+		ReadTimeout:     15 * time.Second,
+		WriteTimeout:    15 * time.Second,
+		IdleTimeout:     60 * time.Second,
 	}
 
 	// Initialize gRPC server

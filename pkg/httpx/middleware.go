@@ -8,6 +8,21 @@ import (
 	"github.com/google/uuid"
 )
 
+// MaxBodyBytes is the default request body size limit (4 MiB).
+const MaxBodyBytes int64 = 4 << 20
+
+// LimitBody wraps each request body with http.MaxBytesReader to prevent
+// memory exhaustion from oversized payloads. Handlers should check for
+// *http.MaxBytesError when decoding to return 413.
+func LimitBody(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 const RequestIDHeader = "X-Request-ID"
 
 // RequestID propagates or generates an X-Request-ID header and stores it in the request context.

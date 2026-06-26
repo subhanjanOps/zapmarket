@@ -36,15 +36,20 @@ async function proxy(req: NextRequest, { params }: Params) {
 
   const target = `${GATEWAY}/${path.join("/")}${req.nextUrl.search}`;
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
+  const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
   };
 
+  const ct = req.headers.get("content-type") ?? "";
   const hasBody = req.method !== "GET" && req.method !== "HEAD";
-  let body: string | undefined;
+  let body: BodyInit | undefined;
   if (hasBody) {
-    body = await req.text();
+    if (ct.includes("multipart/form-data")) {
+      body = await req.formData();
+    } else {
+      if (ct) headers["Content-Type"] = ct;
+      body = await req.text();
+    }
   }
 
   let upstream: Response;

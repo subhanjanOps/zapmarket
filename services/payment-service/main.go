@@ -19,6 +19,9 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
+	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain/contracts"
+	paymentcache "github.com/zapmarket/zapmarket/services/payment-service/internal/infrastructure/cache"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
@@ -59,14 +62,19 @@ func main() {
 		log.Info("migrations applied")
 	}
 
-	// ── Redis ─────────────────────────────────────────────────────────────────
+	// ── Redis (optional — idempotency degrades to DB-only without it) ──────────
+	var idemCache contracts.IdempotencyCache
 	rdb := goredis.NewClient(&goredis.Options{Addr: cfg.RedisURL})
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		log.Error("failed to connect to Redis", "addr", cfg.RedisURL, "error", err)
-		os.Exit(1)
+		log.Warn("Redis unavailable, running with DB-only idempotency", "addr", cfg.RedisURL, "error", err)
+		_ = rdb.Close()
+		rdb = nil
+		idemCache = &paymentcache.NoopIdempotencyCache{}
+	} else {
+		defer rdb.Close()
+		log.Info("connected to Redis", "addr", cfg.RedisURL)
+		idemCache = paymentcache.NewRedisIdempotencyCache(rdb)
 	}
-	defer rdb.Close()
-	log.Info("connected to Redis", "addr", cfg.RedisURL)
 
 	// ── Metrics ───────────────────────────────────────────────────────────────
 	m := pkgmetrics.New("payment")
@@ -74,7 +82,7 @@ func main() {
 	// ── Repository / Gateway / Service / gRPC handler ───────────────────────────
 	repo := repository.NewPaymentRepository(db)
 	paymentGateway := gateway.NewFakePaymentGateway()
-	svc := service.NewPaymentService(repo, paymentGateway, rdb, log)
+	svc := service.NewPaymentService(repo, paymentGateway, idemCache, log)
 	grpcHandler := grpchandler.NewPaymentGRPCHandler(svc)
 	webhookHandler := httphandler.NewWebhookHandler(svc, cfg.PaymentWebhookSecret, log)
 
@@ -86,7 +94,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
-		Handler:      mux,
+		Handler:      httpx.LimitBody(httpx.MaxBodyBytes)(mux),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

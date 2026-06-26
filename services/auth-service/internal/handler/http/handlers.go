@@ -31,7 +31,6 @@ import (
 
 	"log/slog"
 
-	goredis "github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/crypto"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
@@ -90,19 +89,17 @@ func (h *Handler) LoggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 // Handler wraps all HTTP handlers
 type Handler struct {
-	authSvc  *service.AuthService
+	authSvc  AuthServicer
 	oauthSvc *service.OAuthService
 	cfg      *config.Config
-	rdb      *goredis.Client
 }
 
 // NewHandler creates a new HTTP handler
-func NewHandler(authSvc *service.AuthService, oauthSvc *service.OAuthService, cfg *config.Config, rdb *goredis.Client) *Handler {
+func NewHandler(authSvc AuthServicer, oauthSvc *service.OAuthService, cfg *config.Config) *Handler {
 	return &Handler{
 		authSvc:  authSvc,
 		oauthSvc: oauthSvc,
 		cfg:      cfg,
-		rdb:      rdb,
 	}
 }
 
@@ -177,6 +174,17 @@ type UserResponse struct {
 // wire-level JSON plumbing isn't duplicated per service.
 func (h *Handler) writeResponse(w http.ResponseWriter, statusCode int, data interface{}) {
 	httpx.JSON(w, statusCode, data)
+}
+
+// issueAccessToken generates a signed access token for user and returns it,
+// writing an error response and returning ("", false) on failure.
+func (h *Handler) issueAccessToken(w http.ResponseWriter, user *domain.User) (string, bool) {
+	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to generate token")
+		return "", false
+	}
+	return accessToken, true
 }
 
 // writeError writes an error response
@@ -260,10 +268,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate access token
-	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to generate token")
+	accessToken, ok := h.issueAccessToken(w, user)
+	if !ok {
 		return
 	}
 
@@ -306,10 +312,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate access token
-	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to generate token")
+	accessToken, ok := h.issueAccessToken(w, user)
+	if !ok {
 		return
 	}
 
@@ -423,9 +427,8 @@ func (h *Handler) AdminBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to generate token")
+	accessToken, ok := h.issueAccessToken(w, user)
+	if !ok {
 		return
 	}
 
@@ -555,10 +558,8 @@ func (h *Handler) GoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate access token
-	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to generate token")
+	accessToken, ok := h.issueAccessToken(w, user)
+	if !ok {
 		return
 	}
 
@@ -639,10 +640,8 @@ func (h *Handler) FacebookOAuthCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Generate access token
-	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to generate token")
+	accessToken, ok := h.issueAccessToken(w, user)
+	if !ok {
 		return
 	}
 

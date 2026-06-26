@@ -31,6 +31,8 @@ import (
 
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/database"
+	"github.com/zapmarket/zapmarket/pkg/httpx"
+	"github.com/zapmarket/zapmarket/pkg/telemetry"
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
@@ -71,6 +73,14 @@ func main() {
 			os.Exit(1)
 		}
 		log.Info("migrations applied")
+	}
+
+	// ── Telemetry ─────────────────────────────────────────────────────────────
+	shutdownTracing, err := telemetry.Setup(context.Background(), "product-catalog-service", cfg.OTLPEndpoint)
+	if err != nil {
+		log.Warn("tracing unavailable", "error", err)
+	} else {
+		defer func() { _ = shutdownTracing(context.Background()) }()
 	}
 
 	// ── Auth middleware ────────────────────────────────────────────────────────
@@ -126,6 +136,7 @@ func main() {
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.RequestID)
+	r.Use(httpx.LimitBody(httpx.MaxBodyBytes))
 
 	r.Route("/v1", func(r chi.Router) {
 

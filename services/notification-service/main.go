@@ -47,7 +47,15 @@ func main() {
 	m := pkgmetrics.New("notification")
 
 	// ── Notifier ──────────────────────────────────────────────────────────────
-	n := notifier.NewLogNotifier(log)
+	// Use SMTP when credentials are configured; fall back to log-only in dev.
+	var n notifier.Notifier
+	if cfg.SMTPHost != "" && cfg.SMTPFrom != "" {
+		n = notifier.NewSMTPNotifier(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword, cfg.SMTPFrom)
+		log.Info("SMTP notifier active", "host", cfg.SMTPHost, "from", cfg.SMTPFrom)
+	} else {
+		n = notifier.NewLogNotifier(log)
+		log.Info("SMTP not configured — notifications will be logged only")
+	}
 
 	dedup := cache.NewRedisDeduplicator(rdb)
 	handler := consumer.New(n, dedup, log)

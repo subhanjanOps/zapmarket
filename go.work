@@ -42,6 +42,7 @@ use ./pkg/redis
 use ./pkg/registry
 
 use ./pkg/metrics
+use ./pkg/telemetry
 
 use ./services/api-gateway
 

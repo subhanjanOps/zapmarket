@@ -2,16 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PREFIXES = ["/login", "/register", "/api/auth/", "/api/proxy/v1/auth/"];
 
-function isTokenExpired(jwt: string): boolean {
-  try {
-    const payload = JSON.parse(atob(jwt.split(".")[1])) as { exp?: number };
-    if (typeof payload.exp !== "number") return false;
-    return Date.now() / 1000 > payload.exp;
-  } catch {
-    return true;
-  }
-}
-
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -19,8 +9,10 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Only check for cookie presence — signature verification happens at the gateway
+  // via ValidateToken gRPC. Client-side JWT decoding is not a security check.
   const token = req.cookies.get("seller_token");
-  if (!token || isTokenExpired(token.value)) {
+  if (!token) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
