@@ -31,6 +31,12 @@ export async function POST(req: NextRequest) {
       { status: upstream.status },
     );
   }
+  if (data.role !== "seller") {
+    return NextResponse.json(
+      { error: "This portal is for sellers only" },
+      { status: 403 },
+    );
+  }
   const token = data.access_token as string;
   const res = NextResponse.json({ ok: true });
   res.cookies.set("seller_token", token, {

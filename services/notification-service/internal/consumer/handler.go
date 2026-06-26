@@ -11,10 +11,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/services/notification-service/internal/notifier"
 )
+
+// deduplicator abstracts the Redis operations used for notification dedup.
+type deduplicator interface {
+	// SetNX claims the dedup key atomically. Returns true if the claim was acquired.
+	SetNX(ctx context.Context, key string, ttl time.Duration) (bool, error)
+	// Del removes the dedup key (used to release the claim on send failure).
+	Del(ctx context.Context, key string) error
+}
 
 var zeroDecimalCurrencies = map[string]bool{
 	"JPY": true, "KRW": true, "IDR": true,
@@ -67,12 +74,12 @@ func formatWithCommas(n int64) string {
 // Handler processes order events from Kafka and dispatches notifications.
 type Handler struct {
 	notifier notifier.Notifier
-	redis    *redis.Client
+	dedup    deduplicator
 	logger   *slog.Logger
 }
 
-func New(n notifier.Notifier, rdb *redis.Client, logger *slog.Logger) *Handler {
-	return &Handler{notifier: n, redis: rdb, logger: logger}
+func New(n notifier.Notifier, dedup deduplicator, logger *slog.Logger) *Handler {
+	return &Handler{notifier: n, dedup: dedup, logger: logger}
 }
 
 // Handle is a kafka.HandlerFunc compatible method.
@@ -93,13 +100,14 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 
 	dedupKey := fmt.Sprintf("notif:dedup:%s", outboxID)
 
-	// C2: check dedup before sending but do NOT set the key yet.
+	// Claim the dedup key atomically before sending. SetNX is the guard — if
+	// another consumer already claimed the key we skip silently.
 	if dedupEnabled {
-		exists, err := h.redis.Exists(ctx, dedupKey).Result()
+		claimed, err := h.dedup.SetNX(ctx, dedupKey, 72*time.Hour)
 		if err != nil {
-			return fmt.Errorf("dedup check: %w", err)
+			return fmt.Errorf("dedup SetNX: %w", err)
 		}
-		if exists > 0 {
+		if !claimed {
 			h.logger.Info("duplicate event skipped", "outbox_id", outboxID, "event_type", eventType)
 			return nil
 		}
@@ -133,14 +141,13 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 
 	if err := h.notifier.Send(ctx, notif); err != nil {
 		h.logger.Error("failed to send notification", "event_type", eventType, "user_id", notif.UserID, "error", err)
-		return err // Retry.
-	}
-
-	// C2: set dedup key AFTER successful send. H2: use 72h TTL.
-	if dedupEnabled {
-		if _, err := h.redis.SetNX(ctx, dedupKey, 1, 72*time.Hour).Result(); err != nil {
-			h.logger.Warn("failed to set dedup key after send", "outbox_id", outboxID, "error", err)
+		// Release the dedup claim so the next retry can reclaim it.
+		if dedupEnabled {
+			if delErr := h.dedup.Del(ctx, dedupKey); delErr != nil {
+				h.logger.Warn("failed to release dedup key after send failure", "outbox_id", outboxID, "error", delErr)
+			}
 		}
+		return err // Retry.
 	}
 
 	h.logger.Info("notification sent", "event_type", eventType, "user_id", notif.UserID)

@@ -3,16 +3,14 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
-	goredis "github.com/redis/go-redis/v9"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain/contracts"
+	"github.com/zapmarket/zapmarket/services/inventory-service/internal/infrastructure/cache"
 )
 
 // InventoryService defines the interface for inventory operations.
@@ -24,42 +22,16 @@ type InventoryService interface {
 	GetStock(ctx context.Context, skuID uuid.UUID) (*domain.Inventory, error)
 }
 
-// luaReserve atomically checks available qty and decrements by the requested
-// amount. Returns:
-//
-//	-1  → key not in Redis (cache miss; caller must warm and retry)
-//	 0  → insufficient stock
-//	>0  → success; value is remaining available qty after decrement
-var luaReserve = goredis.NewScript(`
-local available = redis.call('GET', KEYS[1])
-if available == false then return -1 end
-available = tonumber(available)
-local qty = tonumber(ARGV[1])
-if available < qty then return 0 end
-return redis.call('DECRBY', KEYS[1], qty)
-`)
-
-// luaIncrIfExists increments the key by ARGV[1] only when it already exists.
-// Returns the new value, or -1 if the key was absent.
-// This prevents AddStock from creating a stale counter seeded with only the
-// delta instead of the true qty_available.
-var luaIncrIfExists = goredis.NewScript(`
-if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
-return redis.call('INCRBY', KEYS[1], ARGV[1])
-`)
+const stockCacheTTL = 24 * time.Hour
 
 type inventoryService struct {
 	repo   contracts.InventoryRepository
-	rdb    *goredis.Client
+	cache  contracts.StockCachePort
 	logger *slog.Logger
 }
 
-func NewInventoryService(repo contracts.InventoryRepository, rdb *goredis.Client, logger *slog.Logger) InventoryService {
-	return &inventoryService{repo: repo, rdb: rdb, logger: logger}
-}
-
-func stockKey(skuID uuid.UUID) string {
-	return fmt.Sprintf("inv:stock:%s", skuID)
+func NewInventoryService(repo contracts.InventoryRepository, stockCache contracts.StockCachePort, logger *slog.Logger) InventoryService {
+	return &inventoryService{repo: repo, cache: stockCache, logger: logger}
 }
 
 func (s *inventoryService) AddStock(ctx context.Context, skuID uuid.UUID, qty int) (int, error) {
@@ -79,7 +51,7 @@ func (s *inventoryService) AddStock(ctx context.Context, skuID uuid.UUID, qty in
 
 	// Increment Redis only if the key already exists. If absent, the next
 	// ReserveStock cache-miss will warm it from DB with the correct value.
-	if _, redisErr := luaIncrIfExists.Run(ctx, s.rdb, []string{stockKey(skuID)}, qty).Int64(); redisErr != nil && !errors.Is(redisErr, goredis.Nil) {
+	if _, redisErr := s.cache.RunIncrIfExistsScript(ctx, s.cache.StockKey(skuID), qty); redisErr != nil {
 		s.logger.Warn("failed to increment redis stock counter", "sku_id", skuID, "error", redisErr)
 	}
 
@@ -99,11 +71,10 @@ func (s *inventoryService) ReserveStock(ctx context.Context, skuID, orderID uuid
 
 	s.logger.Info("reserving stock", "sku_id", skuID, "order_id", orderID, "qty", qty)
 
-	key := stockKey(skuID)
+	key := s.cache.StockKey(skuID)
 
-	// Lua check-and-decrement: atomic, no race between check and update.
-	result, err := luaReserve.Run(ctx, s.rdb, []string{key}, strconv.Itoa(qty)).Int64()
-	if err != nil && !errors.Is(err, goredis.Nil) {
+	result, err := s.cache.RunReserveScript(ctx, key, qty)
+	if err != nil {
 		s.logger.Warn("redis lua script error, falling through to db-only path", "error", err)
 		return s.dbReserve(ctx, skuID, orderID, qty)
 	}
@@ -114,14 +85,14 @@ func (s *inventoryService) ReserveStock(ctx context.Context, skuID, orderID uuid
 		if dbErr != nil {
 			return nil, dbErr
 		}
-		if setErr := s.rdb.Set(ctx, key, inv.QtyAvailable, 24*time.Hour).Err(); setErr != nil {
+		if setErr := s.cache.Set(ctx, key, int64(inv.QtyAvailable), stockCacheTTL); setErr != nil {
 			s.logger.Warn("failed to warm redis stock key", "sku_id", skuID, "error", setErr)
 			return s.dbReserve(ctx, skuID, orderID, qty)
 		}
 		s.logger.Info("warmed redis stock cache", "sku_id", skuID, "available", inv.QtyAvailable)
 
-		result, err = luaReserve.Run(ctx, s.rdb, []string{key}, strconv.Itoa(qty)).Int64()
-		if err != nil && !errors.Is(err, goredis.Nil) {
+		result, err = s.cache.RunReserveScript(ctx, key, qty)
+		if err != nil {
 			return s.dbReserve(ctx, skuID, orderID, qty)
 		}
 	}
@@ -133,18 +104,14 @@ func (s *inventoryService) ReserveStock(ctx context.Context, skuID, orderID uuid
 	// Redis gate passed — now write the durable Postgres record.
 	reservation, dbErr := s.repo.ReserveStock(ctx, skuID, orderID, qty)
 	if dbErr != nil {
-		// Postgres rejected it (race at boundary or constraint violation) —
-		// roll back the Redis decrement so the counters stay in sync.
-		if incrErr := s.rdb.IncrBy(ctx, key, int64(qty)).Err(); incrErr != nil {
+		if _, incrErr := s.cache.IncrBy(ctx, key, int64(qty)); incrErr != nil && !errors.Is(incrErr, cache.ErrCacheMiss) { //nolint:gosec
 			s.logger.Error("CRITICAL: redis rollback failed after db reserve failure",
 				"sku_id", skuID, "qty", qty, "error", incrErr)
 		}
 		return nil, dbErr
 	}
 	if reservation == nil {
-		// DB check-and-update returned no rows (shouldn't happen after Lua pass,
-		// but treat it as a race: roll back and report insufficient stock).
-		if incrErr := s.rdb.IncrBy(ctx, key, int64(qty)).Err(); incrErr != nil {
+		if _, incrErr := s.cache.IncrBy(ctx, key, int64(qty)); incrErr != nil && !errors.Is(incrErr, cache.ErrCacheMiss) { //nolint:gosec
 			s.logger.Error("CRITICAL: redis rollback failed after nil reservation",
 				"sku_id", skuID, "qty", qty, "error", incrErr)
 		}
@@ -180,10 +147,7 @@ func (s *inventoryService) ReleaseStock(ctx context.Context, reservationID uuid.
 		return err
 	}
 
-	// Increment Redis only if the key exists. If absent, the next ReserveStock
-	// cache-miss will warm it from DB. Using INCRBY on a missing key would seed
-	// it with only the released delta instead of the true available qty.
-	if _, redisErr := luaIncrIfExists.Run(ctx, s.rdb, []string{stockKey(skuID)}, qty).Int64(); redisErr != nil && !errors.Is(redisErr, goredis.Nil) {
+	if _, redisErr := s.cache.RunIncrIfExistsScript(ctx, s.cache.StockKey(skuID), int(qty)); redisErr != nil { //nolint:gosec
 		s.logger.Warn("failed to increment redis stock after release", "reservation_id", reservationID, "error", redisErr)
 	}
 
@@ -197,9 +161,6 @@ func (s *inventoryService) DeductStock(ctx context.Context, reservationID uuid.U
 
 	s.logger.Info("deducting stock", "reservation_id", reservationID)
 
-	// DeductStock moves a reservation to CONFIRMED and reduces qty_on_hand.
-	// Redis was already decremented when the reservation was created, so no
-	// Redis update is needed here — available qty doesn't change again.
 	return s.repo.DeductStock(ctx, reservationID)
 }
 

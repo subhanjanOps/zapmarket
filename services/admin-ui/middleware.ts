@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 // Routes that do not require authentication
 const PUBLIC_PREFIXES = ["/login", "/api/auth/"];
 
+function isTokenExpired(jwt: string): boolean {
+  try {
+    const payload = JSON.parse(atob(jwt.split(".")[1])) as { exp?: number };
+    if (typeof payload.exp !== "number") return false;
+    return Date.now() / 1000 > payload.exp;
+  } catch {
+    return true;
+  }
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -11,7 +21,7 @@ export function middleware(req: NextRequest) {
   }
 
   const token = req.cookies.get("gw_token");
-  if (!token) {
+  if (!token || isTokenExpired(token.value)) {
     // API calls from the client: return 401 (don't redirect to HTML page)
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

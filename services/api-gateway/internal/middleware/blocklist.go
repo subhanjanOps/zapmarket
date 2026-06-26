@@ -27,7 +27,14 @@ func Blocklist(rdb *goredis.Client) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := ClientIP(r)
 			blocked, err := rdb.SIsMember(r.Context(), BlocklistKey, ip).Result()
-			if err == nil && blocked {
+			if err != nil {
+				// Redis unavailable — fail closed: deny rather than allow unknown blocklist state.
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"service temporarily unavailable"}}`))
+				return
+			}
+			if blocked {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
 				_, _ = w.Write([]byte(`{"success":false,"error":{"code":"IP_BLOCKED","message":"your IP address has been blocked"}}`))

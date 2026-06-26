@@ -60,9 +60,16 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	const maxCheckoutItems = 50
+
 	var req checkoutRequest
 	if err := DecodeJSON(r, &req); err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+
+	if len(req.Items) > maxCheckoutItems {
+		ErrorResponse(w, http.StatusBadRequest, "TOO_MANY_ITEMS", fmt.Sprintf("checkout is limited to %d items per order", maxCheckoutItems))
 		return
 	}
 

@@ -13,6 +13,7 @@ import (
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/infrastructure/cache"
 )
 
 // ── mock repository ──────────────────────────────────────────────────────────
@@ -140,7 +141,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 
 func newTestService(t *testing.T, repo contracts.OrderRepository, inv inventoryGateway, pay paymentGateway, rdb *redis.Client) OrderService {
 	t.Helper()
-	return NewOrderService(repo, inv, pay, rdb, slog.Default())
+	return NewOrderService(repo, inv, pay, cache.NewRedisCache(rdb), slog.Default())
 }
 
 func defaultItems() []CheckoutItem {

@@ -16,6 +16,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/grpcx v0.0.0
 	github.com/zapmarket/zapmarket/pkg/httpx v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
+	github.com/zapmarket/zapmarket/pkg/metrics v0.0.0
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
 	github.com/zapmarket/zapmarket/pkg/proto v0.0.0
 	github.com/zapmarket/zapmarket/pkg/registry v0.0.0
@@ -27,6 +28,7 @@ require (
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-openapi/jsonpointer v0.23.1 // indirect
@@ -43,6 +45,11 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.18.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/prometheus/client_golang v1.22.0 // indirect
+	github.com/prometheus/client_model v0.6.1 // indirect
+	github.com/prometheus/common v0.62.0 // indirect
+	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/swaggo/files v0.0.0-20220610200504-28940afbdbfe // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
@@ -65,6 +72,7 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/grpcx => ../../pkg/grpcx
 	github.com/zapmarket/zapmarket/pkg/httpx => ../../pkg/httpx
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
+	github.com/zapmarket/zapmarket/pkg/metrics => ../../pkg/metrics
 	github.com/zapmarket/zapmarket/pkg/migrate => ../../pkg/migrate
 	github.com/zapmarket/zapmarket/pkg/proto => ../../pkg/proto
 	github.com/zapmarket/zapmarket/pkg/registry => ../../pkg/registry

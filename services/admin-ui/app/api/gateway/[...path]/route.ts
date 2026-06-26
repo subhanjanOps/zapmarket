@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const GATEWAY = process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+const GATEWAY = process.env.GATEWAY_URL ?? "http://localhost:8000";
+
+const ALLOWED_PREFIXES = [
+  "gateway/v1/stats",
+  "gateway/v1/routes",
+  "gateway/v1/audit",
+  "gateway/v1/registry",
+  "gateway/v1/metrics",
+  "gateway/v1/probe",
+  "gateway/v1/blocklist",
+  "v1/currencies",
+  "v1/admin/currencies",
+];
 
 type Params = { params: Promise<{ path: string[] }> };
 
@@ -15,6 +27,11 @@ async function proxy(req: NextRequest, { params }: Params) {
   // Reject path traversal attempts.
   if (path.some((s) => s === ".." || s === ".")) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  }
+
+  const joined = path.join("/");
+  if (!ALLOWED_PREFIXES.some((p) => joined === p || joined.startsWith(p + "/"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const target = `${GATEWAY}/${path.join("/")}${req.nextUrl.search}`;

@@ -67,6 +67,17 @@ func (h *SKUHandler) CreateSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user, err := requireUser(r)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	if err := assertOwnership(r.Context(), h.productService, req.ProductID, user); err != nil {
+		HandleError(w, err)
+		return
+	}
+
 	variantAttrs, err := json.Marshal(req.VariantAttrs)
 	if err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "INVALID_REQUEST", "invalid attributes")

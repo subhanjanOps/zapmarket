@@ -175,6 +175,7 @@ export default function CheckoutPage() {
       const body = {
         idempotency_key: idempotencyKey.current,
         items: items.map((i) => ({ sku_id: i.skuId, quantity: i.qty, unit_price: i.price })),
+        payment_method: paymentMethod,
         shipping_address: {
           full_name: address.name,
           phone: address.phone,

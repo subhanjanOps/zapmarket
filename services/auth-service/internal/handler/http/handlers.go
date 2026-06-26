@@ -31,6 +31,7 @@ import (
 
 	"log/slog"
 
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/crypto"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
@@ -92,14 +93,16 @@ type Handler struct {
 	authSvc  *service.AuthService
 	oauthSvc *service.OAuthService
 	cfg      *config.Config
+	rdb      *goredis.Client
 }
 
 // NewHandler creates a new HTTP handler
-func NewHandler(authSvc *service.AuthService, oauthSvc *service.OAuthService, cfg *config.Config) *Handler {
+func NewHandler(authSvc *service.AuthService, oauthSvc *service.OAuthService, cfg *config.Config, rdb *goredis.Client) *Handler {
 	return &Handler{
 		authSvc:  authSvc,
 		oauthSvc: oauthSvc,
 		cfg:      cfg,
+		rdb:      rdb,
 	}
 }
 
@@ -231,6 +234,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := mail.ParseAddress(req.Email); err != nil {
 		h.writeError(w, http.StatusBadRequest, "email must be a valid email address")
+		return
+	}
+	if len(req.Password) < 8 {
+		h.writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
 		return
 	}
 	if len(req.Password) > 72 {

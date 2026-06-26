@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain/contracts"
+	"github.com/zapmarket/zapmarket/services/inventory-service/internal/infrastructure/cache"
 )
 
 // ── mock repository ──────────────────────────────────────────────────────────
@@ -87,7 +89,12 @@ func newDownRedis(t *testing.T) *goredis.Client {
 }
 
 func newSvc(repo contracts.InventoryRepository, rdb *goredis.Client) InventoryService {
-	return NewInventoryService(repo, rdb, slog.Default())
+	return NewInventoryService(repo, cache.NewRedisStockCache(rdb), slog.Default())
+}
+
+// stockKey mirrors the key format used by the cache adapter.
+func stockKey(skuID uuid.UUID) string {
+	return fmt.Sprintf("inv:stock:%s", skuID)
 }
 
 // seedRedis sets the stock key directly so the Lua script sees a warm cache.

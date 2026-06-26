@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   adminListUsers, adminUpdateUserRole, adminDeactivateUser,
   type AdminUser,
@@ -23,14 +23,23 @@ export default function UsersPage() {
   const [newRole, setNewRole]   = useState("");
   const [saving, setSaving]     = useState(false);
   const [roleErr, setRoleErr]   = useState("");
+  const [error, setError]       = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => { setDebouncedSearch(search); setPage(0); }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search]);
 
   const load = useCallback(() => {
     setLoading(true);
-    adminListUsers({ search: search || undefined, role: role || undefined, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
-      .then((r) => { setRows(r.data); setTotal(r.total); })
-      .catch(console.error)
+    adminListUsers({ search: debouncedSearch || undefined, role: role || undefined, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+      .then((r) => { setRows(r.data); setTotal(r.total); setError(null); })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load users"))
       .finally(() => setLoading(false));
-  }, [search, role, page]);
+  }, [debouncedSearch, role, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -65,6 +74,11 @@ export default function UsersPage() {
 
   return (
     <div className="page-content">
+      {error && (
+        <div style={{ marginBottom: "1rem", padding: "0.75rem 1rem", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "0.5rem", color: "#DC2626", fontSize: "0.875rem" }}>
+          {error}
+        </div>
+      )}
       <div className="page-header">
         <div>
           <h1 className="page-title">Users</h1>
@@ -79,7 +93,7 @@ export default function UsersPage() {
           style={{ maxWidth: 280 }}
           placeholder="Search email or name…"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+          onChange={(e) => setSearch(e.target.value)}
         />
         <select className="input" style={{ maxWidth: 160 }} value={role} onChange={(e) => { setRole(e.target.value); setPage(0); }}>
           {ROLES.map((r) => <option key={r} value={r}>{r || "All roles"}</option>)}

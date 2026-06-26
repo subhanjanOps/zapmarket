@@ -39,7 +39,7 @@ func (r *PaymentRepository) GetPendingWithGatewayCharge(ctx context.Context, old
 		p := &domain.Payment{}
 		if err := rows.Scan(
 			&p.ID, &p.OrderID, &p.UserID, &p.IdempotencyKey, &p.Status, &p.Amount, &p.Currency, &p.Gateway,
-			&p.GatewayTxnID, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt,
+			&p.GatewayTxnID, &p.GatewayResponse, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 		); err != nil {
 			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan stale pending payment", err)
 		}
@@ -120,11 +120,12 @@ func (r *PaymentRepository) MarkFailed(ctx context.Context, paymentID uuid.UUID,
 				failure_reason = $2,
 				updated_at = NOW()
 			WHERE id = $1
+				AND status IN ('PENDING', 'AUTHORISED')
 				AND deleted_at IS NULL
 			RETURNING order_id, user_id
 		`, paymentID, reason).Scan(&orderID, &userID)
 		if errors.Is(err, sql.ErrNoRows) {
-			return pkgerrors.NewNotFound("PAYMENT_NOT_FOUND", "payment not found")
+			return pkgerrors.NewConflict("PAYMENT_NOT_FAILEABLE", "payment is not in a failable state")
 		}
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to mark payment failed", err)
@@ -189,7 +190,8 @@ func (r *PaymentRepository) CreateRefund(ctx context.Context, refund *domain.Ref
 }
 
 const paymentSelectQuery = `
-	SELECT id, order_id, user_id, idempotency_key, status, amount, currency, gateway, gateway_txn_id, failure_reason, created_at, updated_at
+	SELECT id, order_id, user_id, idempotency_key, status, amount, currency, gateway,
+	       gateway_txn_id, gateway_response, failure_reason, created_at, updated_at, deleted_at
 	FROM payments
 `
 
@@ -198,7 +200,7 @@ func scanPayment(row *sql.Row) (*domain.Payment, error) {
 
 	err := row.Scan(
 		&p.ID, &p.OrderID, &p.UserID, &p.IdempotencyKey, &p.Status, &p.Amount, &p.Currency, &p.Gateway,
-		&p.GatewayTxnID, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt,
+		&p.GatewayTxnID, &p.GatewayResponse, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {

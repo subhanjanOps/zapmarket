@@ -80,6 +80,15 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	status := domain.ProductStatus(req.Status)
+	if req.Status != "" && !status.IsValid() {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_STATUS", "status must be one of: DRAFT, ACTIVE, INACTIVE, ARCHIVED")
+		return
+	}
+	if req.Status == "" {
+		status = domain.ProductStatusDraft
+	}
+
 	product := &domain.Product{
 		CategoryID:  req.CategoryID,
 		SellerID:    sellerID,
@@ -87,7 +96,7 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		Slug:        req.Slug,
 		Description: req.Description,
 		Attributes:  attrs,
-		Status:      domain.ProductStatus(req.Status),
+		Status:      status,
 	}
 
 	if err := h.productService.CreateProduct(r.Context(), product); err != nil {
@@ -311,7 +320,12 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		product.Description = req.Description
 	}
 	if req.Status != "" {
-		product.Status = domain.ProductStatus(req.Status)
+		newStatus := domain.ProductStatus(req.Status)
+		if !newStatus.IsValid() {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_STATUS", "status must be one of: DRAFT, ACTIVE, INACTIVE, ARCHIVED")
+			return
+		}
+		product.Status = newStatus
 	}
 	if req.Attributes != nil {
 		attrs, err := attributesToRawMessage(req.Attributes)
@@ -327,7 +341,13 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SuccessResponse(w, http.StatusOK, product)
+	updated, err := h.productService.GetProductByID(r.Context(), product.ID)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	SuccessResponse(w, http.StatusOK, updated)
 }
 
 // DeleteProduct deletes a product

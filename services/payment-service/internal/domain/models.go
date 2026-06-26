@@ -38,8 +38,8 @@ type Payment struct {
 type LedgerEntryType string
 
 const (
-	LedgerDebit  LedgerEntryType = "debit"
-	LedgerCredit LedgerEntryType = "credit"
+	LedgerDebit  LedgerEntryType = "DEBIT"
+	LedgerCredit LedgerEntryType = "CREDIT"
 )
 
 // LedgerEntry is an immutable double-entry ledger row — no UpdatedAt or

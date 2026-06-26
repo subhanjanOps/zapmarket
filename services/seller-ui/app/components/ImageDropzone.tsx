@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
 
-interface PendingFile { file: File; preview: string; progress: number; done: boolean; error?: string; }
+interface PendingFile { id: string; file: File; preview: string; progress: number; done: boolean; error?: string; }
 
 interface Props {
   onUpload: (file: File) => Promise<void>;
@@ -17,6 +17,7 @@ export function ImageDropzone({ onUpload }: Props) {
     if (!files || files.length === 0) return;
     const arr = Array.from(files);
     const newEntries: PendingFile[] = arr.map((f) => ({
+      id: `${f.name}-${f.size}-${f.lastModified}`,
       file: f,
       preview: URL.createObjectURL(f),
       progress: 0,
@@ -24,24 +25,23 @@ export function ImageDropzone({ onUpload }: Props) {
     }));
     setPending((p) => [...p, ...newEntries]);
 
-    for (let i = 0; i < newEntries.length; i++) {
-      const entry = newEntries[i];
-      const idx = pending.length + i;
-      setPending((p) => p.map((x, j) => j === idx ? { ...x, progress: 30 } : x));
+    for (const entry of newEntries) {
+      setPending((p) => p.map((x) => x.id === entry.id ? { ...x, progress: 30 } : x));
       try {
         await onUpload(entry.file);
-        setPending((p) => p.map((x, j) => j === idx ? { ...x, progress: 100, done: true } : x));
+        setPending((p) => p.map((x) => x.id === entry.id ? { ...x, progress: 100, done: true } : x));
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Upload failed";
-        setPending((p) => p.map((x, j) => j === idx ? { ...x, progress: 0, error: msg } : x));
+        setPending((p) => p.map((x) => x.id === entry.id ? { ...x, progress: 0, error: msg } : x));
       }
     }
   }
 
-  function remove(idx: number) {
+  function remove(id: string) {
     setPending((p) => {
-      URL.revokeObjectURL(p[idx].preview);
-      return p.filter((_, i) => i !== idx);
+      const target = p.find((x) => x.id === id);
+      if (target) URL.revokeObjectURL(target.preview);
+      return p.filter((x) => x.id !== id);
     });
   }
 
@@ -73,8 +73,8 @@ export function ImageDropzone({ onUpload }: Props) {
 
       {pending.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(7rem, 1fr))", gap: "0.75rem", marginTop: "1rem" }}>
-          {pending.map((p, i) => (
-            <div key={i} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface2)" }}>
+          {pending.map((p) => (
+            <div key={p.id} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface2)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.preview} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
               {!p.done && !p.error && (
@@ -90,7 +90,7 @@ export function ImageDropzone({ onUpload }: Props) {
                 </div>
               )}
               <button
-                onClick={(e) => { e.stopPropagation(); remove(i); }}
+                onClick={(e) => { e.stopPropagation(); remove(p.id); }}
                 style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, cursor: "pointer", padding: "2px", display: "flex" }}
               >
                 <X size={12} color="#fff" />

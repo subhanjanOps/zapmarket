@@ -126,6 +126,7 @@ export default function CategoriesPage() {
   const [form, setForm]           = useState<FormState>(EMPTY);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [deleting, setDeleting]   = useState<string | null>(null);
   const [selected, setSelected]   = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -166,8 +167,8 @@ export default function CategoriesPage() {
     else if (pf !== "all") apiParams.parent_id = pf;
 
     getCategories(apiParams)
-      .then((r) => { setRows(r.data); setTotal(r.total ?? r.data.length); })
-      .catch(console.error)
+      .then((r) => { setRows(r.data); setTotal(r.total ?? r.data.length); setLoadError(null); })
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : "Failed to load categories"))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, search, parentFilter, sortBy, sortOrder]);
@@ -293,6 +294,11 @@ export default function CategoriesPage() {
 
   return (
     <div className="page-content">
+      {loadError && (
+        <div style={{ marginBottom: "1rem", padding: "0.75rem 1rem", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "0.5rem", color: "#DC2626", fontSize: "0.875rem" }}>
+          {loadError}
+        </div>
+      )}
       <div className="page-header">
         <div>
           <h1 className="page-title">Categories</h1>

@@ -29,6 +29,7 @@ export default function ProductsPage() {
   const [status, setStatus]         = useState(searchParams.get("status") ?? "");
   const [categoryId, setCategoryId] = useState(searchParams.get("category_id") ?? "");
   const [deleting, setDeleting]     = useState<string | null>(null);
+  const [error, setError]           = useState<string | null>(null);
 
   // Two-tier category filter
   const [rootCats, setRootCats]       = useState<Category[]>([]);
@@ -68,8 +69,8 @@ export default function ProductsPage() {
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     })
-      .then((r) => { setRows(r.data); setTotal(r.total); })
-      .catch(console.error)
+      .then((r) => { setRows(r.data); setTotal(r.total); setError(null); })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load products"))
       .finally(() => setLoading(false));
   }, [search, status, categoryId, page]);
 
@@ -102,6 +103,11 @@ export default function ProductsPage() {
 
   return (
     <div className="page-content">
+      {error && (
+        <div style={{ marginBottom: "1rem", padding: "0.75rem 1rem", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: "0.5rem", color: "#DC2626", fontSize: "0.875rem" }}>
+          {error}
+        </div>
+      )}
       <div className="page-header">
         <div>
           <h1 className="page-title">Products</h1>

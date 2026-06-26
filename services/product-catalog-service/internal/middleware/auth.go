@@ -1,11 +1,14 @@
 package middleware
 
 import (
+	"crypto/tls"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
@@ -21,8 +24,17 @@ type AuthMiddleware struct {
 }
 
 // NewAuthMiddleware dials the auth-service and returns a ready middleware.
+// In development (APP_ENV=development) the channel uses no TLS so that local
+// docker-compose stacks work without certificates. In all other environments
+// TLS is required to protect JWT bearer tokens in transit.
 func NewAuthMiddleware(addr string, logger *slog.Logger) (*AuthMiddleware, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	var dialOpt grpc.DialOption
+	if os.Getenv("APP_ENV") == "development" {
+		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
+	} else {
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12}))
+	}
+	conn, err := grpc.NewClient(addr, dialOpt)
 	if err != nil {
 		return nil, err
 	}

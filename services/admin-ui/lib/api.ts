@@ -202,17 +202,11 @@ export type Currency = {
   enabled: boolean;
 };
 
-export async function getCurrencies(): Promise<Currency[]> {
-  const res = await fetch("/api/gateway/api/v1/currencies");
-  if (!res.ok) throw new Error(`getCurrencies: ${res.status}`);
-  return res.json();
-}
+export const getCurrencies = () =>
+  apiFetch<Currency[]>("/v1/currencies");
 
-export async function toggleCurrency(code: string, enabled: boolean): Promise<void> {
-  const res = await fetch(`/api/gateway/api/v1/admin/currencies/${code}`, {
+export const toggleCurrency = (code: string, enabled: boolean) =>
+  apiFetch<{ updated: boolean }>(`/v1/admin/currencies/${encodeURIComponent(code)}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
   });
-  if (!res.ok) throw new Error(`toggleCurrency: ${res.status}`);
-}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -43,11 +44,9 @@ if count >= limit then
 	return count + 1
 end
 
--- Record this request (score = timestamp ms, member = timestamp ms as string).
--- Using the timestamp as both score and member means duplicate ms timestamps
--- overwrite each other, which is fine: a 1ms collision costs at most one
--- missed count, and millisecond-resolution is more than sufficient.
-redis.call('ZADD', key, now, tostring(now))
+-- Record this request using a unique member passed from Go (ARGV[5]) so that
+-- concurrent requests at the same millisecond do not overwrite each other.
+redis.call('ZADD', key, now, ARGV[5])
 
 -- Keep the key alive for one full window after the last request.
 redis.call('EXPIRE', key, ttl)
@@ -78,10 +77,11 @@ func (rl *RateLimiter) Limit(next http.Handler) http.Handler {
 		nowMS := time.Now().UnixMilli()
 		windowMS := int64(rateWindowSecs) * 1000
 		ttlSecs := rateWindowSecs + 1
+		member := uuid.New().String()
 
 		count, err := slidingWindow.Run(ctx, rl.rdb,
 			[]string{key},
-			nowMS, windowMS, ttlSecs, limit,
+			nowMS, windowMS, ttlSecs, limit, member,
 		).Int64()
 
 		remaining := max(int64(0), int64(limit)-count)

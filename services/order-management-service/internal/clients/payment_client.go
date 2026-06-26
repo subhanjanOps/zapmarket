@@ -11,6 +11,7 @@ import (
 )
 
 type PaymentClient struct {
+	conn   *grpc.ClientConn
 	client pb.PaymentServiceClient
 }
 
@@ -19,7 +20,12 @@ func NewPaymentClient(addr string) (*PaymentClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial payment-service at %s: %w", addr, err)
 	}
-	return &PaymentClient{client: pb.NewPaymentServiceClient(conn)}, nil
+	return &PaymentClient{conn: conn, client: pb.NewPaymentServiceClient(conn)}, nil
+}
+
+// Close drains and closes the underlying gRPC connection.
+func (c *PaymentClient) Close() error {
+	return c.conn.Close()
 }
 
 // ChargeCard charges the user's card for the given order. Returns the

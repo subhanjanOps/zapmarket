@@ -79,7 +79,7 @@ export async function fetchRates(): Promise<{ rates: Record<string, number>; asO
         return { rates, asOf, stale: true };
       }
     } catch { /* */ }
-    return { rates: { USD: 1 }, asOf: "", stale: false };
+    return { rates: { USD: 1 }, asOf: "", stale: true };
   }
 }
 

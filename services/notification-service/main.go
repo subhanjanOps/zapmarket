@@ -10,12 +10,16 @@ import (
 	"syscall"
 	"time"
 
+	"fmt"
+
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
+	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	"github.com/zapmarket/zapmarket/services/notification-service/internal/consumer"
+	"github.com/zapmarket/zapmarket/services/notification-service/internal/infrastructure/cache"
 	"github.com/zapmarket/zapmarket/services/notification-service/internal/notifier"
 )
 
@@ -39,18 +43,23 @@ func main() {
 	defer rdb.Close()
 	log.Info("connected to Redis", "addr", cfg.RedisURL)
 
+	// ── Metrics ───────────────────────────────────────────────────────────────
+	m := pkgmetrics.New("notification")
+
 	// ── Notifier ──────────────────────────────────────────────────────────────
 	n := notifier.NewLogNotifier(log)
 
-	handler := consumer.New(n, rdb, log)
+	dedup := cache.NewRedisDeduplicator(rdb)
+	handler := consumer.New(n, dedup, log)
 
-	// ── Health endpoint ───────────────────────────────────────────────────────
+	// ── Health + metrics endpoint ─────────────────────────────────────────────
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
-	healthSrv := &http.Server{Addr: ":8085", Handler: mux}
+	mux.Handle("/metrics", m.Handler())
+	healthSrv := &http.Server{Addr: fmt.Sprintf(":%d", cfg.HTTPPort), Handler: mux}
 	go func() {
 		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("health server error", "error", err)
@@ -94,21 +103,37 @@ func main() {
 	log.Info("notification service stopped")
 }
 
-// runConsumer runs a consumer for a single topic, restarting on transient errors.
+const (
+	retryBaseDelay = 2 * time.Second
+	retryMaxDelay  = 2 * time.Minute
+)
+
+// runConsumer runs a consumer for a single topic, restarting on transient errors
+// with exponential backoff (2s → 4s → 8s … capped at 2 min).
 func runConsumer(ctx context.Context, brokers []string, topic string, h *consumer.Handler, log *slog.Logger) {
 	log.Info("starting consumer", "topic", topic)
+	delay := retryBaseDelay
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		c := pkgkafka.NewConsumer(brokers, topic, "notification-service")
+		start := time.Now()
 		if err := c.Run(ctx, h.Handle); err != nil {
 			_ = c.Close()
-			log.Error("consumer error, retrying in 5s", "topic", topic, "error", err)
+			// Reset backoff if the consumer ran for at least one full window before failing.
+			if time.Since(start) > retryMaxDelay {
+				delay = retryBaseDelay
+			}
+			log.Error("consumer error, retrying", "topic", topic, "error", err, "backoff", delay)
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(5 * time.Second):
+			case <-time.After(delay):
+			}
+			delay *= 2
+			if delay > retryMaxDelay {
+				delay = retryMaxDelay
 			}
 			continue
 		}

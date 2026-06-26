@@ -41,6 +41,8 @@ use ./pkg/redis
 
 use ./pkg/registry
 
+use ./pkg/metrics
+
 use ./services/api-gateway
 
 use ./services/currency-service

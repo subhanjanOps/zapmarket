@@ -23,8 +23,10 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	pb "github.com/zapmarket/zapmarket/pkg/proto/inventory"
+	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	grpchandler "github.com/zapmarket/zapmarket/services/inventory-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/inventory-service/internal/handler/http"
+	"github.com/zapmarket/zapmarket/services/inventory-service/internal/infrastructure/cache"
 	"github.com/zapmarket/zapmarket/pkg/relay"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/service"
@@ -66,14 +68,19 @@ func main() {
 	defer rdb.Close()
 	log.Info("connected to Redis", "addr", cfg.RedisURL)
 
+	// ── Metrics ───────────────────────────────────────────────────────────────
+	m := pkgmetrics.New("inventory")
+
 	// ── Repository / Service / gRPC handler ─────────────────────────────────────
 	repo := repository.NewInventoryRepository(db)
-	svc := service.NewInventoryService(repo, rdb, log)
+	stockCache := cache.NewRedisStockCache(rdb)
+	svc := service.NewInventoryService(repo, stockCache, log)
 	grpcHandler := grpchandler.NewInventoryGRPCHandler(svc)
 
 	// ── HTTP (health check only — no public REST API, see design.md) ───────────
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", httphandler.Health)
+	mux.Handle("/metrics", m.Handler())
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),

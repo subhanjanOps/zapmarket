@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
@@ -60,7 +59,7 @@ type orderService struct {
 	repo      contracts.OrderRepository
 	inventory inventoryGateway
 	payment   paymentGateway
-	rdb       *redis.Client
+	cache     contracts.OrderCache
 	logger    *slog.Logger
 }
 
@@ -68,10 +67,10 @@ func NewOrderService(
 	repo contracts.OrderRepository,
 	inventory inventoryGateway,
 	payment paymentGateway,
-	rdb *redis.Client,
+	cache contracts.OrderCache,
 	logger *slog.Logger,
 ) OrderService {
-	return &orderService{repo: repo, inventory: inventory, payment: payment, rdb: rdb, logger: logger}
+	return &orderService{repo: repo, inventory: inventory, payment: payment, cache: cache, logger: logger}
 }
 
 func idempCacheKey(key uuid.UUID) string {
@@ -92,47 +91,11 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		currency = "INR"
 	}
 
-	// Idempotency: Redis-first cache check (24h TTL), then DB with a NX lock
-	// to prevent duplicate order creation under concurrent requests sharing the
-	// same key. The lock is held only during the DB lookup + insert window.
-	cacheKey := idempCacheKey(idempotencyKey)
-	lockKey := cacheKey + ":lock"
-	if cached, err := s.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
-		var order domain.Order
-		if json.Unmarshal(cached, &order) == nil {
-			s.logger.Info("idempotent replay from cache", "order_id", order.ID)
-			return &order, nil
-		}
+	if existing, err := s.checkIdempotency(ctx, idempotencyKey); existing != nil || err != nil {
+		return existing, err
 	}
 
-	// Attempt a single NX lock; regardless of whether we win, fall through to
-	// the DB check. The DB's unique constraint on idempotency_key is the true
-	// safety net — the lock only reduces contention, not correctness.
-	const lockTTL = 10 * time.Second
-	acquired, err := s.rdb.SetNX(ctx, lockKey, "1", lockTTL).Result()
-	if err != nil {
-		s.logger.Warn("idempotency lock unavailable, proceeding without lock", "error", err)
-	}
-	defer func() {
-		if acquired {
-			_ = s.rdb.Del(ctx, lockKey).Err()
-		}
-	}()
-
-	existing, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)
-	if err == nil {
-		s.logger.Info("idempotent replay from db", "order_id", existing.ID, "status", existing.Status)
-		if b, err := json.Marshal(existing); err == nil {
-			_ = s.rdb.Set(ctx, cacheKey, b, idempotencyTTL).Err()
-		}
-		return existing, nil
-	}
-	var appErr *pkgerrors.AppError
-	if !errors.As(err, &appErr) || appErr.Type != pkgerrors.NotFound {
-		return nil, err
-	}
-
-	// Step 1: persist order in PENDING + items.
+	// Build domain items + total and persist PENDING order.
 	var totalAmount int64
 	domainItems := make([]*domain.OrderItem, len(items))
 	for i, it := range items {
@@ -143,94 +106,23 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 			return nil, pkgerrors.NewValidation("INVALID_DATA", "item unit_price must be greater than zero")
 		}
 		totalAmount += int64(it.Quantity) * it.UnitPrice
-		domainItems[i] = &domain.OrderItem{
-			SKUID:     it.SKUID,
-			SellerID:  it.SellerID,
-			Quantity:  it.Quantity,
-			UnitPrice: it.UnitPrice,
-		}
+		domainItems[i] = &domain.OrderItem{SKUID: it.SKUID, SellerID: it.SellerID, Quantity: it.Quantity, UnitPrice: it.UnitPrice}
 	}
 
-	order := &domain.Order{
-		UserID:         userID,
-		IdempotencyKey: idempotencyKey,
-		Status:         domain.OrderPending,
-		TotalAmount:    totalAmount,
-		Currency:       currency,
-	}
+	order := &domain.Order{UserID: userID, IdempotencyKey: idempotencyKey, Status: domain.OrderPending, TotalAmount: totalAmount, Currency: currency}
 	if err := s.repo.CreateOrder(ctx, order, domainItems); err != nil {
 		return nil, err
 	}
 	s.logger.Info("order created", "order_id", order.ID, "total", totalAmount)
 
-	// Step 2: reserve stock for each item via inventory gRPC.
-	var reserved []*domain.OrderItem
-	for _, item := range domainItems {
-		reservationID, ok, err := s.inventory.ReserveStock(ctx, item.SKUID, order.ID, item.Quantity)
-		if err != nil {
-			s.logger.Error("inventory ReserveStock error", "sku_id", item.SKUID, "error", err)
-			s.compensate(ctx, order.ID, reserved)
-			return nil, pkgerrors.NewInternal("INVENTORY_ERROR", "failed to reserve stock", err)
-		}
-		if !ok {
-			s.logger.Info("insufficient stock", "sku_id", item.SKUID)
-			s.compensate(ctx, order.ID, reserved)
-			return nil, pkgerrors.NewConflict("INSUFFICIENT_STOCK", "insufficient stock for sku "+item.SKUID.String())
-		}
-		item.ReservationID = &reservationID
-		reserved = append(reserved, item)
-	}
-
-	// Step 3: persist RESERVED status + reservation IDs.
-	if err := s.repo.MarkReserved(ctx, order.ID, domainItems); err != nil {
-		s.compensate(ctx, order.ID, reserved)
+	if err := s.reserveStockForOrder(ctx, order.ID, domainItems); err != nil {
 		return nil, err
 	}
 	order.Status = domain.OrderReserved
 	s.logger.Info("order reserved", "order_id", order.ID)
 
-	// Step 4: charge payment — outside DB transaction.
-	paymentID, paymentStatus, err := s.payment.ChargeCard(ctx, order.ID, userID, totalAmount, currency, idempotencyKey)
+	paymentID, err := s.finalisePayment(ctx, order, domainItems, userID, currency, idempotencyKey)
 	if err != nil {
-		s.logger.Error("payment ChargeCard error", "order_id", order.ID, "error", err)
-		s.compensate(ctx, order.ID, domainItems)
-		cancelPayload, _ := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_error"})
-		if cancelErr := s.repo.MarkCancelled(ctx, order.ID, cancelPayload); cancelErr != nil {
-			s.logger.Error("failed to mark order cancelled after payment error", "order_id", order.ID, "error", cancelErr)
-		}
-		return nil, pkgerrors.NewInternal("PAYMENT_ERROR", "payment service error", err)
-	}
-
-	// Step 5: handle payment outcome.
-	if paymentStatus != "CAPTURED" {
-		s.logger.Info("payment not captured", "order_id", order.ID, "payment_status", paymentStatus)
-		s.compensate(ctx, order.ID, domainItems)
-		cancelPayload, _ := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_failed", "payment_status": paymentStatus})
-		if cancelErr := s.repo.MarkCancelled(ctx, order.ID, cancelPayload); cancelErr != nil {
-			s.logger.Error("failed to mark order cancelled after payment failure", "order_id", order.ID, "error", cancelErr)
-		}
-		return nil, pkgerrors.NewConflict("PAYMENT_FAILED", "payment was not captured (status: "+paymentStatus+")")
-	}
-
-	// Step 5a: deduct stock from qty_on_hand (finalise the sale).
-	for _, item := range domainItems {
-		if item.ReservationID == nil {
-			continue
-		}
-		if err := s.inventory.DeductStock(ctx, *item.ReservationID); err != nil {
-			// Log and continue — payment already captured; stock discrepancy
-			// is reconcilable; do not fail the order over a deduct error.
-			s.logger.Error("failed to deduct stock after payment", "reservation_id", item.ReservationID, "error", err)
-		}
-	}
-
-	// Step 5b: persist CONFIRMED + outbox event.
-	confirmPayload, _ := json.Marshal(map[string]string{
-		"order_id":   order.ID.String(),
-		"user_id":    userID.String(),
-		"payment_id": paymentID.String(),
-	})
-	if err := s.repo.MarkConfirmed(ctx, order.ID, paymentID, confirmPayload); err != nil {
 		return nil, err
 	}
 
@@ -238,10 +130,121 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 	order.PaymentID = &paymentID
 	s.logger.Info("order confirmed", "order_id", order.ID, "payment_id", paymentID)
 
-	if b, err := json.Marshal(order); err == nil {
-		_ = s.rdb.Set(ctx, idempCacheKey(idempotencyKey), b, idempotencyTTL).Err()
+	if b, marshalErr := json.Marshal(order); marshalErr == nil {
+		_ = s.cache.Set(ctx, idempCacheKey(idempotencyKey), b, idempotencyTTL)
 	}
 	return order, nil
+}
+
+// checkIdempotency returns an existing order if the idempotency key was already used, or (nil, nil) to proceed.
+func (s *orderService) checkIdempotency(ctx context.Context, idempotencyKey uuid.UUID) (*domain.Order, error) {
+	cacheKey := idempCacheKey(idempotencyKey)
+	lockKey := cacheKey + ":lock"
+	if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
+		var order domain.Order
+		if json.Unmarshal(cached, &order) == nil {
+			s.logger.Info("idempotent replay from cache", "order_id", order.ID)
+			return &order, nil
+		}
+	}
+
+	const lockTTL = 10 * time.Second
+	acquired, err := s.cache.SetNX(ctx, lockKey, "1", lockTTL)
+	if err != nil {
+		s.logger.Warn("idempotency lock unavailable, proceeding without lock", "error", err)
+	}
+	defer func() {
+		if acquired {
+			_ = s.cache.Del(ctx, lockKey)
+		}
+	}()
+
+	existing, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)
+	if err == nil {
+		s.logger.Info("idempotent replay from db", "order_id", existing.ID, "status", existing.Status)
+		if b, marshalErr := json.Marshal(existing); marshalErr == nil {
+			_ = s.cache.Set(ctx, cacheKey, b, idempotencyTTL)
+		}
+		return existing, nil
+	}
+	var appErr *pkgerrors.AppError
+	if !errors.As(err, &appErr) || appErr.Type != pkgerrors.NotFound {
+		return nil, err
+	}
+	return nil, nil
+}
+
+// reserveStockForOrder reserves inventory for all items. Compensates and returns error on failure.
+func (s *orderService) reserveStockForOrder(ctx context.Context, orderID uuid.UUID, items []*domain.OrderItem) error {
+	var reserved []*domain.OrderItem
+	for _, item := range items {
+		reservationID, ok, err := s.inventory.ReserveStock(ctx, item.SKUID, orderID, item.Quantity)
+		if err != nil {
+			s.logger.Error("inventory ReserveStock error", "sku_id", item.SKUID, "error", err)
+			s.compensate(ctx, orderID, reserved)
+			return pkgerrors.NewInternal("INVENTORY_ERROR", "failed to reserve stock", err)
+		}
+		if !ok {
+			s.logger.Info("insufficient stock", "sku_id", item.SKUID)
+			s.compensate(ctx, orderID, reserved)
+			return pkgerrors.NewConflict("INSUFFICIENT_STOCK", "insufficient stock for sku "+item.SKUID.String())
+		}
+		item.ReservationID = &reservationID
+		reserved = append(reserved, item)
+	}
+	if err := s.repo.MarkReserved(ctx, orderID, items); err != nil {
+		s.compensate(ctx, orderID, reserved)
+		return err
+	}
+	return nil
+}
+
+// finalisePayment charges the card and, on success, deducts stock and confirms the order.
+// On failure it compensates inventory and marks the order cancelled before returning.
+func (s *orderService) finalisePayment(ctx context.Context, order *domain.Order, items []*domain.OrderItem, userID uuid.UUID, currency string, idempotencyKey uuid.UUID) (uuid.UUID, error) {
+	paymentID, paymentStatus, err := s.payment.ChargeCard(ctx, order.ID, userID, order.TotalAmount, currency, idempotencyKey)
+	if err != nil {
+		s.logger.Error("payment ChargeCard error", "order_id", order.ID, "error", err)
+		s.compensate(ctx, order.ID, items)
+		s.cancelWithPayload(ctx, order.ID, map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_error"})
+		return uuid.Nil, pkgerrors.NewInternal("PAYMENT_ERROR", "payment service error", err)
+	}
+	if paymentStatus != "CAPTURED" {
+		s.logger.Info("payment not captured", "order_id", order.ID, "payment_status", paymentStatus)
+		s.compensate(ctx, order.ID, items)
+		s.cancelWithPayload(ctx, order.ID, map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_failed", "payment_status": paymentStatus})
+		return uuid.Nil, pkgerrors.NewConflict("PAYMENT_FAILED", "payment was not captured (status: "+paymentStatus+")")
+	}
+
+	for _, item := range items {
+		if item.ReservationID == nil {
+			continue
+		}
+		if err := s.inventory.DeductStock(ctx, *item.ReservationID); err != nil {
+			s.logger.Error("failed to deduct stock after payment", "reservation_id", item.ReservationID, "error", err)
+		}
+	}
+
+	confirmPayload, marshalErr := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "payment_id": paymentID.String()})
+	if marshalErr != nil {
+		return uuid.Nil, pkgerrors.NewInternal("INTERNAL_ERROR", "internal serialization error", marshalErr)
+	}
+	if err := s.repo.MarkConfirmed(ctx, order.ID, paymentID, confirmPayload); err != nil {
+		return uuid.Nil, err
+	}
+	return paymentID, nil
+}
+
+// cancelWithPayload marshals the payload and marks the order cancelled, logging any error.
+func (s *orderService) cancelWithPayload(ctx context.Context, orderID uuid.UUID, payload map[string]string) {
+	b, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		s.logger.Error("failed to marshal cancel payload", "order_id", orderID, "error", marshalErr)
+		return
+	}
+	if err := s.repo.MarkCancelled(ctx, orderID, b); err != nil {
+		s.logger.Error("failed to mark order cancelled", "order_id", orderID, "error", err)
+	}
 }
 
 func (s *orderService) GetOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, []*domain.OrderItem, error) {
@@ -282,11 +285,10 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUI
 	}
 
 	// Persist CANCELLED status first — if this fails we do nothing else.
-	cancelPayload, _ := json.Marshal(map[string]string{
-		"order_id": orderID.String(),
-		"user_id":  userID.String(),
-		"reason":   "user_requested",
-	})
+	cancelPayload, marshalErr := json.Marshal(map[string]string{"order_id": orderID.String(), "user_id": userID.String(), "reason": "user_requested"})
+	if marshalErr != nil {
+		return nil, pkgerrors.NewInternal("INTERNAL_ERROR", "internal serialization error", marshalErr)
+	}
 	if err := s.repo.MarkCancelled(ctx, orderID, cancelPayload); err != nil {
 		return nil, err
 	}
@@ -360,10 +362,10 @@ func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) 
 	}
 
 	// Persist CANCELLED status first, then release inventory.
-	cancelPayload, _ := json.Marshal(map[string]string{
-		"order_id": orderID.String(),
-		"reason":   "admin_cancelled",
-	})
+	cancelPayload, marshalErr := json.Marshal(map[string]string{"order_id": orderID.String(), "reason": "admin_cancelled"})
+	if marshalErr != nil {
+		return nil, pkgerrors.NewInternal("INTERNAL_ERROR", "internal serialization error", marshalErr)
+	}
 	if err := s.repo.MarkCancelled(ctx, orderID, cancelPayload); err != nil {
 		return nil, err
 	}

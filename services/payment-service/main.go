@@ -23,6 +23,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	pb "github.com/zapmarket/zapmarket/pkg/proto/payment"
+	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/gateway"
 	grpchandler "github.com/zapmarket/zapmarket/services/payment-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/payment-service/internal/handler/http"
@@ -67,6 +68,9 @@ func main() {
 	defer rdb.Close()
 	log.Info("connected to Redis", "addr", cfg.RedisURL)
 
+	// ── Metrics ───────────────────────────────────────────────────────────────
+	m := pkgmetrics.New("payment")
+
 	// ── Repository / Gateway / Service / gRPC handler ───────────────────────────
 	repo := repository.NewPaymentRepository(db)
 	paymentGateway := gateway.NewFakePaymentGateway()
@@ -78,6 +82,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", webhookHandler.Health)
 	mux.HandleFunc("/webhooks/payment", webhookHandler.HandlePaymentWebhook)
+	mux.Handle("/metrics", m.Handler())
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),

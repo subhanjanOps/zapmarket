@@ -83,6 +83,14 @@ const (
 	ProductStatusArchived ProductStatus = "ARCHIVED"
 )
 
+func (s ProductStatus) IsValid() bool {
+	switch s {
+	case ProductStatusDraft, ProductStatusActive, ProductStatusInactive, ProductStatusArchived:
+		return true
+	}
+	return false
+}
+
 type SKU struct {
 	ID           uuid.UUID       `json:"id"`
 	ProductID    uuid.UUID       `json:"product_id"`

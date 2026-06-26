@@ -159,13 +159,13 @@ func (r *OrderRepository) MarkReserved(ctx context.Context, orderID uuid.UUID, i
 	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `
 			UPDATE orders SET status = 'RESERVED', updated_at = NOW()
-			WHERE id = $1 AND deleted_at IS NULL
+			WHERE id = $1 AND status = 'PENDING' AND deleted_at IS NULL
 		`, orderID)
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to mark order reserved", err)
 		}
 		if n, _ := result.RowsAffected(); n == 0 {
-			return pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
+			return pkgerrors.NewConflict("ORDER_STATUS_CONFLICT", "order not found or not in PENDING status")
 		}
 
 		for _, item := range items {
@@ -208,13 +208,13 @@ func (r *OrderRepository) MarkCancelled(ctx context.Context, orderID uuid.UUID, 
 	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `
 			UPDATE orders SET status = 'CANCELLED', updated_at = NOW()
-			WHERE id = $1 AND deleted_at IS NULL
+			WHERE id = $1 AND status IN ('PENDING', 'RESERVED') AND deleted_at IS NULL
 		`, orderID)
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to cancel order", err)
 		}
 		if n, _ := result.RowsAffected(); n == 0 {
-			return pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
+			return pkgerrors.NewConflict("ORDER_STATUS_CONFLICT", "order not found or cannot be cancelled from its current status")
 		}
 		return insertOutboxEvent(ctx, tx, orderID, "order", "order.cancelled", outboxPayload)
 	})

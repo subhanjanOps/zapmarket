@@ -190,10 +190,11 @@ func (s *OAuthService) handleOAuthUser(ctx context.Context, userInfo *OAuthUserI
 func (s *OAuthService) getGoogleUserInfo(token *oauth2.Token) (*OAuthUserInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.googleapis.com/oauth2/v2/userinfo?access_token="+token.AccessToken, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.googleapis.com/oauth2/v2/userinfo", nil)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to build request: %v", err), err)
 	}
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to get user info: %v", err), err)
@@ -225,10 +226,11 @@ func (s *OAuthService) getGoogleUserInfo(token *oauth2.Token) (*OAuthUserInfo, e
 func (s *OAuthService) getFacebookUserInfo(ctx context.Context, token *oauth2.Token) (*OAuthUserInfo, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "https://graph.facebook.com/me?fields=id,email,name&access_token="+token.AccessToken, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "https://graph.facebook.com/me?fields=id,email,name", nil)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to build request: %v", err), err)
 	}
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("OAUTH_FAILED", fmt.Sprintf("failed to get user info: %v", err), err)

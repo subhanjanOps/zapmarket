@@ -44,6 +44,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
 	"github.com/zapmarket/zapmarket/pkg/logger"
+	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	"github.com/zapmarket/zapmarket/pkg/registry"
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
@@ -85,6 +86,9 @@ func main() {
 		slog.Info("Migrations applied")
 	}
 
+	// ── Metrics ───────────────────────────────────────────────────────────────
+	m := pkgmetrics.New("auth")
+
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
 	oauthRepo := repository.NewOAuthRepository(db)
@@ -117,16 +121,17 @@ func main() {
 	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, authService, cfg)
 
 	// Initialize HTTP handlers
-	httpHandler := httphandler.NewHandler(authService, oauthService, cfg)
-	adminHandler := httphandler.NewAdminHandler(userRepo, authService, cfg)
+	httpHandler := httphandler.NewHandler(authService, oauthService, cfg, rdb)
+	adminSvc := service.NewAdminService(userRepo)
+	adminHandler := httphandler.NewAdminHandler(adminSvc, authService, cfg)
 	prefsHandler := httphandler.NewPreferencesHandler(prefsRepo, authService)
 
 	// Setup HTTP server
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/v1/auth/admin/bootstrap", httpHandler.LoggingMiddleware(httpHandler.AdminBootstrap))
-	mux.HandleFunc("/v1/auth/register", httpHandler.LoggingMiddleware(httpHandler.Register))
-	mux.HandleFunc("/v1/auth/login", httpHandler.LoggingMiddleware(httpHandler.Login))
+	mux.HandleFunc("/v1/auth/register", httphandler.IPRateLimit(rdb, "register")(httpHandler.LoggingMiddleware(httpHandler.Register)))
+	mux.HandleFunc("/v1/auth/login", httphandler.IPRateLimit(rdb, "login")(httpHandler.LoggingMiddleware(httpHandler.Login)))
 	mux.HandleFunc("/v1/auth/refresh", httpHandler.LoggingMiddleware(httpHandler.Refresh))
 	mux.HandleFunc("/v1/auth/me", httpHandler.LoggingMiddleware(httpHandler.Me))
 	mux.HandleFunc("/v1/auth/logout", httpHandler.LoggingMiddleware(httpHandler.Logout))
@@ -135,7 +140,7 @@ func main() {
 	mux.HandleFunc("/v1/auth/oauth/facebook/url", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthURL))
 	mux.HandleFunc("/v1/auth/oauth/facebook/callback", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthCallback))
 	mux.HandleFunc("/v1/auth/password/forgot", httpHandler.LoggingMiddleware(httpHandler.ForgotPassword))
-	mux.HandleFunc("/v1/auth/password/reset", httpHandler.LoggingMiddleware(httpHandler.ResetPassword))
+	mux.HandleFunc("/v1/auth/password/reset", httphandler.IPRateLimit(rdb, "password-reset")(httpHandler.LoggingMiddleware(httpHandler.ResetPassword)))
 
 	// Swagger: spec served from the embedded swag doc (see docs/docs.go,
 	// regenerated via `swag init -g cmd/main.go`), not a file on disk.
@@ -162,6 +167,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"ok"}`)
 	})
+	mux.Handle("/metrics", m.Handler())
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),

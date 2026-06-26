@@ -8,7 +8,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="terminal">
+      <head>
+        {/* Inline script applies saved theme before first paint to prevent FOUC */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t=localStorage.getItem('zap-theme');if(t)document.documentElement.setAttribute('data-theme',t);})()`,
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

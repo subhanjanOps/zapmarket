@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -12,18 +13,22 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain/contracts"
-	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 )
+
+// tokenValidator is the subset of AuthService that AdminHandler needs.
+type tokenValidator interface {
+	ValidateAccessToken(ctx context.Context, token string) (*domain.User, error)
+}
 
 // AdminHandler provides admin-only endpoints: user management + seller verification.
 type AdminHandler struct {
-	userRepo contracts.UserRepository
-	authSvc  *service.AuthService
+	adminSvc contracts.AdminService
+	authSvc  tokenValidator
 	cfg      *config.Config
 }
 
-func NewAdminHandler(userRepo contracts.UserRepository, authSvc *service.AuthService, cfg *config.Config) *AdminHandler {
-	return &AdminHandler{userRepo: userRepo, authSvc: authSvc, cfg: cfg}
+func NewAdminHandler(adminSvc contracts.AdminService, authSvc tokenValidator, cfg *config.Config) *AdminHandler {
+	return &AdminHandler{adminSvc: adminSvc, authSvc: authSvc, cfg: cfg}
 }
 
 // AdminAuthMiddleware validates the JWT and requires role == "admin".
@@ -108,7 +113,7 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		limit = 20
 	}
 
-	users, total, err := h.userRepo.ListUsers(r.Context(), contracts.UserListParams{
+	users, total, err := h.adminSvc.ListUsers(r.Context(), contracts.UserListParams{
 		Role:   q.Get("role"),
 		Search: q.Get("search"),
 		Limit:  limit,
@@ -137,7 +142,7 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_ID", "user id must be a valid UUID")
 		return
 	}
-	user, err := h.userRepo.GetUserByID(r.Context(), id)
+	user, err := h.adminSvc.GetUser(r.Context(), id)
 	if err != nil {
 		pkgerrors.HandleHTTP(w, err)
 		return
@@ -167,13 +172,8 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.userRepo.GetUserByID(r.Context(), id)
+	user, err := h.adminSvc.PromoteUser(r.Context(), id, body.Role)
 	if err != nil {
-		pkgerrors.HandleHTTP(w, err)
-		return
-	}
-	user.Role = body.Role
-	if err := h.userRepo.UpdateUser(r.Context(), user); err != nil {
 		pkgerrors.HandleHTTP(w, err)
 		return
 	}
@@ -187,7 +187,7 @@ func (h *AdminHandler) DeactivateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_ID", "user id must be a valid UUID")
 		return
 	}
-	if err := h.userRepo.DeleteUser(r.Context(), id); err != nil {
+	if err := h.adminSvc.DeactivateUser(r.Context(), id); err != nil {
 		pkgerrors.HandleHTTP(w, err)
 		return
 	}
@@ -205,7 +205,7 @@ func (h *AdminHandler) ListSellers(w http.ResponseWriter, r *http.Request) {
 		limit = 20
 	}
 
-	sellers, total, err := h.userRepo.ListSellers(r.Context(), q.Get("status"), limit, offset)
+	sellers, total, err := h.adminSvc.ListSellers(r.Context(), q.Get("status"), limit, offset)
 	if err != nil {
 		pkgerrors.HandleHTTP(w, err)
 		return
@@ -244,7 +244,7 @@ func (h *AdminHandler) UpdateSellerStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.userRepo.UpdateSellerStatus(r.Context(), id, body.Status); err != nil {
+	if err := h.adminSvc.UpdateSellerStatus(r.Context(), id, body.Status); err != nil {
 		pkgerrors.HandleHTTP(w, err)
 		return
 	}

@@ -63,6 +63,15 @@ func (m *Metrics) ObserveFetch(start time.Time) {
 	m.FetchDuration.Observe(time.Since(start).Seconds())
 }
 
+// RecordFetchDuration implements ports.MetricsRecorder.
+func (m *Metrics) RecordFetchDuration(start time.Time) { m.ObserveFetch(start) }
+
+// RecordCacheHit implements ports.MetricsRecorder.
+func (m *Metrics) RecordCacheHit() { m.CacheHits.Inc() }
+
+// RecordCacheMiss implements ports.MetricsRecorder.
+func (m *Metrics) RecordCacheMiss() { m.CacheMisses.Inc() }
+
 // RecordIngest increments the ingestion counter with the given result label.
 func (m *Metrics) RecordIngest(success bool) {
 	result := "success"

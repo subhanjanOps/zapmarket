@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const GW = process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000";
+const GW = process.env.GATEWAY_URL ?? "http://localhost:8000";
+
+const ALLOWED_PREFIXES = [
+  "v1/products",
+  "v1/skus",
+  "v1/categories",
+  "v1/orders",
+  "v1/inventory",
+  "v1/images",
+  "v1/users/me",
+  "v1/users/profile",
+];
 
 async function proxy(req: NextRequest, pathSegments: string[]) {
   // Reject path traversal attempts.
   if (pathSegments.some((s) => s === ".." || s === ".")) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  }
+
+  const joined = pathSegments.join("/");
+  if (!ALLOWED_PREFIXES.some((p) => joined === p || joined.startsWith(p + "/"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const token = req.cookies.get("seller_token")?.value;

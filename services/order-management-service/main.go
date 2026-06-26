@@ -31,12 +31,14 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/database"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
+	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	"github.com/zapmarket/zapmarket/pkg/registry"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/order-management-service/docs"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
 	httphandler "github.com/zapmarket/zapmarket/services/order-management-service/internal/handler/http"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/infrastructure/cache"
 	authmw "github.com/zapmarket/zapmarket/services/order-management-service/internal/middleware"
 	"github.com/zapmarket/zapmarket/pkg/relay"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/repository"
@@ -85,6 +87,7 @@ func main() {
 		log.Error("failed to connect to inventory-service", "addr", cfg.InventoryServiceAddr, "error", err)
 		os.Exit(1)
 	}
+	defer inventoryClient.Close()
 	log.Info("connected to inventory-service", "addr", cfg.InventoryServiceAddr)
 
 	paymentClient, err := clients.NewPaymentClient(cfg.PaymentServiceAddr)
@@ -92,6 +95,7 @@ func main() {
 		log.Error("failed to connect to payment-service", "addr", cfg.PaymentServiceAddr, "error", err)
 		os.Exit(1)
 	}
+	defer paymentClient.Close()
 	log.Info("connected to payment-service", "addr", cfg.PaymentServiceAddr)
 
 	// ── Auth middleware ───────────────────────────────────────────────────────
@@ -102,9 +106,13 @@ func main() {
 	}
 	log.Info("connected to auth-service", "addr", cfg.AuthServiceAddr)
 
+	// ── Metrics ───────────────────────────────────────────────────────────────
+	m := pkgmetrics.New("order")
+
 	// ── Repository / Service / Handler ───────────────────────────────────────
 	repo := repository.NewOrderRepository(db)
-	svc := service.NewOrderService(repo, inventoryClient, paymentClient, rdb, log)
+	orderCache := cache.NewRedisCache(rdb)
+	svc := service.NewOrderService(repo, inventoryClient, paymentClient, orderCache, log)
 	handler := httphandler.NewOrderHandler(svc)
 	adminHandler := httphandler.NewAdminOrderHandler(svc)
 
@@ -116,6 +124,7 @@ func main() {
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		httphandler.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	r.Handle("/metrics", m.Handler())
 
 	// Admin order routes — require admin JWT role.
 	// Register /v1/admin/orders BEFORE any broader /v1/admin prefix on another service.

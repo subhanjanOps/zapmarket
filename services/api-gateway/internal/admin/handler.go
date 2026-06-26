@@ -2,14 +2,12 @@ package admin
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +22,7 @@ import (
 
 // Handler exposes the gateway admin API.
 type Handler struct {
-	db      *sql.DB
+	svc     AdminService
 	reg     *registry.RedisRegistry
 	tracker *metrics.Tracker
 	rdb     *goredis.Client
@@ -32,13 +30,13 @@ type Handler struct {
 }
 
 func NewHandler(
-	db *sql.DB,
+	svc AdminService,
 	reg *registry.RedisRegistry,
 	tracker *metrics.Tracker,
 	rdb *goredis.Client,
 	resolve func(ctx context.Context, name string) (string, bool),
 ) *Handler {
-	return &Handler{db: db, reg: reg, tracker: tracker, rdb: rdb, resolve: resolve}
+	return &Handler{svc: svc, reg: reg, tracker: tracker, rdb: rdb, resolve: resolve}
 }
 
 func (h *Handler) Mount(r chi.Router) {
@@ -73,24 +71,10 @@ type routeRow struct {
 }
 
 func (h *Handler) listRoutes(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.QueryContext(r.Context(),
-		`SELECT id, path_prefix, upstream, auth_mode, strip_prefix, enabled, created_at, updated_at
-		 FROM gateway_routes ORDER BY length(path_prefix) DESC, path_prefix`)
+	result, err := h.svc.ListRoutes(r.Context())
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
-	}
-	defer rows.Close()
-
-	var result []routeRow
-	for rows.Next() {
-		var row routeRow
-		if err := rows.Scan(&row.ID, &row.PathPrefix, &row.Upstream, &row.AuthMode,
-			&row.StripPrefix, &row.Enabled, &row.CreatedAt, &row.UpdatedAt); err != nil {
-			jsonErr(w, http.StatusInternalServerError, "SCAN_ERROR", err.Error())
-			return
-		}
-		result = append(result, row)
 	}
 	jsonOK(w, map[string]any{"routes": result})
 }
@@ -116,12 +100,7 @@ func (h *Handler) createRoute(w http.ResponseWriter, r *http.Request) {
 		req.AuthMode = "required"
 	}
 
-	var id string
-	err := h.db.QueryRowContext(r.Context(),
-		`INSERT INTO gateway_routes (path_prefix, upstream, auth_mode, strip_prefix)
-		 VALUES ($1, $2, $3, $4) RETURNING id`,
-		req.PathPrefix, req.Upstream, req.AuthMode, req.StripPrefix,
-	).Scan(&id)
+	id, err := h.svc.CreateRoute(r.Context(), req.PathPrefix, req.Upstream, req.AuthMode, req.StripPrefix)
 	if err != nil {
 		jsonErr(w, http.StatusConflict, "CREATE_FAILED", err.Error())
 		return
@@ -144,54 +123,17 @@ func (h *Handler) updateRoute(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
-
-	sets := []string{}
-	args := []any{}
-	idx := 1
-	if req.Upstream != nil {
-		sets = append(sets, "upstream = $"+strconv.Itoa(idx))
-		args = append(args, *req.Upstream)
-		idx++
-	}
-	if req.AuthMode != nil {
-		sets = append(sets, "auth_mode = $"+strconv.Itoa(idx))
-		args = append(args, *req.AuthMode)
-		idx++
-	}
-	if req.StripPrefix != nil {
-		sets = append(sets, "strip_prefix = $"+strconv.Itoa(idx))
-		args = append(args, *req.StripPrefix)
-		idx++
-	}
-	if req.Enabled != nil {
-		sets = append(sets, "enabled = $"+strconv.Itoa(idx))
-		args = append(args, *req.Enabled)
-		idx++
-	}
-	if len(sets) == 0 {
+	if req.Upstream == nil && req.AuthMode == nil && req.StripPrefix == nil && req.Enabled == nil {
 		jsonErr(w, http.StatusBadRequest, "NOTHING_TO_UPDATE", "provide at least one field")
 		return
 	}
 
-	var sb strings.Builder
-	sb.WriteString("UPDATE gateway_routes SET ")
-	for i, s := range sets {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString(s)
-	}
-	sb.WriteString(" WHERE id = $")
-	sb.WriteString(strconv.Itoa(idx))
-	q := sb.String()
-	args = append(args, id)
-
-	res, err := h.db.ExecContext(r.Context(), q, args...)
+	updated, err := h.svc.UpdateRoute(r.Context(), id, req)
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	if !updated {
 		jsonErr(w, http.StatusNotFound, "NOT_FOUND", "route not found")
 		return
 	}
@@ -200,13 +142,12 @@ func (h *Handler) updateRoute(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteRoute(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	res, err := h.db.ExecContext(r.Context(),
-		`UPDATE gateway_routes SET enabled = false WHERE id = $1`, id)
+	disabled, err := h.svc.DisableRoute(r.Context(), id)
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, "DELETE_FAILED", err.Error())
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	if !disabled {
 		jsonErr(w, http.StatusNotFound, "NOT_FOUND", "route not found")
 		return
 	}
@@ -233,64 +174,25 @@ func (h *Handler) queryAudit(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit := 100
 	if l := q.Get("limit"); l != "" {
-		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 1000 {
-			limit = n
+		if n, err := fmt.Sscanf(l, "%d", new(int)); n == 1 && err == nil {
+			var v int
+			fmt.Sscanf(l, "%d", &v)
+			if v > 0 && v <= 1000 {
+				limit = v
+			}
 		}
 	}
 
-	args := []any{}
-	where := "WHERE 1=1"
-	idx := 1
-	if userID := q.Get("user_id"); userID != "" {
-		where += " AND user_id = $" + strconv.Itoa(idx)
-		args = append(args, userID)
-		idx++
-	}
-	if event := q.Get("event"); event != "" {
-		where += " AND event = $" + strconv.Itoa(idx)
-		args = append(args, event)
-		idx++
-	}
-	if from := q.Get("from"); from != "" {
-		where += " AND ts >= $" + strconv.Itoa(idx)
-		args = append(args, from)
-		idx++
-	}
-	if to := q.Get("to"); to != "" {
-		where += " AND ts <= $" + strconv.Itoa(idx)
-		args = append(args, to)
-		idx++
-	}
-	// after_id supports real-time tail: only return entries newer than this ID
-	if afterID := q.Get("after_id"); afterID != "" {
-		where += " AND id > $" + strconv.Itoa(idx)
-		args = append(args, afterID)
-		idx++
-	}
-	args = append(args, limit)
-
-	query := `SELECT id, ts, request_id, user_id, ip, method, path, upstream, status_code, event, detail
-			  FROM gateway_audit_log ` + where + ` ORDER BY ts DESC LIMIT $` + strconv.Itoa(idx)
-
-	rows, err := h.db.QueryContext(r.Context(), query, args...)
+	result, err := h.svc.QueryAudit(r.Context(), auditFilters{
+		UserID:  q.Get("user_id"),
+		Event:   q.Get("event"),
+		From:    q.Get("from"),
+		To:      q.Get("to"),
+		AfterID: q.Get("after_id"),
+		Limit:   limit,
+	})
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	defer rows.Close()
-
-	var result []auditRow
-	for rows.Next() {
-		var row auditRow
-		if err := rows.Scan(&row.ID, &row.Ts, &row.RequestID, &row.UserID, &row.IP,
-			&row.Method, &row.Path, &row.Upstream, &row.StatusCode, &row.Event, &row.Detail); err != nil {
-			jsonErr(w, http.StatusInternalServerError, "SCAN_ERROR", err.Error())
-			return
-		}
-		result = append(result, row)
-	}
-	if err := rows.Err(); err != nil {
-		jsonErr(w, http.StatusInternalServerError, "ROWS_ERROR", err.Error())
 		return
 	}
 	jsonOK(w, map[string]any{"entries": result, "count": len(result)})
@@ -364,45 +266,19 @@ func (h *Handler) getMetrics(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Active / total routes
-	var activeRoutes, totalRoutes int
-	if err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gateway_routes`).Scan(&totalRoutes); err != nil {
-		slog.Warn("getStats: failed to count total routes", "error", err)
-		totalRoutes = -1
-	}
-	if err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gateway_routes WHERE enabled = true`).Scan(&activeRoutes); err != nil {
-		slog.Warn("getStats: failed to count active routes", "error", err)
-		activeRoutes = -1
+	activeRoutes, totalRoutes, err := h.svc.RouteCount(ctx)
+	if err != nil {
+		slog.Warn("getStats: failed to count routes", "error", err)
+		activeRoutes, totalRoutes = -1, -1
 	}
 
-	// Live instances
 	services, _ := h.reg.AllInstances(ctx)
 	liveInstances := 0
 	for _, insts := range services {
 		liveInstances += len(insts)
 	}
 
-	// Recent audit entries (last 5)
-	rows, err := h.db.QueryContext(ctx,
-		`SELECT id, ts, request_id, user_id, ip, method, path, upstream, status_code, event, detail
-		 FROM gateway_audit_log ORDER BY ts DESC LIMIT 5`)
-	var recentAudit []auditRow
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var row auditRow
-			if err := rows.Scan(&row.ID, &row.Ts, &row.RequestID, &row.UserID, &row.IP,
-				&row.Method, &row.Path, &row.Upstream, &row.StatusCode, &row.Event, &row.Detail); err == nil {
-				recentAudit = append(recentAudit, row)
-			}
-		}
-		if rowsErr := rows.Err(); rowsErr != nil {
-			jsonErr(w, http.StatusInternalServerError, "ROWS_ERROR", rowsErr.Error())
-			return
-		}
-	}
-
-	// Upstream stats summary
+	recentAudit, _ := h.svc.RecentAudit(ctx, 5)
 	snapshots := h.tracker.Snapshots()
 
 	jsonOK(w, map[string]any{
@@ -449,19 +325,13 @@ func (h *Handler) probeRoute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the best matching route from DB.
-	var upstreamName string
-	err := h.db.QueryRowContext(r.Context(),
-		`SELECT upstream FROM gateway_routes
-		 WHERE enabled = true AND ($1 = path_prefix OR $1 LIKE path_prefix || '/%')
-		 ORDER BY length(path_prefix) DESC LIMIT 1`,
-		req.Path,
-	).Scan(&upstreamName)
-	if err == sql.ErrNoRows {
-		jsonErr(w, http.StatusNotFound, "NO_ROUTE", fmt.Sprintf("no enabled route matches %s", req.Path))
-		return
-	}
+	upstreamName, err := h.svc.FindRouteUpstream(r.Context(), req.Path)
 	if err != nil {
-		jsonErr(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		if strings.Contains(err.Error(), "no enabled route matches") {
+			jsonErr(w, http.StatusNotFound, "NO_ROUTE", err.Error())
+		} else {
+			jsonErr(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		}
 		return
 	}
 

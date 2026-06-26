@@ -39,7 +39,10 @@ func NewCachedProductService(inner ProductService, rdb *goredis.Client, logger *
 func productIDKey(id uuid.UUID) string   { return fmt.Sprintf("product:id:%s", id) }
 func productSlugKey(slug string) string  { return fmt.Sprintf("product:slug:%s", slug) }
 func productListKey(filters *domain.ProductFilters) string {
-	b, _ := json.Marshal(filters)
+	b, err := json.Marshal(filters)
+	if err != nil {
+		return fmt.Sprintf("product:list:err:%p", filters)
+	}
 	return fmt.Sprintf("product:list:%x", md5.Sum(b))
 }
 

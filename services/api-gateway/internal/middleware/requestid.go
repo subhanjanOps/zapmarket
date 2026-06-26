@@ -16,7 +16,9 @@ const requestIDKey contextKey = "request_id"
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-ID")
-		if id == "" {
+		// Only accept the client-supplied ID if it is a valid UUID; otherwise
+		// generate a fresh one to prevent audit log poisoning.
+		if id == "" || uuid.Validate(id) != nil {
 			id = uuid.New().String()
 		}
 		r.Header.Set("X-Request-ID", id)

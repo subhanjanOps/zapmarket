@@ -102,8 +102,8 @@ func main() {
 
 	// ── Use cases ─────────────────────────────────────────────────────────────
 	listCurrenciesUC := usecases.NewListCurrenciesUseCase(currencyRepo)
-	getRatesUC := usecases.NewGetRatesUseCase(ratesRepo, ratesCache, cfg.RateRefreshInterval, cfg.MaxRateAge)
-	ingestRatesUC := usecases.NewIngestRatesUseCase(provider, ratesRepo, ratesCache, cfg.RateRefreshInterval, log, publisher)
+	getRatesUC := usecases.NewGetRatesUseCase(ratesRepo, ratesCache, m, cfg.RateRefreshInterval, cfg.MaxRateAge)
+	ingestRatesUC := usecases.NewIngestRatesUseCase(provider, ratesRepo, ratesCache, cfg.RateRefreshInterval, m, log, publisher)
 	toggleCurrencyUC := usecases.NewToggleCurrencyUseCase(currencyRepo)
 	getRatesHistoryUC := usecases.NewGetRatesHistoryUseCase(ratesRepo)
 

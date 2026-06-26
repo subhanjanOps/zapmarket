@@ -45,7 +45,7 @@ func Load() (*Config, error) {
 		DBHost:     getEnv("DB_HOST", "localhost"),
 		DBPort:     getEnvInt("DB_PORT", 5432),
 		DBUser:     getEnv("DB_USER", "zapuser"),
-		DBPassword: getEnv("DB_PASSWORD", "zappass123"),
+		DBPassword: os.Getenv("DB_PASSWORD"),
 		DBName:     getEnv("DB_NAME", "currency"),
 
 		HTTPPort: getEnvInt("HTTP_PORT", 8086),

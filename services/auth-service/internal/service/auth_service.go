@@ -229,10 +229,10 @@ func (s *AuthService) StoreOAuthState(ctx context.Context, state string) error {
 }
 
 // ValidateAndConsumeOAuthState verifies a state token exists in Redis and deletes it
-// atomically so it cannot be reused. Returns false when Redis is unavailable (degraded mode).
+// atomically so it cannot be reused.
 func (s *AuthService) ValidateAndConsumeOAuthState(ctx context.Context, state string) (bool, error) {
 	if s.rdb == nil {
-		return true, nil // degrade gracefully when Redis is not wired
+		return false, pkgerrors.NewInternal("OAUTH_STATE_UNAVAILABLE", "Redis is required for OAuth CSRF protection", nil)
 	}
 	key := fmt.Sprintf("auth:oauth:state:%s", state)
 	n, err := s.rdb.Del(ctx, key).Result()

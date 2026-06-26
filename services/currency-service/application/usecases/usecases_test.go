@@ -100,6 +100,12 @@ func (f *fakeProvider) FetchLatest(_ context.Context, _ string) (ports.RateSet, 
 	return f.rateSet, f.err
 }
 
+type noopMetrics struct{}
+
+func (noopMetrics) RecordCacheHit()                    {}
+func (noopMetrics) RecordCacheMiss()                   {}
+func (noopMetrics) RecordFetchDuration(_ time.Time)    {}
+
 // ── ListCurrencies tests ─────────────────────────────────────────────────────
 
 func TestListCurrencies_ReturnsOnlyEnabled(t *testing.T) {
@@ -129,6 +135,7 @@ func TestGetRates_ServesCachedRates(t *testing.T) {
 	uc := usecases.NewGetRatesUseCase(
 		&fakeRatesRepo{},
 		cache,
+		noopMetrics{},
 		time.Hour,
 		24*time.Hour,
 	)
@@ -150,7 +157,7 @@ func TestGetRates_TooStaleReturns503Error(t *testing.T) {
 		rates: []entities.ExchangeRate{{Base: "USD", Quote: "EUR", Rate: 0.92, AsOf: asOf}},
 		asOf:  asOf,
 	}
-	uc := usecases.NewGetRatesUseCase(repo, newFakeCache(), time.Hour, 24*time.Hour)
+	uc := usecases.NewGetRatesUseCase(repo, newFakeCache(), noopMetrics{}, time.Hour, 24*time.Hour)
 	_, err := uc.Execute(context.Background(), "USD")
 	var staleErr *usecases.ErrRatesTooStale
 	if !errors.As(err, &staleErr) {
@@ -164,7 +171,7 @@ func TestGetRates_MarksStaleWhenOlderThan2xInterval(t *testing.T) {
 		rates: []entities.ExchangeRate{{Base: "USD", Quote: "EUR", Rate: 0.92, AsOf: asOf}},
 		asOf:  asOf,
 	}
-	uc := usecases.NewGetRatesUseCase(repo, newFakeCache(), time.Hour, 24*time.Hour)
+	uc := usecases.NewGetRatesUseCase(repo, newFakeCache(), noopMetrics{}, time.Hour, 24*time.Hour)
 	result, err := uc.Execute(context.Background(), "USD")
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +190,7 @@ func TestIngestRates_StoresAndCachesRates(t *testing.T) {
 	}}
 	repo := &fakeRatesRepo{}
 	cache := newFakeCache()
-	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopLogger(), &noopPublisher{})
+	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopMetrics{}, noopLogger(), &noopPublisher{})
 
 	if err := uc.Execute(context.Background(), "USD"); err != nil {
 		t.Fatal(err)
@@ -204,7 +211,7 @@ func TestIngestRates_PublishesEventOnSuccess(t *testing.T) {
 	cache := newFakeCache()
 	publisher := &capturePublisher{}
 
-	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopLogger(), publisher)
+	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopMetrics{}, noopLogger(), publisher)
 	if err := uc.Execute(context.Background(), "USD"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -222,7 +229,7 @@ func TestIngestRates_DoesNotPublishOnProviderError(t *testing.T) {
 	cache := newFakeCache()
 	publisher := &capturePublisher{}
 
-	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopLogger(), publisher)
+	uc := usecases.NewIngestRatesUseCase(provider, repo, cache, time.Hour, noopMetrics{}, noopLogger(), publisher)
 	_ = uc.Execute(context.Background(), "USD")
 	if publisher.event != "" {
 		t.Errorf("expected no event published on provider error, got %q", publisher.event)

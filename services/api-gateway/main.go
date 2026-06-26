@@ -171,7 +171,8 @@ func main() {
 		})
 
 		// Admin API — requires admin JWT.
-		adminHandler := admin.NewHandler(db, redisReg, tracker, rdb, resolve)
+		adminSvc := admin.NewPostgresAdminService(db)
+		adminHandler := admin.NewHandler(adminSvc, redisReg, tracker, rdb, resolve)
 		r.Route("/gateway/v1", func(r chi.Router) {
 			r.Use(authMW.Authenticate)
 			r.Use(rl.Limit)

@@ -14,6 +14,7 @@ import (
 type GetRatesUseCase struct {
 	ratesRepo       repositories.RatesRepository
 	cache           ports.RatesCache
+	metrics         ports.MetricsRecorder
 	refreshInterval time.Duration
 	maxAge          time.Duration
 }
@@ -21,12 +22,14 @@ type GetRatesUseCase struct {
 func NewGetRatesUseCase(
 	ratesRepo repositories.RatesRepository,
 	cache ports.RatesCache,
+	m ports.MetricsRecorder,
 	refreshInterval time.Duration,
 	maxAge time.Duration,
 ) *GetRatesUseCase {
 	return &GetRatesUseCase{
 		ratesRepo:       ratesRepo,
 		cache:           cache,
+		metrics:         m,
 		refreshInterval: refreshInterval,
 		maxAge:          maxAge,
 	}
@@ -42,8 +45,10 @@ func (e *ErrRatesTooStale) Error() string {
 func (uc *GetRatesUseCase) Execute(ctx context.Context, base string) (dto.RatesDTO, error) {
 	// Try cache first.
 	if cached, ok, err := uc.cache.Get(ctx, base); err == nil && ok {
+		uc.metrics.RecordCacheHit()
 		return uc.buildDTO(cached.Base, cached.AsOf, cached.Rates), nil
 	}
+	uc.metrics.RecordCacheMiss()
 
 	// Fall back to DB.
 	rates, asOf, err := uc.ratesRepo.LatestByBase(ctx, base)

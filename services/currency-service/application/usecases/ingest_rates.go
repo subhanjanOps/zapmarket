@@ -18,6 +18,7 @@ type IngestRatesUseCase struct {
 	provider  ports.RatesProvider
 	ratesRepo repositories.RatesRepository
 	cache     ports.RatesCache
+	metrics   ports.MetricsRecorder
 	cacheTTL  time.Duration
 	publisher ports.EventPublisher
 	log       *slog.Logger
@@ -28,6 +29,7 @@ func NewIngestRatesUseCase(
 	ratesRepo repositories.RatesRepository,
 	cache ports.RatesCache,
 	cacheTTL time.Duration,
+	m ports.MetricsRecorder,
 	log *slog.Logger,
 	publisher ports.EventPublisher,
 ) *IngestRatesUseCase {
@@ -35,6 +37,7 @@ func NewIngestRatesUseCase(
 		provider:  provider,
 		ratesRepo: ratesRepo,
 		cache:     cache,
+		metrics:   m,
 		cacheTTL:  cacheTTL,
 		publisher: publisher,
 		log:       log,
@@ -42,7 +45,9 @@ func NewIngestRatesUseCase(
 }
 
 func (uc *IngestRatesUseCase) Execute(ctx context.Context, base string) error {
+	fetchStart := time.Now()
 	rateSet, err := uc.provider.FetchLatest(ctx, base)
+	uc.metrics.RecordFetchDuration(fetchStart)
 	if err != nil {
 		return fmt.Errorf("ingest rates: fetch: %w", err)
 	}

@@ -10,7 +10,7 @@ export const revalidate = 60;
 function publicImageUrl(raw: string): string {
   if (!raw) return "/placeholder-product.png";
   if (raw.startsWith("http")) return raw;
-  const gwBase = (process.env.GATEWAY_URL ?? process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8000").replace(/\/$/, "");
+  const gwBase = GW.replace(/\/$/, "");
   return `${gwBase}/${raw.replace(/^\//, "")}`;
 }
 

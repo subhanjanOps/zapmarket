@@ -11,6 +11,7 @@ import (
 )
 
 type InventoryClient struct {
+	conn   *grpc.ClientConn
 	client pb.InventoryServiceClient
 }
 
@@ -19,7 +20,12 @@ func NewInventoryClient(addr string) (*InventoryClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial inventory-service at %s: %w", addr, err)
 	}
-	return &InventoryClient{client: pb.NewInventoryServiceClient(conn)}, nil
+	return &InventoryClient{conn: conn, client: pb.NewInventoryServiceClient(conn)}, nil
+}
+
+// Close drains and closes the underlying gRPC connection.
+func (c *InventoryClient) Close() error {
+	return c.conn.Close()
 }
 
 // ReserveStock attempts to reserve qty units of skuID for orderID.

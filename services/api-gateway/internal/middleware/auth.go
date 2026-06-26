@@ -2,12 +2,15 @@ package middleware
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 
 	authpb "github.com/zapmarket/zapmarket/pkg/proto/auth"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -27,8 +30,16 @@ type AuthMiddleware struct {
 	conn   *grpc.ClientConn
 }
 
+// NewAuthMiddleware dials auth-service. Uses TLS except when APP_ENV=development,
+// where insecure credentials are used to support local docker-compose stacks.
 func NewAuthMiddleware(authAddr string) (*AuthMiddleware, error) {
-	conn, err := grpc.NewClient(authAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	var dialOpt grpc.DialOption
+	if os.Getenv("APP_ENV") == "development" {
+		dialOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
+	} else {
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12}))
+	}
+	conn, err := grpc.NewClient(authAddr, dialOpt)
 	if err != nil {
 		return nil, err
 	}

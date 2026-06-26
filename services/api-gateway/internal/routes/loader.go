@@ -167,7 +167,7 @@ func (l *Loader) refresh(ctx context.Context) error {
 func BuildDSN() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		getenv("DB_USER", "zapuser"),
-		getenv("DB_PASSWORD", "zappass123"),
+		os.Getenv("DB_PASSWORD"),
 		getenv("DB_HOST", "localhost"),
 		getenv("DB_PORT", "5432"),
 		getenv("DB_NAME", "apigateway"),

@@ -142,6 +142,15 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		{EntryType: domain.LedgerCredit, Account: "revenue", Amount: amount, Currency: currency, Description: "charge for order " + orderID.String()},
 	}
 	if err := s.repo.MarkCaptured(ctx, payment.ID, result.GatewayTxnID, entries); err != nil {
+		// Card was charged but we can't persist CAPTURED. Attempt a gateway refund
+		// so the customer is not debited for an order that won't be fulfilled.
+		compensateCtx := context.WithoutCancel(ctx)
+		if _, refundErr := s.gateway.Refund(compensateCtx, result.GatewayTxnID, amount, currency); refundErr != nil {
+			s.logger.Error("CRITICAL: gateway refund after MarkCaptured failure failed — manual intervention required",
+				"payment_id", payment.ID, "gateway_txn_id", result.GatewayTxnID, "refund_error", refundErr)
+		} else {
+			_ = s.repo.MarkFailed(compensateCtx, payment.ID, "db_capture_failed_gateway_refunded")
+		}
 		return nil, err
 	}
 
