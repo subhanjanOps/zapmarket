@@ -128,6 +128,7 @@ func main() {
 
 	// ── Router ───────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
+	r.Use(m.Middleware())
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Use(httpx.LimitBody(httpx.MaxBodyBytes))
