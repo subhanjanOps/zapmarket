@@ -3,6 +3,7 @@
 package metrics
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -52,4 +53,38 @@ func New(namespace string) *Base {
 // Handler returns an http.Handler that serves the Prometheus metrics page.
 func (m *Base) Handler() http.Handler {
 	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+}
+
+// responseWriter wraps http.ResponseWriter to capture the written status code.
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if rw.status == 0 {
+		rw.status = http.StatusOK
+	}
+	return rw.ResponseWriter.Write(b)
+}
+
+// Middleware returns an http.Handler middleware that records request counts
+// by HTTP method and status code via RequestsTotal.
+func (m *Base) Middleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rw := &responseWriter{ResponseWriter: w}
+			next.ServeHTTP(rw, r)
+			status := rw.status
+			if status == 0 {
+				status = http.StatusOK
+			}
+			m.RequestsTotal.WithLabelValues(r.Method, fmt.Sprintf("%d", status)).Inc()
+		})
+	}
 }
