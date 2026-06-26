@@ -22,6 +22,7 @@ import (
 
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/logger"
+	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/admin"
 	"github.com/zapmarket/zapmarket/services/api-gateway/internal/audit"
@@ -119,6 +120,9 @@ func main() {
 	// ── Rate limiter ───────────────────────────────────────────────────────
 	rl := gw.NewRateLimiter(rdb)
 
+	// ── Metrics ───────────────────────────────────────────────────────────
+	m := pkgmetrics.New("gateway")
+
 	// ── Metrics tracker ────────────────────────────────────────────────────
 	tracker := metrics.NewTracker()
 
@@ -169,6 +173,8 @@ func main() {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"status":"ok","service":"api-gateway"}`))
 		})
+
+		r.Handle("/metrics", m.Handler())
 
 		// Admin API — requires admin JWT.
 		adminSvc := admin.NewPostgresAdminService(db)

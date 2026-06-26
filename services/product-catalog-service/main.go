@@ -32,6 +32,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/httpx"
+	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	"github.com/zapmarket/zapmarket/pkg/telemetry"
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
 	"github.com/zapmarket/zapmarket/pkg/logger"
@@ -74,6 +75,9 @@ func main() {
 		}
 		log.Info("migrations applied")
 	}
+
+	// ── Metrics ───────────────────────────────────────────────────────────────
+	m := pkgmetrics.New("catalog")
 
 	// ── Telemetry ─────────────────────────────────────────────────────────────
 	shutdownTracing, err := telemetry.Setup(context.Background(), "product-catalog-service", cfg.OTLPEndpoint)
@@ -183,6 +187,8 @@ func main() {
 			r.Delete("/categories/{id}", categoryH.DeleteCategory)
 		})
 	})
+
+	r.Handle("/metrics", m.Handler())
 
 	// Swagger: spec served from the embedded swag doc (see docs/docs.go,
 	// regenerated via `swag init -g main.go`), not a file on disk.

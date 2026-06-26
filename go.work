@@ -35,6 +35,7 @@ use ./pkg/storage
 use ./pkg/swaggerx
 
 use ./pkg/kafka
+
 use ./pkg/relay
 
 use ./pkg/redis
@@ -42,6 +43,7 @@ use ./pkg/redis
 use ./pkg/registry
 
 use ./pkg/metrics
+
 use ./pkg/telemetry
 
 use ./services/api-gateway

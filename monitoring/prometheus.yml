@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: auth-service
+    static_configs:
+      - targets: ['zapmarket-auth-service:8080']
+
+  - job_name: product-catalog-service
+    static_configs:
+      - targets: ['zapmarket-product-catalog-service:8081']
+
+  - job_name: inventory-service
+    static_configs:
+      - targets: ['zapmarket-inventory-service:8082']
+
+  - job_name: payment-service
+    static_configs:
+      - targets: ['zapmarket-payment-service:8083']
+
+  - job_name: order-management-service
+    static_configs:
+      - targets: ['zapmarket-order-management-service:8084']
+
+  - job_name: notification-service
+    static_configs:
+      - targets: ['zapmarket-notification-service:8085']
+
+  - job_name: currency-service
+    static_configs:
+      - targets: ['zapmarket-currency-service:8086']
+
+  - job_name: api-gateway
+    static_configs:
+      - targets: ['zapmarket-api-gateway:8000']

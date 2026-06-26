@@ -467,6 +467,42 @@ services:
       - redisinsight-data:/data
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: zapmarket-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: zapmarket-grafana
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=zapmarket
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_HTTP_PORT=3009
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3009:3009"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: zapmarket-pgadmin
@@ -480,43 +516,6 @@ services:
     volumes:
       - pgadmin-data:/var/lib/pgadmin
 
-  # elasticsearch:
-  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
-  #   container_name: zapmarket-elasticsearch
-  #   environment:
-  #     - discovery.type=single-node
-  #     - xpack.security.enabled=false
-  #     - xpack.ml.enabled=false
-  #     - ES_JAVA_OPTS=-Xms512m -Xmx512m
-  #   ports:
-  #     - 9200:9200
-  #   networks:
-  #     - zapnet
-  #   volumes:
-  #     - elasticsearch-data:/usr/share/elasticsearch/data
-
-  # kafka-connect:
-  #   image: debezium/connect:2.5
-  #   container_name: zapmarket-kafka-connect
-  #   depends_on:
-  #     - kafka
-  #   environment:
-  #     - BOOTSTRAP_SERVERS=kafka:9092
-  #     - GROUP_ID=1
-  #     - CONFIG_STORAGE_TOPIC=my_connect_configs
-  #     - OFFSET_STORAGE_TOPIC=my_connect_offsets
-  #     - STATUS_STORAGE_TOPIC=my_connect_statuses
-  #     - KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
-  #     - VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
-  #     - KEY_CONVERTER_SCHEMAS_ENABLE=false
-  #     - VALUE_CONVERTER_SCHEMAS_ENABLE=false
-  #     - CONNECT_REST_ADVERTISED_HOST_NAME=kafka-connect
-  #     - CONNECT_PLUGIN_PATH=/kafka/connect
-  #   ports:
-  #     - 8083:8083
-  #   networks:
-  #     - zapnet
-
 networks:
   zapnet:
   frontend:
@@ -529,3 +528,5 @@ volumes:
   redisinsight-data:
   pgadmin-data:
   elasticsearch-data:
+  prometheus-data:
+  grafana-data:
