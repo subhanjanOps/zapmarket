@@ -41,18 +41,25 @@ func formatAmount(amountCents string, currency string) string {
 	if sym == "" {
 		sym = currency + " "
 	}
+	groupFn := formatWithCommasWestern
+	if currency == "INR" {
+		groupFn = formatWithCommasINR
+	}
 	if zeroDecimalCurrencies[currency] {
-		return sym + formatWithCommas(cents)
+		return sym + groupFn(cents)
 	}
 	whole := cents / 100
 	frac := cents % 100
 	if frac < 0 {
 		frac = -frac
 	}
-	return fmt.Sprintf("%s%s.%02d", sym, formatWithCommas(whole), frac)
+	return fmt.Sprintf("%s%s.%02d", sym, groupFn(whole), frac)
 }
 
-func formatWithCommas(n int64) string {
+// formatWithCommas formats n with South Asian grouping (3-2-2-... from the right)
+// for INR, and standard Western grouping (3-3-3) for all other currencies.
+// The currency parameter is passed through from formatAmount.
+func formatWithCommasWestern(n int64) string {
 	s := strconv.FormatInt(n, 10)
 	if len(s) <= 3 {
 		return s
@@ -68,6 +75,33 @@ func formatWithCommas(n int64) string {
 		}
 		b.WriteString(s[i : i+3])
 	}
+	return b.String()
+}
+
+// formatWithCommasINR formats n using South Asian grouping: first group is 3
+// digits from the right, then groups of 2 (e.g. 1,23,45,678).
+func formatWithCommasINR(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	if len(s) <= 3 {
+		return s
+	}
+	var b strings.Builder
+	// Last 3 digits form the first (rightmost) group.
+	tail := s[len(s)-3:]
+	head := s[:len(s)-3]
+	// Remaining digits are grouped in 2s from the right.
+	rem := len(head) % 2
+	if rem > 0 {
+		b.WriteString(head[:rem])
+	}
+	for i := rem; i < len(head); i += 2 {
+		if i > 0 || rem > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(head[i : i+2])
+	}
+	b.WriteByte(',')
+	b.WriteString(tail)
 	return b.String()
 }
 
@@ -155,68 +189,74 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 	return nil
 }
 
+// notifTemplate describes how to build a notification for one event type.
+// userIDField names the payload key that holds the recipient user ID.
+type notifTemplate struct {
+	userIDField string
+	subject     string
+	body        func(payload map[string]string) string
+}
+
+// notifTemplates is the source of truth for all notification copy.
+// Add or modify entries here without touching handler logic.
+var notifTemplates = map[string]notifTemplate{
+	"order.confirmed": {
+		userIDField: "user_id",
+		subject:     "Your order has been confirmed",
+		body: func(p map[string]string) string {
+			return fmt.Sprintf("Order %s has been confirmed and payment captured. Thank you for shopping with ZapMarket!", p["order_id"])
+		},
+	},
+	"order.cancelled": {
+		userIDField: "user_id",
+		subject:     "Your order has been cancelled",
+		body: func(p map[string]string) string {
+			return fmt.Sprintf("Order %s has been cancelled. If you have any questions, please contact support.", p["order_id"])
+		},
+	},
+	"payment.captured": {
+		userIDField: "user_id",
+		subject:     "Payment successful",
+		body: func(p map[string]string) string {
+			return fmt.Sprintf("Your payment of %s for order %s was successful.", formatAmount(p["amount"], p["currency"]), p["order_id"])
+		},
+	},
+	"payment.failed": {
+		userIDField: "user_id",
+		subject:     "Payment failed",
+		body: func(p map[string]string) string {
+			return fmt.Sprintf("We were unable to process your payment for order %s. Please update your payment details and try again.", p["order_id"])
+		},
+	},
+	"payment.refunded": {
+		userIDField: "user_id",
+		subject:     "Refund processed",
+		body: func(p map[string]string) string {
+			return fmt.Sprintf("A refund of %s for order %s has been processed and will appear within 3-5 business days.", formatAmount(p["amount"], p["currency"]), p["order_id"])
+		},
+	},
+	"inventory.depleted": {
+		userIDField: "seller_id",
+		subject:     "Stock depleted for your product",
+		body: func(p map[string]string) string {
+			return fmt.Sprintf("SKU %s is now out of stock. Update your inventory to continue selling.", p["sku_id"])
+		},
+	},
+}
+
 func (h *Handler) buildNotification(eventType string, payload map[string]string) (notifier.Notification, bool) {
-	switch eventType {
-
-	// ── Order events ──────────────────────────────────────────────────────────
-	case "order.confirmed":
-		return notifier.Notification{
-			UserID:    payload["user_id"],
-			EventType: eventType,
-			Subject:   "Your order has been confirmed",
-			Body:      fmt.Sprintf("Order %s has been confirmed and payment captured. Thank you for shopping with ZapMarket!", payload["order_id"]),
-		}, true
-
-	case "order.cancelled":
-		return notifier.Notification{
-			UserID:    payload["user_id"],
-			EventType: eventType,
-			Subject:   "Your order has been cancelled",
-			Body:      fmt.Sprintf("Order %s has been cancelled. If you have any questions, please contact support.", payload["order_id"]),
-		}, true
-
-	// ── Payment events ────────────────────────────────────────────────────────
-	case "payment.captured":
-		return notifier.Notification{
-			UserID:    payload["user_id"],
-			EventType: eventType,
-			Subject:   "Payment successful",
-			Body:      fmt.Sprintf("Your payment of %s for order %s was successful.", formatAmount(payload["amount"], payload["currency"]), payload["order_id"]),
-		}, true
-
-	case "payment.failed":
-		return notifier.Notification{
-			UserID:    payload["user_id"],
-			EventType: eventType,
-			Subject:   "Payment failed",
-			Body:      fmt.Sprintf("We were unable to process your payment for order %s. Please update your payment details and try again.", payload["order_id"]),
-		}, true
-
-	case "payment.refunded":
-		return notifier.Notification{
-			UserID:    payload["user_id"],
-			EventType: eventType,
-			Subject:   "Refund processed",
-			Body:      fmt.Sprintf("A refund of %s for order %s has been processed and will appear within 3-5 business days.", formatAmount(payload["amount"], payload["currency"]), payload["order_id"]),
-		}, true
-
-	// ── Inventory events ──────────────────────────────────────────────────────
-	case "inventory.reserved":
-		// Informational — no user-facing notification needed.
-		return notifier.Notification{}, false
-
-	case "inventory.depleted":
-		if payload["seller_id"] == "" {
-			return notifier.Notification{}, false
-		}
-		return notifier.Notification{
-			UserID:    payload["seller_id"],
-			EventType: eventType,
-			Subject:   "Stock depleted for your product",
-			Body:      fmt.Sprintf("SKU %s is now out of stock. Update your inventory to continue selling.", payload["sku_id"]),
-		}, true
-
-	default:
+	tmpl, ok := notifTemplates[eventType]
+	if !ok {
 		return notifier.Notification{}, false
 	}
+	userID := payload[tmpl.userIDField]
+	if userID == "" {
+		return notifier.Notification{}, false
+	}
+	return notifier.Notification{
+		UserID:    userID,
+		EventType: eventType,
+		Subject:   tmpl.subject,
+		Body:      tmpl.body(payload),
+	}, true
 }

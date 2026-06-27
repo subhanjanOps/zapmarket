@@ -104,10 +104,6 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		return nil, err
 	}
 
-	gatewayName := "fake"
-	if paymentMethodID != "" {
-		gatewayName = "stripe"
-	}
 	payment := &domain.Payment{
 		OrderID:        orderID,
 		UserID:         userID,
@@ -115,7 +111,7 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		Status:         domain.PaymentPending,
 		Amount:         amount,
 		Currency:       currency,
-		Gateway:        gatewayName,
+		Gateway:        s.gateway.Name(),
 	}
 	if err := s.repo.CreatePayment(ctx, payment); err != nil {
 		return nil, err
@@ -148,7 +144,13 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 			s.logger.Error("CRITICAL: gateway refund after MarkCaptured failure failed — manual intervention required",
 				"payment_id", payment.ID, "gateway_txn_id", result.GatewayTxnID, "refund_error", refundErr)
 		} else {
-			_ = s.repo.MarkFailed(compensateCtx, payment.ID, "db_capture_failed_gateway_refunded")
+			if mfErr := s.repo.MarkFailed(compensateCtx, payment.ID, "db_capture_failed_gateway_refunded"); mfErr != nil {
+				s.logger.Error("CRITICAL: failed to mark payment failed after gateway refund — manual reconciliation required",
+					"payment_id", payment.ID,
+					"gateway_txn_id", result.GatewayTxnID,
+					"mark_failed_error", mfErr,
+				)
+			}
 		}
 		return nil, err
 	}

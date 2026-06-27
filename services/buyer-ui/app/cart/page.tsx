@@ -4,11 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useCartStore } from "@/lib/cart";
+import { useCartStore, selectCartTotal } from "@/lib/cart";
 import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react";
 
 export default function CartPage() {
-  const { items, removeItem, updateQty, total } = useCartStore();
+  const { items, removeItem, updateQty } = useCartStore();
+  const total = selectCartTotal(items);
   const [promoCode, setPromoCode] = useState("");
 
   /* ── Empty state ── */
@@ -41,7 +42,7 @@ export default function CartPage() {
     );
   }
 
-  const subtotal = total();
+  const subtotal = total;
 
   return (
     <div className="bg-white min-h-screen">

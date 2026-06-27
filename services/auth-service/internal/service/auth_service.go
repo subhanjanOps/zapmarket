@@ -19,6 +19,23 @@ import (
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/sms"
 )
 
+// AuthRepos groups all repository dependencies for AuthService.
+type AuthRepos struct {
+	Users    contracts.UserRepository
+	OAuth    contracts.OAuthRepository
+	Tokens   contracts.RefreshTokenRepository
+	Resets   contracts.PasswordResetRepository
+	OTPs     contracts.OTPRepository
+}
+
+// AuthInfra groups infrastructure dependencies for AuthService.
+type AuthInfra struct {
+	Emailer    email.Emailer
+	SMSer      sms.SMSer
+	Blacklist  contracts.TokenBlacklist
+	OAuthState contracts.OAuthStateStore
+}
+
 // AuthService handles authentication business logic
 type AuthService struct {
 	userRepo      contracts.UserRepository
@@ -58,6 +75,15 @@ func NewAuthService(
 		blacklist:  blacklist,
 		oauthState: oauthState,
 	}
+}
+
+// NewAuthServiceFromGroups is the preferred constructor for new call-sites.
+// It groups the 10 dependencies into two typed structs, making wiring readable.
+func NewAuthServiceFromGroups(repos AuthRepos, infra AuthInfra, cfg *config.Config) *AuthService {
+	return NewAuthService(
+		repos.Users, repos.OAuth, repos.Tokens, repos.Resets, repos.OTPs,
+		infra.Emailer, infra.SMSer, cfg, infra.Blacklist, infra.OAuthState,
+	)
 }
 
 // RegisterUserPassword registers a new user with email, password, and role.
@@ -252,18 +278,17 @@ func (s *AuthService) ValidateAccessToken(ctx context.Context, tokenString strin
 
 // Logout revokes all refresh tokens for a user and blacklists the current
 // access token so it cannot be used before it naturally expires.
-func (s *AuthService) Logout(ctx context.Context, userID uuid.UUID, accessToken string) error {
-	if err := s.tokenRepo.InvalidateUserTokens(ctx, userID); err != nil {
+func (s *AuthService) Logout(ctx context.Context, _ uuid.UUID, accessToken string) error {
+	claims, err := crypto.ValidateAccessToken(accessToken, s.cfg.JWTSecretKey)
+	if err != nil {
+		return pkgerrors.NewUnauthorized("INVALID_TOKEN", "invalid or expired access token")
+	}
+	if err := s.tokenRepo.InvalidateUserTokens(ctx, claims.UserID); err != nil {
 		return err
 	}
-	if accessToken != "" {
-		claims, err := crypto.ValidateAccessToken(accessToken, s.cfg.JWTSecretKey)
-		if err == nil {
-			ttl := time.Until(time.Unix(claims.ExpiresAt, 0))
-			if ttl > 0 {
-				s.BlacklistToken(ctx, accessToken, ttl)
-			}
-		}
+	ttl := time.Until(time.Unix(claims.ExpiresAt, 0))
+	if ttl > 0 {
+		s.BlacklistToken(ctx, accessToken, ttl)
 	}
 	return nil
 }

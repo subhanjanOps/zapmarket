@@ -1,25 +1,5 @@
 package http
 
-// @title ZapMarket Auth Service API
-// @version 1.0
-// @description This is the authentication and user management service for ZapMarket.
-// @termsOfService http://swagger.io/terms/
-
-// @contact.name API Support
-// @contact.url http://www.swagger.io/support
-// @contact.email support@swagger.io
-
-// @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host localhost:8080
-// @BasePath /v1/auth
-// @schemes http https
-
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-
 import (
 	"crypto/rand"
 	"encoding/hex"
@@ -31,12 +11,12 @@ import (
 
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/config"
 	"github.com/zapmarket/zapmarket/pkg/crypto"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/pkg/httpx"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
-	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
 )
 
 // statusOnlyWriter captures just the status code for logging — never the body,
@@ -66,13 +46,11 @@ func (h *Handler) LoggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		authenticated := r.Header.Get("Authorization") != ""
 		sw := &statusOnlyWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 		slog.Info("HTTP request",
 			"method", r.Method,
 			"path", r.URL.Path,
-			"authenticated", authenticated,
 			"remote_addr", r.RemoteAddr,
 		)
 
@@ -90,12 +68,12 @@ func (h *Handler) LoggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // Handler wraps all HTTP handlers
 type Handler struct {
 	authSvc  AuthServicer
-	oauthSvc *service.OAuthService
+	oauthSvc OAuthServicer
 	cfg      *config.Config
 }
 
 // NewHandler creates a new HTTP handler
-func NewHandler(authSvc AuthServicer, oauthSvc *service.OAuthService, cfg *config.Config) *Handler {
+func NewHandler(authSvc AuthServicer, oauthSvc OAuthServicer, cfg *config.Config) *Handler {
 	return &Handler{
 		authSvc:  authSvc,
 		oauthSvc: oauthSvc,
@@ -454,14 +432,8 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.authSvc.ValidateAccessToken(r.Context(), accessToken)
-	if err != nil {
+	if err := h.authSvc.Logout(r.Context(), uuid.Nil, accessToken); err != nil {
 		h.writeError(w, http.StatusUnauthorized, "invalid or expired token")
-		return
-	}
-
-	if err := h.authSvc.Logout(r.Context(), user.ID, accessToken); err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to logout")
 		return
 	}
 

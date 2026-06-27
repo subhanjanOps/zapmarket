@@ -33,11 +33,21 @@ type checkoutItemRequest struct {
 	UnitPrice int64  `json:"unit_price"`
 }
 
+type shippingAddressRequest struct {
+	FullName     string `json:"full_name"`
+	Phone        string `json:"phone"`
+	AddressLine1 string `json:"address_line1"`
+	City         string `json:"city"`
+	Pincode      string `json:"pincode"`
+	Country      string `json:"country"`
+}
+
 type checkoutRequest struct {
-	Items           []checkoutItemRequest `json:"items"`
-	IdempotencyKey  string                `json:"idempotency_key"`
-	Currency        string                `json:"currency,omitempty"`
-	PaymentMethodID string                `json:"payment_method_id,omitempty"`
+	Items           []checkoutItemRequest  `json:"items"`
+	IdempotencyKey  string                 `json:"idempotency_key"`
+	Currency        string                 `json:"currency,omitempty"`
+	PaymentMethodID string                 `json:"payment_method_id,omitempty"`
+	ShippingAddress shippingAddressRequest `json:"shipping_address"`
 }
 
 // Checkout handles POST /v1/orders.
@@ -92,6 +102,12 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	addr := req.ShippingAddress
+	if addr.FullName == "" || addr.Phone == "" || addr.AddressLine1 == "" || addr.City == "" || addr.Pincode == "" {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ADDRESS", "shipping_address must include full_name, phone, address_line1, city, and pincode")
+		return
+	}
+
 	items := make([]service.CheckoutItem, len(req.Items))
 	for i, it := range req.Items {
 		skuID, err := uuid.Parse(it.SKUID)
@@ -112,14 +128,16 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 			Quantity:  it.Quantity,
 			UnitPrice: it.UnitPrice,
 		}
-		if it.SellerID != "" {
-			sid, err := uuid.Parse(it.SellerID)
-			if err != nil {
-				ErrorResponse(w, http.StatusBadRequest, "INVALID_SELLER_ID", fmt.Sprintf("items[%d]: seller_id must be a valid UUID", i))
-				return
-			}
-			item.SellerID = &sid
+		if it.SellerID == "" {
+			ErrorResponse(w, http.StatusBadRequest, "MISSING_SELLER_ID", fmt.Sprintf("items[%d]: seller_id is required", i))
+			return
 		}
+		sid, err := uuid.Parse(it.SellerID)
+		if err != nil {
+			ErrorResponse(w, http.StatusBadRequest, "INVALID_SELLER_ID", fmt.Sprintf("items[%d]: seller_id must be a valid UUID", i))
+			return
+		}
+		item.SellerID = &sid
 		items[i] = item
 	}
 

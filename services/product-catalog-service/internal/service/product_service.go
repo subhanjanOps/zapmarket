@@ -78,7 +78,7 @@ func (ps *productService) GetProductByID(ctx context.Context, id uuid.UUID) (*do
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "product id is required")
 	}
 
-	ps.logger.Info("fetching product by id", "id", id)
+	ps.logger.Debug("fetching product by id", "id", id)
 
 	return ps.productRepo.GetProductByID(ctx, id)
 }
@@ -88,7 +88,7 @@ func (ps *productService) GetProductBySlug(ctx context.Context, slug string) (*d
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "product slug is required")
 	}
 
-	ps.logger.Info("fetching product by slug", "slug", slug)
+	ps.logger.Debug("fetching product by slug", "slug", slug)
 
 	return ps.productRepo.GetProductBySlug(ctx, slug)
 }
@@ -104,7 +104,7 @@ func (ps *productService) GetProductList(ctx context.Context, filters *domain.Pr
 
 	filters.Limit = capPageSize(filters.Limit, domain.DefaultPageSize, domain.MaxPageSize)
 
-	ps.logger.Info("fetching product list", "filters", filters)
+	ps.logger.Debug("fetching product list", "limit", filters.Limit, "offset", filters.Offset)
 
 	return ps.productRepo.GetProductList(ctx, filters)
 }

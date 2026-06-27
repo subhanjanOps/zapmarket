@@ -70,7 +70,7 @@ func (ss *skuService) CreateSKU(ctx context.Context, sku *domain.SKU) error {
 }
 
 func (ss *skuService) GetSKUByID(ctx context.Context, id uuid.UUID) (*domain.SKU, error) {
-	ss.logger.Info("fetching sku by id", "id", id)
+	ss.logger.Debug("fetching sku by id", "id", id)
 
 	return ss.skuRepo.GetSkuByID(ctx, id)
 }
@@ -86,7 +86,7 @@ func (ss *skuService) GetSKUList(ctx context.Context, filters *domain.SKUFilters
 
 	filters.Limit = capPageSize(filters.Limit, domain.DefaultPageSize, domain.MaxPageSize)
 
-	ss.logger.Info("fetching sku list", "filters", filters)
+	ss.logger.Debug("fetching sku list", "limit", filters.Limit, "offset", filters.Offset)
 
 	return ss.skuRepo.GetSkuList(ctx, filters)
 }

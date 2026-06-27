@@ -148,8 +148,8 @@ func (r *UserRepository) GetUserByPhone(ctx context.Context, phone string) (*dom
 func (r *UserRepository) UpdateUser(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET email = $1, phone = $2, password_hash = $3, full_name = $4, role = $5, is_verified = $6, updated_at = $7
-		WHERE id = $8 AND deleted_at IS NULL
+		SET email = $1, phone = $2, password_hash = $3, full_name = $4, role = $5, is_verified = $6, seller_status = $7, updated_at = $8
+		WHERE id = $9 AND deleted_at IS NULL
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
@@ -159,6 +159,7 @@ func (r *UserRepository) UpdateUser(ctx context.Context, user *domain.User) erro
 		user.FullName,
 		user.Role,
 		user.IsVerified,
+		user.SellerStatus,
 		time.Now(),
 		user.ID,
 	)

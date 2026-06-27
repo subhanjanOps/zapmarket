@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"log/slog"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,16 +22,23 @@ type InventoryService interface {
 	GetStock(ctx context.Context, skuID uuid.UUID) (*domain.Inventory, error)
 }
 
-const stockCacheTTL = 24 * time.Hour
+const defaultStockCacheTTLHours = 24
 
 type inventoryService struct {
-	repo   contracts.InventoryRepository
-	cache  contracts.StockCachePort
-	logger *slog.Logger
+	repo          contracts.InventoryRepository
+	cache         contracts.StockCachePort
+	stockCacheTTL time.Duration
+	logger        *slog.Logger
 }
 
 func NewInventoryService(repo contracts.InventoryRepository, stockCache contracts.StockCachePort, logger *slog.Logger) InventoryService {
-	return &inventoryService{repo: repo, cache: stockCache, logger: logger}
+	ttl := time.Duration(defaultStockCacheTTLHours) * time.Hour
+	if v := os.Getenv("STOCK_CACHE_TTL_HOURS"); v != "" {
+		if h, err := strconv.Atoi(v); err == nil && h > 0 {
+			ttl = time.Duration(h) * time.Hour
+		}
+	}
+	return &inventoryService{repo: repo, cache: stockCache, stockCacheTTL: ttl, logger: logger}
 }
 
 func (s *inventoryService) AddStock(ctx context.Context, skuID uuid.UUID, qty int) (int, error) {
@@ -83,7 +92,7 @@ func (s *inventoryService) ReserveStock(ctx context.Context, skuID, orderID uuid
 		if dbErr != nil {
 			return nil, dbErr
 		}
-		if setErr := s.cache.Set(ctx, key, int64(inv.QtyAvailable), stockCacheTTL); setErr != nil {
+		if setErr := s.cache.Set(ctx, key, int64(inv.QtyAvailable), s.stockCacheTTL); setErr != nil {
 			s.logger.Warn("failed to warm redis stock key", "sku_id", skuID, "error", setErr)
 			return s.dbReserve(ctx, skuID, orderID, qty)
 		}

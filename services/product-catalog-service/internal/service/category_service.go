@@ -186,7 +186,7 @@ func (cs *categoryService) GetCategoryByID(ctx context.Context, id uuid.UUID) (*
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "category id is required")
 	}
 
-	cs.logger.Info("fetching category by id", "id", id)
+	cs.logger.Debug("fetching category by id", "id", id)
 
 	return cs.categoryRepo.GetCategoryByID(ctx, id)
 }
@@ -196,7 +196,7 @@ func (cs *categoryService) GetCategoryBySlug(ctx context.Context, slug string) (
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "category slug is required")
 	}
 
-	cs.logger.Info("fetching category by slug", "slug", slug)
+	cs.logger.Debug("fetching category by slug", "slug", slug)
 
 	return cs.categoryRepo.GetCategoryBySlug(ctx, slug)
 }
@@ -212,7 +212,7 @@ func (cs *categoryService) GetCategoryList(ctx context.Context, filters *domain.
 
 	filters.Limit = capPageSize(filters.Limit, domain.DefaultPageSize, domain.MaxPageSize)
 
-	cs.logger.Info("fetching category list", "limit", filters.Limit, "offset", filters.Offset)
+	cs.logger.Debug("fetching category list", "limit", filters.Limit, "offset", filters.Offset)
 
 	return cs.categoryRepo.GetCategoryList(ctx, filters)
 }

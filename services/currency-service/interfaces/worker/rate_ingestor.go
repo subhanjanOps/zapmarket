@@ -9,6 +9,12 @@ import (
 	"github.com/zapmarket/zapmarket/services/currency-service/infrastructure/metrics"
 )
 
+const (
+	backoffInitial = 5 * time.Second
+	backoffMax     = 5 * time.Minute
+	backoffFactor  = 2
+)
+
 // RateIngestor runs scheduled rate ingestion on a ticker.
 // It fetches immediately on startup to warm the cache, then on every tick.
 type RateIngestor struct {
@@ -57,11 +63,24 @@ func (r *RateIngestor) Run(ctx context.Context) {
 }
 
 func (r *RateIngestor) runOnce(ctx context.Context) {
-	if err := r.ingest.Execute(ctx, r.base); err != nil {
-		r.log.Warn("rate ingestion failed", "error", err)
+	backoff := backoffInitial
+	for {
+		err := r.ingest.Execute(ctx, r.base)
+		if err == nil {
+			r.log.Info("rate ingestion succeeded", "base", r.base)
+			r.metrics.RecordIngest(true)
+			return
+		}
+		r.log.Warn("rate ingestion failed, retrying with backoff", "error", err, "backoff", backoff)
 		r.metrics.RecordIngest(false)
-	} else {
-		r.log.Info("rate ingestion succeeded", "base", r.base)
-		r.metrics.RecordIngest(true)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff *= backoffFactor
+		if backoff > backoffMax {
+			backoff = backoffMax
+		}
 	}
 }

@@ -10,36 +10,39 @@ import (
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain/contracts"
 
 	"github.com/stripe/stripe-go/v82"
-	"github.com/stripe/stripe-go/v82/paymentintent"
-	"github.com/stripe/stripe-go/v82/refund"
 )
 
 // StripePaymentGateway implements contracts.PaymentGateway using Stripe.
-type StripePaymentGateway struct{}
+// It holds a per-instance stripe.Client so multiple gateways (e.g. in tests)
+// do not clobber each other via the global stripe.Key.
+type StripePaymentGateway struct {
+	client *stripe.Client
+}
 
 func NewStripePaymentGateway(secretKey string) *StripePaymentGateway {
-	stripe.Key = secretKey
-	return &StripePaymentGateway{}
+	return &StripePaymentGateway{client: stripe.NewClient(secretKey)}
 }
+
+func (g *StripePaymentGateway) Name() string { return "stripe" }
 
 func (g *StripePaymentGateway) Charge(ctx context.Context, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (*contracts.ChargeResult, error) {
 	if paymentMethodID == "" {
 		return nil, pkgerrors.NewValidation("PAYMENT_METHOD_REQUIRED", "payment_method_id is required for Stripe payments")
 	}
 
-	params := &stripe.PaymentIntentParams{
+	params := &stripe.PaymentIntentCreateParams{
 		Amount:        stripe.Int64(amount),
 		Currency:      stripe.String(currency),
 		PaymentMethod: stripe.String(paymentMethodID),
 		Confirm:       stripe.Bool(true),
-		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+		AutomaticPaymentMethods: &stripe.PaymentIntentCreateAutomaticPaymentMethodsParams{
 			Enabled:        stripe.Bool(true),
 			AllowRedirects: stripe.String("never"),
 		},
 	}
 	params.IdempotencyKey = stripe.String(idempotencyKey.String())
 
-	pi, err := paymentintent.New(params)
+	pi, err := g.client.V1PaymentIntents.Create(ctx, params)
 	if err != nil {
 		stripeErr, ok := err.(*stripe.Error)
 		if ok {
@@ -55,13 +58,13 @@ func (g *StripePaymentGateway) Charge(ctx context.Context, amount int64, currenc
 	return &contracts.ChargeResult{GatewayTxnID: pi.ID}, nil
 }
 
-func (g *StripePaymentGateway) Refund(_ context.Context, gatewayTxnID string, amount int64, _ string) (string, error) {
-	params := &stripe.RefundParams{
+func (g *StripePaymentGateway) Refund(ctx context.Context, gatewayTxnID string, amount int64, _ string) (string, error) {
+	params := &stripe.RefundCreateParams{
 		PaymentIntent: stripe.String(gatewayTxnID),
 		Amount:        stripe.Int64(amount),
 	}
 
-	r, err := refund.New(params)
+	r, err := g.client.V1Refunds.Create(ctx, params)
 	if err != nil {
 		return "", pkgerrors.NewInternal("REFUND_ERROR", fmt.Sprintf("stripe refund failed: %v", err), err)
 	}

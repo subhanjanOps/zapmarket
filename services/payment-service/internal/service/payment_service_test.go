@@ -67,6 +67,8 @@ type mockGateway struct {
 	refundFn func(ctx context.Context, txnID string, amount int64, currency string) (string, error)
 }
 
+func (m *mockGateway) Name() string { return "mock" }
+
 func (m *mockGateway) Charge(ctx context.Context, amount int64, currency string, key uuid.UUID, pmID string) (*contracts.ChargeResult, error) {
 	if m.chargeFn != nil {
 		return m.chargeFn(ctx, amount, currency, key, pmID)

@@ -10,6 +10,14 @@ import (
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/domain"
 )
 
+// OAuthServicer is the subset of service.OAuthService the HTTP handlers depend on.
+type OAuthServicer interface {
+	GetGoogleOAuthURL(state string) (string, error)
+	GetFacebookOAuthURL(state string) (string, error)
+	HandleGoogleCallback(ctx context.Context, code string) (*domain.User, *domain.RefreshToken, error)
+	HandleFacebookCallback(ctx context.Context, code string) (*domain.User, *domain.RefreshToken, error)
+}
+
 // AuthServicer is the subset of service.AuthService the HTTP handlers depend on.
 // Holding an interface instead of the concrete struct enables testing with mocks.
 type AuthServicer interface {

@@ -1,4 +1,4 @@
-import { useCartStore } from "@/lib/cart";
+import { useCartStore, selectCartTotal } from "@/lib/cart";
 
 const item1 = {
   skuId: "sku-001",
@@ -114,34 +114,34 @@ describe("clearCart", () => {
   });
 });
 
-describe("total()", () => {
+describe("selectCartTotal()", () => {
   it("returns 0 for an empty cart", () => {
-    expect(useCartStore.getState().total()).toBe(0);
+    expect(selectCartTotal(useCartStore.getState().items)).toBe(0);
   });
 
   it("sums price * qty for a single item (handles cents)", () => {
     useCartStore.getState().addItem({ ...item1, qty: 3 });
     // 1099 cents * 3 = 3297
-    expect(useCartStore.getState().total()).toBe(3297);
+    expect(selectCartTotal(useCartStore.getState().items)).toBe(3297);
   });
 
   it("sums price * qty correctly across multiple items", () => {
     useCartStore.getState().addItem({ ...item1, qty: 2 }); // 1099 * 2 = 2198
     useCartStore.getState().addItem({ ...item2, qty: 4 }); // 499 * 4  = 1996
     // total = 4194
-    expect(useCartStore.getState().total()).toBe(4194);
+    expect(selectCartTotal(useCartStore.getState().items)).toBe(4194);
   });
 
   it("recalculates total correctly after updateQty", () => {
     useCartStore.getState().addItem({ ...item1, qty: 2 }); // 1099 * 2 = 2198
     useCartStore.getState().updateQty("sku-001", 1);       // 1099 * 1 = 1099
-    expect(useCartStore.getState().total()).toBe(1099);
+    expect(selectCartTotal(useCartStore.getState().items)).toBe(1099);
   });
 
   it("recalculates total correctly after removeItem", () => {
     useCartStore.getState().addItem({ ...item1, qty: 1 }); // 1099
     useCartStore.getState().addItem({ ...item2, qty: 1 }); // 499
     useCartStore.getState().removeItem("sku-001");
-    expect(useCartStore.getState().total()).toBe(499);
+    expect(selectCartTotal(useCartStore.getState().items)).toBe(499);
   });
 });

@@ -50,6 +50,9 @@ type ChargeResult struct {
 
 // PaymentGateway defines the interface for the actual payment processor.
 type PaymentGateway interface {
+	// Name returns the gateway identifier stored on Payment records (e.g. "stripe", "fake").
+	Name() string
+
 	// Charge attempts to charge amount (in the smallest currency unit) and
 	// returns a ChargeResult on success or an error on failure.
 	// paymentMethodID is the gateway-specific token (e.g. Stripe pm_...); the

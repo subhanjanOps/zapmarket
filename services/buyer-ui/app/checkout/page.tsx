@@ -19,7 +19,7 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { useCartStore, CartItem } from "@/lib/cart";
+import { useCartStore, selectCartTotal, CartItem } from "@/lib/cart";
 import { getStripe } from "@/lib/stripe";
 import { cn } from "@/lib/utils";
 
@@ -246,7 +246,7 @@ function CheckoutForm({
       if (res.status === 201 || res.status === 409) {
         const data = await res.json();
         const orderId = data.data?.id ?? data.id;
-        sessionStorage.removeItem("checkout_idempotency_key");
+        resetIdempotencyKey();
         clearCart();
         router.push(`/account/orders/${orderId}?new=1`);
         return;
@@ -475,7 +475,8 @@ function CheckoutForm({
 // ---------------------------------------------------------------------------
 
 export default function CheckoutPage() {
-  const { items, total, clearCart } = useCartStore();
+  const { items, clearCart } = useCartStore();
+  const total = selectCartTotal(items);
   const router = useRouter();
   const idempotencyKey = useRef<string>("");
   const getIdempotencyKey = useCallback(() => {
@@ -503,7 +504,7 @@ export default function CheckoutPage() {
     if (items.length === 0) router.replace("/cart");
   }, [items.length, router]);
 
-  const subtotal = total() / 100;
+  const subtotal = total / 100;
   const stripePromise = getStripe();
 
   const formProps = {

@@ -18,12 +18,11 @@ interface CartStore {
   removeItem: (skuId: string) => void;
   updateQty: (skuId: string, qty: number) => void;
   clearCart: () => void;
-  total: () => number;
 }
 
 export const useCartStore = create<CartStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       items: [],
       addItem: (item) =>
         set((s) => {
@@ -49,8 +48,10 @@ export const useCartStore = create<CartStore>()(
               : s.items.map((i) => (i.skuId === skuId ? { ...i, qty } : i)),
         })),
       clearCart: () => set({ items: [] }),
-      total: () => get().items.reduce((sum, i) => sum + i.price * i.qty, 0),
     }),
     { name: "buyer-cart" }
   )
 );
+
+export const selectCartTotal = (items: CartItem[]): number =>
+  items.reduce((sum, i) => sum + i.price * i.qty, 0);

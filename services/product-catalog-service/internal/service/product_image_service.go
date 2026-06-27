@@ -105,7 +105,7 @@ func (pis *productImageService) GetImagesByProductID(ctx context.Context, produc
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "product id is required")
 	}
 
-	pis.logger.Info("fetching images by product id", "product_id", productID)
+	pis.logger.Debug("fetching images by product id", "product_id", productID)
 
 	return pis.imageRepo.GetImageByProductID(ctx, productID)
 }
@@ -115,7 +115,7 @@ func (pis *productImageService) GetImagesBySKUID(ctx context.Context, skuID uuid
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "sku id is required")
 	}
 
-	pis.logger.Info("fetching images by sku id", "sku_id", skuID)
+	pis.logger.Debug("fetching images by sku id", "sku_id", skuID)
 
 	return pis.imageRepo.GetImageBySKUID(ctx, skuID)
 }

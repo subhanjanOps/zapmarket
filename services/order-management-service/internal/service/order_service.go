@@ -14,6 +14,14 @@ import (
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
 )
 
+// Per-call timeouts for downstream gRPC calls in the checkout saga.
+// These prevent a hung downstream service from blocking the order request indefinitely.
+const (
+	catalogCallTimeout   = 5 * time.Second
+	inventoryCallTimeout = 5 * time.Second
+	paymentCallTimeout   = 30 * time.Second
+)
+
 // inventoryGateway is the subset of clients.InventoryClient the saga needs.
 // Keeping it here avoids importing the clients package in tests.
 type inventoryGateway interface {
@@ -110,7 +118,9 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		if it.Quantity <= 0 {
 			return nil, pkgerrors.NewValidation("INVALID_DATA", "item quantity must be greater than zero")
 		}
-		authPrice, err := s.catalog.GetSKUPrice(ctx, it.SKUID)
+		catalogCtx, catalogCancel := context.WithTimeout(ctx, catalogCallTimeout)
+		authPrice, err := s.catalog.GetSKUPrice(catalogCtx, it.SKUID)
+		catalogCancel()
 		if err != nil {
 			return nil, pkgerrors.NewValidation("INVALID_SKU", fmt.Sprintf("SKU %s not found or unavailable: %v", it.SKUID, err))
 		}
@@ -133,7 +143,9 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 	order.Status = domain.OrderReserved
 	s.logger.Info("order reserved", "order_id", order.ID)
 
-	paymentID, err := s.finalisePayment(ctx, order, domainItems, userID, currency, idempotencyKey, paymentMethodID)
+	paymentCtx, paymentCancel := context.WithTimeout(ctx, paymentCallTimeout)
+	paymentID, err := s.finalisePayment(paymentCtx, order, domainItems, userID, currency, idempotencyKey, paymentMethodID)
+	paymentCancel()
 	if err != nil {
 		return nil, err
 	}
@@ -186,11 +198,14 @@ func (s *orderService) checkIdempotency(ctx context.Context, idempotencyKey uuid
 	return nil, nil
 }
 
-// reserveStockForOrder reserves inventory for all items. Compensates and returns error on failure.
+// reserveStockForOrder reserves inventory for all items, using per-call timeouts.
+// Compensates and returns error on failure.
 func (s *orderService) reserveStockForOrder(ctx context.Context, orderID uuid.UUID, items []*domain.OrderItem) error {
 	var reserved []*domain.OrderItem
 	for _, item := range items {
-		reservationID, ok, err := s.inventory.ReserveStock(ctx, item.SKUID, orderID, item.Quantity)
+		invCtx, invCancel := context.WithTimeout(ctx, inventoryCallTimeout)
+		reservationID, ok, err := s.inventory.ReserveStock(invCtx, item.SKUID, orderID, item.Quantity)
+		invCancel()
 		if err != nil {
 			s.logger.Error("inventory ReserveStock error", "sku_id", item.SKUID, "error", err)
 			s.compensate(ctx, orderID, reserved)
@@ -232,9 +247,11 @@ func (s *orderService) finalisePayment(ctx context.Context, order *domain.Order,
 		if item.ReservationID == nil {
 			continue
 		}
-		if err := s.inventory.DeductStock(ctx, *item.ReservationID); err != nil {
+		invCtx, invCancel := context.WithTimeout(ctx, inventoryCallTimeout)
+		if err := s.inventory.DeductStock(invCtx, *item.ReservationID); err != nil {
 			s.logger.Error("failed to deduct stock after payment", "reservation_id", item.ReservationID, "error", err)
 		}
+		invCancel()
 	}
 
 	confirmPayload, marshalErr := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "payment_id": paymentID.String()})
@@ -290,13 +307,11 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUI
 		return nil, err
 	}
 
-	// Fetch items needed for inventory release (before persisting CANCELLED).
 	items, err := s.repo.GetOrderItems(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Persist CANCELLED status first — if this fails we do nothing else.
 	cancelPayload, marshalErr := json.Marshal(map[string]string{"order_id": orderID.String(), "user_id": userID.String(), "reason": "user_requested"})
 	if marshalErr != nil {
 		return nil, pkgerrors.NewInternal("INTERNAL_ERROR", "internal serialization error", marshalErr)
@@ -305,8 +320,6 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUI
 		return nil, err
 	}
 
-	// Release inventory after the order is durably cancelled.
-	// If this fails the order is still cancelled; log and move on.
 	s.compensate(ctx, orderID, items)
 
 	order.Status = domain.OrderCancelled
@@ -327,7 +340,6 @@ func (s *orderService) GetSellerOrder(ctx context.Context, orderID, sellerID uui
 	if err != nil {
 		return nil, nil, err
 	}
-	// Verify at least one item belongs to this seller.
 	hasSeller := false
 	for _, item := range items {
 		if item.SellerID != nil && *item.SellerID == sellerID {
@@ -340,8 +352,6 @@ func (s *orderService) GetSellerOrder(ctx context.Context, orderID, sellerID uui
 	}
 	return order, items, nil
 }
-
-// ── Admin methods ──────────────────────────────────────────────────────────
 
 func (s *orderService) ListAllOrders(ctx context.Context, params contracts.OrderListParams) ([]*domain.Order, int64, error) {
 	return s.repo.ListAll(ctx, params)
@@ -373,7 +383,6 @@ func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) 
 		return nil, err
 	}
 
-	// Persist CANCELLED status first, then release inventory.
 	cancelPayload, marshalErr := json.Marshal(map[string]string{"order_id": orderID.String(), "reason": "admin_cancelled"})
 	if marshalErr != nil {
 		return nil, pkgerrors.NewInternal("INTERNAL_ERROR", "internal serialization error", marshalErr)
@@ -382,7 +391,6 @@ func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) 
 		return nil, err
 	}
 
-	// Release inventory after durable cancel; log failures but don't surface them.
 	s.compensate(ctx, orderID, items)
 
 	order.Status = domain.OrderCancelled
@@ -392,10 +400,9 @@ func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) 
 
 // compensate releases all reservations that were already made before a
 // failure. Errors are logged but not returned — the caller's error takes
-// precedence. A failed release here means stock is temporarily stranded in
-// RESERVED state; it will be recovered by the TTL sweep job (Stage 12).
+// precedence. A failed release means stock is temporarily stranded in
+// RESERVED state; it will be recovered by the TTL sweep job.
 func (s *orderService) compensate(ctx context.Context, orderID uuid.UUID, reserved []*domain.OrderItem) {
-	// Use a detached context so client disconnects don't abort compensation.
 	compensateCtx := context.WithoutCancel(ctx)
 	for _, item := range reserved {
 		if item.ReservationID == nil {

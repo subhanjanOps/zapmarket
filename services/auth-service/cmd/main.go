@@ -31,7 +31,6 @@ import (
 	"syscall"
 	"time"
 
-	"google.golang.org/grpc"
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -237,7 +236,7 @@ func main() {
 	}()
 
 	// Start gRPC server in a goroutine
-	var grpcSrv *grpc.Server
+	grpcSrv := grpcx.NewServer()
 	go func() {
 		slog.Info("gRPC server configured", "port", cfg.GRPCPort)
 		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPCPort))
@@ -246,7 +245,6 @@ func main() {
 			sigChan <- syscall.SIGTERM
 			return
 		}
-		grpcSrv = grpcx.NewServer()
 		grpcServer := grpcHandler.NewAuthServer(authService, cfg)
 		authpb.RegisterAuthServiceServer(grpcSrv, grpcServer)
 		reflection.Register(grpcSrv)
@@ -279,9 +277,7 @@ func main() {
 		slog.Error("HTTP server shutdown error", "error", err)
 	}
 
-	if grpcSrv != nil {
-		grpcSrv.GracefulStop()
-	}
+	grpcSrv.GracefulStop()
 
 	slog.Info("Auth service stopped")
 }
