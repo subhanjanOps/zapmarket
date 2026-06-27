@@ -427,6 +427,8 @@ services:
       - PAYMENT_WEBHOOK_SECRET=change-me-webhook-secret
       - REDIS_URL=zapmarket-redis:6379
       - KAFKA_BROKERS=kafka:9092
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
     ports:
       - "8083:8083"
       - "50054:50054"
