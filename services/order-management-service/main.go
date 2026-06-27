@@ -48,7 +48,10 @@ import (
 )
 
 func main() {
-	_ = godotenv.Load()
+	// Try loading .env from CWD first, then from the directory of this file.
+	if err := godotenv.Load(); err != nil {
+		_ = godotenv.Load("services/order-management-service/.env")
+	}
 
 	cfg, err := config.Load()
 	if err != nil {

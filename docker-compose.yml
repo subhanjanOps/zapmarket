@@ -179,6 +179,7 @@ services:
       - DB_PASSWORD=zappass123
       - DB_NAME=ordermgmt
       - AUTH_SERVICE_ADDR=zapmarket-auth-service:50051
+      - CATALOG_SERVICE_ADDR=zapmarket-product-catalog-service:50052
       - INVENTORY_SERVICE_ADDR=zapmarket-inventory-service:50053
       - PAYMENT_SERVICE_ADDR=zapmarket-payment-service:50054
       - KAFKA_BROKERS=kafka:9092

@@ -34,9 +34,10 @@ type checkoutItemRequest struct {
 }
 
 type checkoutRequest struct {
-	Items          []checkoutItemRequest `json:"items"`
-	IdempotencyKey string                `json:"idempotency_key"`
-	Currency       string                `json:"currency,omitempty"`
+	Items           []checkoutItemRequest `json:"items"`
+	IdempotencyKey  string                `json:"idempotency_key"`
+	Currency        string                `json:"currency,omitempty"`
+	PaymentMethodID string                `json:"payment_method_id,omitempty"`
 }
 
 // Checkout handles POST /v1/orders.
@@ -122,7 +123,7 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		items[i] = item
 	}
 
-	order, err := h.svc.Checkout(r.Context(), userID, idempotencyKey, items, req.Currency)
+	order, err := h.svc.Checkout(r.Context(), userID, idempotencyKey, items, req.Currency, req.PaymentMethodID)
 	if err != nil {
 		HandleError(w, err)
 		return

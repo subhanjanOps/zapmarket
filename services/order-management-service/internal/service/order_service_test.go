@@ -121,12 +121,12 @@ func (m *mockInventory) DeductStock(ctx context.Context, reservationID uuid.UUID
 }
 
 type mockPayment struct {
-	chargeFn func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (uuid.UUID, string, error)
+	chargeFn func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, string, error)
 }
 
-func (m *mockPayment) ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (uuid.UUID, string, error) {
+func (m *mockPayment) ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, string, error) {
 	if m.chargeFn != nil {
-		return m.chargeFn(ctx, orderID, userID, amount, currency, idempotencyKey)
+		return m.chargeFn(ctx, orderID, userID, amount, currency, idempotencyKey, paymentMethodID)
 	}
 	return uuid.New(), "CAPTURED", nil
 }
@@ -175,7 +175,7 @@ func TestCheckout_HappyPath(t *testing.T) {
 	userID := uuid.New()
 	idemKey := uuid.New()
 
-	order, err := svc.Checkout(context.Background(), userID, idemKey, defaultItems(), "INR")
+	order, err := svc.Checkout(context.Background(), userID, idemKey, defaultItems(), "INR", "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -196,20 +196,20 @@ func TestCheckout_ValidationErrors(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("nil user ID", func(t *testing.T) {
-		_, err := svc.Checkout(ctx, uuid.Nil, uuid.New(), defaultItems(), "INR")
+		_, err := svc.Checkout(ctx, uuid.Nil, uuid.New(), defaultItems(), "INR", "")
 		assertValidationError(t, err)
 	})
 	t.Run("nil idempotency key", func(t *testing.T) {
-		_, err := svc.Checkout(ctx, uuid.New(), uuid.Nil, defaultItems(), "INR")
+		_, err := svc.Checkout(ctx, uuid.New(), uuid.Nil, defaultItems(), "INR", "")
 		assertValidationError(t, err)
 	})
 	t.Run("empty items", func(t *testing.T) {
-		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), nil, "INR")
+		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), nil, "INR", "")
 		assertValidationError(t, err)
 	})
 	t.Run("zero quantity", func(t *testing.T) {
 		items := []CheckoutItem{{SKUID: uuid.New(), Quantity: 0}}
-		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), items, "INR")
+		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), items, "INR", "")
 		assertValidationError(t, err)
 	})
 	// unit_price is now fetched from catalog; client-supplied value is ignored
@@ -232,7 +232,7 @@ func TestCheckout_InventoryFailure(t *testing.T) {
 	pay := &mockPayment{}
 	svc := newTestService(t, repo, inv, pay, rdb)
 
-	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR")
+	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR", "")
 	if err == nil {
 		t.Fatal("expected error from insufficient stock")
 	}
@@ -263,13 +263,13 @@ func TestCheckout_PaymentFailure_ReleasesReservations(t *testing.T) {
 		},
 	}
 	pay := &mockPayment{
-		chargeFn: func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, key uuid.UUID) (uuid.UUID, string, error) {
+		chargeFn: func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, key uuid.UUID, pmID string) (uuid.UUID, string, error) {
 			return uuid.Nil, "", pkgerrors.NewInternal("PAYMENT_ERROR", "gateway timeout", nil)
 		},
 	}
 	svc := newTestService(t, repo, inv, pay, rdb)
 
-	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR")
+	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR", "")
 	if err == nil {
 		t.Fatal("expected payment error")
 	}
@@ -293,13 +293,13 @@ func TestCheckout_PaymentNotCaptured(t *testing.T) {
 		},
 	}
 	pay := &mockPayment{
-		chargeFn: func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, key uuid.UUID) (uuid.UUID, string, error) {
+		chargeFn: func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, key uuid.UUID, pmID string) (uuid.UUID, string, error) {
 			return uuid.New(), "FAILED", nil
 		},
 	}
 	svc := newTestService(t, repo, inv, pay, rdb)
 
-	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR")
+	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR", "")
 	if err == nil {
 		t.Fatal("expected payment-not-captured error")
 	}
@@ -341,7 +341,7 @@ func TestCheckout_IdempotencyReplay(t *testing.T) {
 	pay := &mockPayment{}
 	svc := newTestService(t, repo, inv, pay, rdb)
 
-	order, err := svc.Checkout(context.Background(), existing.UserID, idemKey, defaultItems(), "INR")
+	order, err := svc.Checkout(context.Background(), existing.UserID, idemKey, defaultItems(), "INR", "")
 	if err != nil {
 		t.Fatalf("idempotent replay returned error: %v", err)
 	}
@@ -381,7 +381,7 @@ func TestCheckout_IdempotencyReplay_DBFallback(t *testing.T) {
 	pay := &mockPayment{}
 	svc := newTestService(t, repo, inv, pay, rdb)
 
-	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR")
+	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR", "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

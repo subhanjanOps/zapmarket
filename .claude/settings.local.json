@@ -211,11 +211,16 @@
       "mcp__shadcn__list_items_in_registries",
       "Bash(py \".claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.5.0/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"marketplace seller dashboard e-commerce product management\" --design-system -p \"ZapMarket Seller\")",
       "Bash(py *)",
-      "Bash(go test *)"
+      "Bash(go test *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\" -Force | Select-Object Name, LastWriteTime; Write-Host \"---\"; \\(Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\" -Recurse -Force | Measure-Object -Property Length -Sum\\).Sum / 1MB | ForEach-Object { \"$\\([math]::Round\\($_, 1\\)\\) MB total\" })",
+      "PowerShell(\\(Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\\\\cache\" -Recurse -Force | Measure-Object -Property Length -Sum\\).Sum / 1MB | ForEach-Object { \"$\\([math]::Round\\($_, 1\\)\\) MB\" }; Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\\\\cache\" -Force | Select-Object Name, LastWriteTime)"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "shadcn"
-  ]
+  ],
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
+  }
 }

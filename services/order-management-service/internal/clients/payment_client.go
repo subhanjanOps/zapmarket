@@ -30,13 +30,14 @@ func (c *PaymentClient) Close() error {
 
 // ChargeCard charges the user's card for the given order. Returns the
 // payment ID and the payment status string (e.g. "CAPTURED" or "FAILED").
-func (c *PaymentClient) ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (uuid.UUID, string, error) {
+func (c *PaymentClient) ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, string, error) {
 	resp, err := c.client.ChargeCard(ctx, &pb.ChargeCardRequest{
-		OrderId:        orderID.String(),
-		UserId:         userID.String(),
-		Amount:         amount,
-		Currency:       currency,
-		IdempotencyKey: idempotencyKey.String(),
+		OrderId:         orderID.String(),
+		UserId:          userID.String(),
+		Amount:          amount,
+		Currency:        currency,
+		IdempotencyKey:  idempotencyKey.String(),
+		PaymentMethodId: paymentMethodID,
 	})
 	if err != nil {
 		return uuid.Nil, "", fmt.Errorf("payment ChargeCard: %w", err)

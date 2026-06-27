@@ -24,7 +24,7 @@ type inventoryGateway interface {
 
 // paymentGateway is the subset of clients.PaymentClient the saga needs.
 type paymentGateway interface {
-	ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (uuid.UUID, string, error)
+	ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, string, error)
 }
 
 // catalogGateway fetches authoritative SKU prices to prevent client-supplied price injection.
@@ -34,7 +34,7 @@ type catalogGateway interface {
 
 // OrderService defines the public interface for order operations.
 type OrderService interface {
-	Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency string) (*domain.Order, error)
+	Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency, paymentMethodID string) (*domain.Order, error)
 	GetOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
 	ListOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.Order, int64, error)
 	CancelOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, error)
@@ -84,7 +84,7 @@ func idempCacheKey(key uuid.UUID) string {
 	return fmt.Sprintf("idempotency:order:%s", key)
 }
 
-func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency string) (*domain.Order, error) {
+func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency, paymentMethodID string) (*domain.Order, error) {
 	if userID == uuid.Nil {
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "user_id is required")
 	}
@@ -133,7 +133,7 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 	order.Status = domain.OrderReserved
 	s.logger.Info("order reserved", "order_id", order.ID)
 
-	paymentID, err := s.finalisePayment(ctx, order, domainItems, userID, currency, idempotencyKey)
+	paymentID, err := s.finalisePayment(ctx, order, domainItems, userID, currency, idempotencyKey, paymentMethodID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,8 +213,8 @@ func (s *orderService) reserveStockForOrder(ctx context.Context, orderID uuid.UU
 
 // finalisePayment charges the card and, on success, deducts stock and confirms the order.
 // On failure it compensates inventory and marks the order cancelled before returning.
-func (s *orderService) finalisePayment(ctx context.Context, order *domain.Order, items []*domain.OrderItem, userID uuid.UUID, currency string, idempotencyKey uuid.UUID) (uuid.UUID, error) {
-	paymentID, paymentStatus, err := s.payment.ChargeCard(ctx, order.ID, userID, order.TotalAmount, currency, idempotencyKey)
+func (s *orderService) finalisePayment(ctx context.Context, order *domain.Order, items []*domain.OrderItem, userID uuid.UUID, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, error) {
+	paymentID, paymentStatus, err := s.payment.ChargeCard(ctx, order.ID, userID, order.TotalAmount, currency, idempotencyKey, paymentMethodID)
 	if err != nil {
 		s.logger.Error("payment ChargeCard error", "order_id", order.ID, "error", err)
 		s.compensate(ctx, order.ID, items)

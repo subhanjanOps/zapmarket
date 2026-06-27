@@ -9,6 +9,7 @@ const ALLOWED_PREFIXES = [
   "v1/categories",
   "v1/orders",
   "v1/users",
+  "v1/admin",
   "v1/inventory",
   "v1/payments",
   "v1/images",
