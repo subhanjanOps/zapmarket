@@ -63,13 +63,13 @@ func (m *mockRepo) CreateRefund(ctx context.Context, r *domain.Refund, userID uu
 }
 
 type mockGateway struct {
-	chargeFn func(ctx context.Context, amount int64, currency string, key uuid.UUID) (*contracts.ChargeResult, error)
+	chargeFn func(ctx context.Context, amount int64, currency string, key uuid.UUID, pmID string) (*contracts.ChargeResult, error)
 	refundFn func(ctx context.Context, txnID string, amount int64, currency string) (string, error)
 }
 
-func (m *mockGateway) Charge(ctx context.Context, amount int64, currency string, key uuid.UUID) (*contracts.ChargeResult, error) {
+func (m *mockGateway) Charge(ctx context.Context, amount int64, currency string, key uuid.UUID, pmID string) (*contracts.ChargeResult, error) {
 	if m.chargeFn != nil {
-		return m.chargeFn(ctx, amount, currency, key)
+		return m.chargeFn(ctx, amount, currency, key, pmID)
 	}
 	return &contracts.ChargeResult{GatewayTxnID: "txn_" + uuid.NewString()}, nil
 }
@@ -102,7 +102,7 @@ func TestChargeCard_HappyPath(t *testing.T) {
 	gw := &mockGateway{}
 	svc := newSvc(repo, gw)
 
-	p, err := svc.ChargeCard(context.Background(), uuid.New(), uuid.New(), 1000, "INR", uuid.New())
+	p, err := svc.ChargeCard(context.Background(), uuid.New(), uuid.New(), 1000, "INR", uuid.New(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -113,12 +113,12 @@ func TestChargeCard_HappyPath(t *testing.T) {
 
 func TestChargeCard_GatewayDecline(t *testing.T) {
 	gw := &mockGateway{
-		chargeFn: func(_ context.Context, _ int64, _ string, _ uuid.UUID) (*contracts.ChargeResult, error) {
+		chargeFn: func(_ context.Context, _ int64, _ string, _ uuid.UUID, _ string) (*contracts.ChargeResult, error) {
 			return nil, pkgerrors.NewConflict("DECLINED", "card declined")
 		},
 	}
 	svc := newSvc(&mockRepo{}, gw)
-	p, err := svc.ChargeCard(context.Background(), uuid.New(), uuid.New(), 500, "INR", uuid.New())
+	p, err := svc.ChargeCard(context.Background(), uuid.New(), uuid.New(), 500, "INR", uuid.New(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -136,13 +136,13 @@ func TestChargeCard_IdempotentReplay(t *testing.T) {
 	}
 	chargeCount := 0
 	gw := &mockGateway{
-		chargeFn: func(_ context.Context, _ int64, _ string, _ uuid.UUID) (*contracts.ChargeResult, error) {
+		chargeFn: func(_ context.Context, _ int64, _ string, _ uuid.UUID, _ string) (*contracts.ChargeResult, error) {
 			chargeCount++
 			return &contracts.ChargeResult{GatewayTxnID: "txn_x"}, nil
 		},
 	}
 	svc := newSvc(repo, gw)
-	p, err := svc.ChargeCard(context.Background(), uuid.New(), uuid.New(), 999, "INR", uuid.New())
+	p, err := svc.ChargeCard(context.Background(), uuid.New(), uuid.New(), 999, "INR", uuid.New(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -158,16 +158,16 @@ func TestChargeCard_ValidationErrors(t *testing.T) {
 	svc := newSvc(&mockRepo{}, &mockGateway{})
 	ctx := context.Background()
 
-	if _, err := svc.ChargeCard(ctx, uuid.Nil, uuid.New(), 100, "INR", uuid.New()); err == nil {
+	if _, err := svc.ChargeCard(ctx, uuid.Nil, uuid.New(), 100, "INR", uuid.New(), ""); err == nil {
 		t.Error("expected error for nil order_id")
 	}
-	if _, err := svc.ChargeCard(ctx, uuid.New(), uuid.Nil, 100, "INR", uuid.New()); err == nil {
+	if _, err := svc.ChargeCard(ctx, uuid.New(), uuid.Nil, 100, "INR", uuid.New(), ""); err == nil {
 		t.Error("expected error for nil user_id")
 	}
-	if _, err := svc.ChargeCard(ctx, uuid.New(), uuid.New(), 0, "INR", uuid.New()); err == nil {
+	if _, err := svc.ChargeCard(ctx, uuid.New(), uuid.New(), 0, "INR", uuid.New(), ""); err == nil {
 		t.Error("expected error for zero amount")
 	}
-	if _, err := svc.ChargeCard(ctx, uuid.New(), uuid.New(), 100, "INR", uuid.Nil); err == nil {
+	if _, err := svc.ChargeCard(ctx, uuid.New(), uuid.New(), 100, "INR", uuid.Nil, ""); err == nil {
 		t.Error("expected error for nil idempotency_key")
 	}
 }

@@ -76,6 +76,9 @@ func (r *fakeUserRepo) ListUsers(_ context.Context, p contracts.UserListParams) 
 	return out, int64(len(out)), nil
 }
 func (r *fakeUserRepo) UpdateSellerStatus(_ context.Context, _ uuid.UUID, _ string) error { return nil }
+func (r *fakeUserRepo) GetUserByPhone(_ context.Context, _ string) (*domain.User, error) {
+	return nil, pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
+}
 func (r *fakeUserRepo) ListSellers(_ context.Context, _ string, _, _ int) ([]*domain.User, int64, error) {
 	return nil, 0, nil
 }
@@ -155,6 +158,23 @@ func (e *fakeEmailer) SendPasswordResetEmail(_ context.Context, to, _ string) er
 	return nil
 }
 
+func (e *fakeEmailer) SendOTPEmail(_ context.Context, to, _ string) error {
+	e.sent = append(e.sent, to)
+	return nil
+}
+
+type fakeOTPRepo struct{}
+
+func (r *fakeOTPRepo) CreateOTP(_ context.Context, _ *domain.OTPVerification) error { return nil }
+func (r *fakeOTPRepo) GetLatestUnusedOTP(_ context.Context, _ uuid.UUID, _ domain.OTPPurpose) (*domain.OTPVerification, error) {
+	return nil, pkgerrors.NewNotFound("OTP_NOT_FOUND", "not found")
+}
+func (r *fakeOTPRepo) MarkOTPUsed(_ context.Context, _ uuid.UUID) error { return nil }
+
+type fakeSMSer struct{}
+
+func (s *fakeSMSer) SendOTP(_ context.Context, _, _ string) error { return nil }
+
 type fakeBlacklist struct{ revoked map[string]bool }
 
 func newFakeBlacklist() *fakeBlacklist { return &fakeBlacklist{revoked: make(map[string]bool)} }
@@ -207,7 +227,7 @@ func newFixture() *testFixture {
 	bl := newFakeBlacklist()
 	svc := service.NewAuthService(
 		userRepo, &fakeOAuthRepo{}, tokenRepo, resetRepo,
-		emailer, testConfig(), bl, &fakeOAuthState{},
+		&fakeOTPRepo{}, emailer, &fakeSMSer{}, testConfig(), bl, &fakeOAuthState{},
 	)
 	return &testFixture{svc, userRepo, tokenRepo, resetRepo, emailer, bl}
 }
@@ -311,6 +331,10 @@ func TestPasswordReset_DoesNotLeakEmail(t *testing.T) {
 func TestPasswordReset_EmailSentForKnownUser(t *testing.T) {
 	f := newFixture()
 	_, _, _ = f.svc.RegisterUserPassword(context.Background(), "reset@b.com", "pass1234", "D", "buyer")
+	// Drain any OTP emails from the async goroutine before asserting.
+	time.Sleep(20 * time.Millisecond)
+	f.emailer.sent = nil
+
 	err := f.svc.RequestPasswordReset(context.Background(), "reset@b.com")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

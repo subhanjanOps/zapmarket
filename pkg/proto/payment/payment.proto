@@ -5,12 +5,13 @@ package payment;
 option go_package = "github.com/zapmarket/zapmarket/pkg/proto/payment;paymentpb";
 
 message ChargeCardRequest {
-  string order_id        = 1;
-  string user_id         = 2;
-  int64  amount          = 3; // smallest currency unit (paise for INR)
-  string currency        = 4; // ISO 4217, e.g. "INR"
-  string idempotency_key = 5; // UUID; a retry with the same key returns the
-                               // original result instead of charging twice
+  string order_id           = 1;
+  string user_id            = 2;
+  int64  amount             = 3; // smallest currency unit (paise for INR)
+  string currency           = 4; // ISO 4217, e.g. "INR"
+  string idempotency_key    = 5; // UUID; a retry with the same key returns the
+                                  // original result instead of charging twice
+  string payment_method_id  = 6; // Stripe PaymentMethod ID (pm_...); empty for fake gateway
 }
 
 message ChargeCardResponse {

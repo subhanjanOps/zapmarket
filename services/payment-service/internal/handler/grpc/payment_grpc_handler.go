@@ -34,7 +34,7 @@ func (h *PaymentGRPCHandler) ChargeCard(ctx context.Context, req *pb.ChargeCardR
 		return nil, status.Errorf(codes.InvalidArgument, "invalid idempotency_key: %s", req.IdempotencyKey)
 	}
 
-	payment, err := h.svc.ChargeCard(ctx, orderID, userID, req.Amount, req.Currency, idempotencyKey)
+	payment, err := h.svc.ChargeCard(ctx, orderID, userID, req.Amount, req.Currency, idempotencyKey, req.PaymentMethodId)
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

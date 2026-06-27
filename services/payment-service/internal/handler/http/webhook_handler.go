@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stripe/stripe-go/v82"
+	"github.com/stripe/stripe-go/v82/webhook"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/service"
 )
 
@@ -116,4 +118,67 @@ func (h *WebhookHandler) validSignature(body []byte, signatureHeader string) boo
 	mac.Write(body)
 	expected := hex.EncodeToString(mac.Sum(nil))
 	return hmac.Equal([]byte(expected), []byte(signatureHeader))
+}
+
+// HandleStripeWebhook verifies Stripe-Signature and dispatches payment_intent events.
+func (h *WebhookHandler) HandleStripeWebhook(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), h.secret)
+	if err != nil {
+		h.logger.Warn("stripe webhook signature verification failed", "error", err)
+		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		return
+	}
+
+	switch event.Type {
+	case stripe.EventTypePaymentIntentSucceeded:
+		var pi stripe.PaymentIntent
+		if err := json.Unmarshal(event.Data.Raw, &pi); err != nil {
+			http.Error(w, "invalid event data", http.StatusBadRequest)
+			return
+		}
+		paymentID, parseErr := uuid.Parse(pi.Metadata["payment_id"])
+		if parseErr != nil {
+			h.logger.Warn("stripe webhook: missing payment_id in metadata", "pi_id", pi.ID)
+			w.WriteHeader(http.StatusOK) // ack so Stripe doesn't retry
+			return
+		}
+		if err := h.svc.HandleCaptureWebhook(r.Context(), paymentID, pi.ID); err != nil {
+			h.logger.Error("failed to handle stripe capture", "payment_id", paymentID, "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+	case stripe.EventTypePaymentIntentPaymentFailed:
+		var pi stripe.PaymentIntent
+		if err := json.Unmarshal(event.Data.Raw, &pi); err != nil {
+			http.Error(w, "invalid event data", http.StatusBadRequest)
+			return
+		}
+		paymentID, parseErr := uuid.Parse(pi.Metadata["payment_id"])
+		if parseErr != nil {
+			h.logger.Warn("stripe webhook: missing payment_id in metadata", "pi_id", pi.ID)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		reason := "payment failed"
+		if pi.LastPaymentError != nil {
+			reason = pi.LastPaymentError.Msg
+		}
+		if err := h.svc.HandleFailureWebhook(r.Context(), paymentID, reason); err != nil {
+			h.logger.Error("failed to handle stripe failure", "payment_id", paymentID, "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+	default:
+		// Acknowledge unhandled event types so Stripe doesn't retry them.
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

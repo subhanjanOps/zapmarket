@@ -91,6 +91,23 @@ type Config struct {
 	SMTPPassword string
 	SMTPFrom     string
 
+	// Resend (preferred transactional email). When set, ResendEmailer is used
+	// instead of SMTPEmailer. RESEND_API_KEY="" falls back to LogEmailer.
+	ResendAPIKey string
+	EmailFrom    string // "From" address, e.g. "noreply@zapmarket.io"
+
+	// Stripe payment gateway.
+	StripeSecretKey      string // sk_test_... or sk_live_...
+	StripeWebhookSecret  string // whsec_... for Stripe webhook signature verification
+
+	// Twilio SMS for OTP delivery.
+	TwilioAccountSID  string
+	TwilioAuthToken   string
+	TwilioFromNumber  string // E.164, e.g. "+15005550006"
+
+	// OTP settings.
+	OTPExpiryMinutes int // default 10
+
 	// OTLPEndpoint is the gRPC address of an OpenTelemetry collector
 	// (e.g. "localhost:4317"). Empty string disables tracing.
 	OTLPEndpoint string
@@ -162,6 +179,18 @@ func Load() (*Config, error) {
 		SMTPUser:     getEnv("SMTP_USER", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:     getEnv("SMTP_FROM", "noreply@zapmarket.com"),
+
+		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
+		EmailFrom:    getEnv("EMAIL_FROM", "onboarding@resend.dev"),
+
+		StripeSecretKey:     getEnv("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
+
+		TwilioAccountSID: getEnv("TWILIO_ACCOUNT_SID", ""),
+		TwilioAuthToken:  getEnv("TWILIO_AUTH_TOKEN", ""),
+		TwilioFromNumber: getEnv("TWILIO_FROM_NUMBER", ""),
+
+		OTPExpiryMinutes: getEnvInt("OTP_EXPIRY_MINUTES", 10),
 
 		OTLPEndpoint: getEnv("OTLP_ENDPOINT", ""),
 	}

@@ -24,6 +24,7 @@ type UserRepository interface {
 	CreateUser(ctx context.Context, user *domain.User) error
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
+	GetUserByPhone(ctx context.Context, phone string) (*domain.User, error)
 	UpdateUser(ctx context.Context, user *domain.User) error
 	VerifyUser(ctx context.Context, userID uuid.UUID) error
 	DeleteUser(ctx context.Context, userID uuid.UUID) error
@@ -53,6 +54,13 @@ type PasswordResetRepository interface {
 	CreatePasswordResetToken(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time) (*domain.PasswordResetToken, error)
 	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (*domain.PasswordResetToken, error)
 	MarkPasswordResetTokenUsed(ctx context.Context, tokenID uuid.UUID) error
+}
+
+// OTPRepository defines the interface for OTP verification persistence.
+type OTPRepository interface {
+	CreateOTP(ctx context.Context, otp *domain.OTPVerification) error
+	GetLatestUnusedOTP(ctx context.Context, userID uuid.UUID, purpose domain.OTPPurpose) (*domain.OTPVerification, error)
+	MarkOTPUsed(ctx context.Context, otpID uuid.UUID) error
 }
 
 // RefreshTokenRepository defines the interface for refresh token persistence.

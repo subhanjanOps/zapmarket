@@ -26,4 +26,8 @@ type AuthServicer interface {
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	RequestPasswordReset(ctx context.Context, userEmail string) error
 	ResetPassword(ctx context.Context, rawToken, newPassword string) error
+	SendEmailOTP(ctx context.Context, userEmail string) error
+	VerifyEmailOTP(ctx context.Context, userID uuid.UUID, code string) error
+	RequestPasswordResetOTP(ctx context.Context, phone string) error
+	ResetPasswordWithOTP(ctx context.Context, phone, code, newPassword string) error
 }

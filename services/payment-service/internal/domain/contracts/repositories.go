@@ -49,15 +49,12 @@ type ChargeResult struct {
 }
 
 // PaymentGateway defines the interface for the actual payment processor.
-// The only implementation built so far is FakePaymentGateway — see
-// planning/04-payment-service.md for why a real Razorpay/Stripe
-// integration was deliberately deferred.
 type PaymentGateway interface {
 	// Charge attempts to charge amount (in the smallest currency unit) and
-	// returns a ChargeResult on success or an error on failure. The error
-	// message becomes the payment's failure_reason, so it should be safe
-	// to store and not leak secrets.
-	Charge(ctx context.Context, amount int64, currency string, idempotencyKey uuid.UUID) (*ChargeResult, error)
+	// returns a ChargeResult on success or an error on failure.
+	// paymentMethodID is the gateway-specific token (e.g. Stripe pm_...); the
+	// fake gateway ignores it.
+	Charge(ctx context.Context, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (*ChargeResult, error)
 
 	// Refund attempts to refund amount against a previously-successful
 	// charge identified by gatewayTxnID, returning the gateway's refund

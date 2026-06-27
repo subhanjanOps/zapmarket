@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.10
 // 	protoc        v4.25.3
-// source: payment/payment.proto
+// source: payment.proto
 
 package paymentpb
 
@@ -28,13 +28,15 @@ type ChargeCardRequest struct {
 	Amount         int64                  `protobuf:"varint,3,opt,name=amount,proto3" json:"amount,omitempty"`                                      // smallest currency unit (paise for INR)
 	Currency       string                 `protobuf:"bytes,4,opt,name=currency,proto3" json:"currency,omitempty"`                                   // ISO 4217, e.g. "INR"
 	IdempotencyKey string                 `protobuf:"bytes,5,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"` // UUID; a retry with the same key returns the
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// original result instead of charging twice
+	PaymentMethodId string `protobuf:"bytes,6,opt,name=payment_method_id,json=paymentMethodId,proto3" json:"payment_method_id,omitempty"` // Stripe PaymentMethod ID (pm_...); empty for fake gateway
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ChargeCardRequest) Reset() {
 	*x = ChargeCardRequest{}
-	mi := &file_payment_payment_proto_msgTypes[0]
+	mi := &file_payment_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +48,7 @@ func (x *ChargeCardRequest) String() string {
 func (*ChargeCardRequest) ProtoMessage() {}
 
 func (x *ChargeCardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_payment_payment_proto_msgTypes[0]
+	mi := &file_payment_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +61,7 @@ func (x *ChargeCardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChargeCardRequest.ProtoReflect.Descriptor instead.
 func (*ChargeCardRequest) Descriptor() ([]byte, []int) {
-	return file_payment_payment_proto_rawDescGZIP(), []int{0}
+	return file_payment_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ChargeCardRequest) GetOrderId() string {
@@ -97,10 +99,17 @@ func (x *ChargeCardRequest) GetIdempotencyKey() string {
 	return ""
 }
 
+func (x *ChargeCardRequest) GetPaymentMethodId() string {
+	if x != nil {
+		return x.PaymentMethodId
+	}
+	return ""
+}
+
 type ChargeCardResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PaymentId     string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
-	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // pending|authorised|captured|failed|refunded|partially_refunded
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // PENDING|AUTHORISED|CAPTURED|FAILED|REFUNDED|PARTIALLY_REFUNDED
 	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -108,7 +117,7 @@ type ChargeCardResponse struct {
 
 func (x *ChargeCardResponse) Reset() {
 	*x = ChargeCardResponse{}
-	mi := &file_payment_payment_proto_msgTypes[1]
+	mi := &file_payment_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -120,7 +129,7 @@ func (x *ChargeCardResponse) String() string {
 func (*ChargeCardResponse) ProtoMessage() {}
 
 func (x *ChargeCardResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payment_payment_proto_msgTypes[1]
+	mi := &file_payment_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -133,7 +142,7 @@ func (x *ChargeCardResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChargeCardResponse.ProtoReflect.Descriptor instead.
 func (*ChargeCardResponse) Descriptor() ([]byte, []int) {
-	return file_payment_payment_proto_rawDescGZIP(), []int{1}
+	return file_payment_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ChargeCardResponse) GetPaymentId() string {
@@ -168,7 +177,7 @@ type RefundPaymentRequest struct {
 
 func (x *RefundPaymentRequest) Reset() {
 	*x = RefundPaymentRequest{}
-	mi := &file_payment_payment_proto_msgTypes[2]
+	mi := &file_payment_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -180,7 +189,7 @@ func (x *RefundPaymentRequest) String() string {
 func (*RefundPaymentRequest) ProtoMessage() {}
 
 func (x *RefundPaymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_payment_payment_proto_msgTypes[2]
+	mi := &file_payment_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -193,7 +202,7 @@ func (x *RefundPaymentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefundPaymentRequest.ProtoReflect.Descriptor instead.
 func (*RefundPaymentRequest) Descriptor() ([]byte, []int) {
-	return file_payment_payment_proto_rawDescGZIP(), []int{2}
+	return file_payment_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RefundPaymentRequest) GetPaymentId() string {
@@ -220,7 +229,7 @@ func (x *RefundPaymentRequest) GetReason() string {
 type RefundPaymentResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RefundId      string                 `protobuf:"bytes,1,opt,name=refund_id,json=refundId,proto3" json:"refund_id,omitempty"`
-	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // pending|processed|failed
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // PENDING|PROCESSED|FAILED
 	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -228,7 +237,7 @@ type RefundPaymentResponse struct {
 
 func (x *RefundPaymentResponse) Reset() {
 	*x = RefundPaymentResponse{}
-	mi := &file_payment_payment_proto_msgTypes[3]
+	mi := &file_payment_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -240,7 +249,7 @@ func (x *RefundPaymentResponse) String() string {
 func (*RefundPaymentResponse) ProtoMessage() {}
 
 func (x *RefundPaymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payment_payment_proto_msgTypes[3]
+	mi := &file_payment_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -253,7 +262,7 @@ func (x *RefundPaymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefundPaymentResponse.ProtoReflect.Descriptor instead.
 func (*RefundPaymentResponse) Descriptor() ([]byte, []int) {
-	return file_payment_payment_proto_rawDescGZIP(), []int{3}
+	return file_payment_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RefundPaymentResponse) GetRefundId() string {
@@ -286,7 +295,7 @@ type GetTransactionRequest struct {
 
 func (x *GetTransactionRequest) Reset() {
 	*x = GetTransactionRequest{}
-	mi := &file_payment_payment_proto_msgTypes[4]
+	mi := &file_payment_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -298,7 +307,7 @@ func (x *GetTransactionRequest) String() string {
 func (*GetTransactionRequest) ProtoMessage() {}
 
 func (x *GetTransactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_payment_payment_proto_msgTypes[4]
+	mi := &file_payment_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -311,7 +320,7 @@ func (x *GetTransactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTransactionRequest.ProtoReflect.Descriptor instead.
 func (*GetTransactionRequest) Descriptor() ([]byte, []int) {
-	return file_payment_payment_proto_rawDescGZIP(), []int{4}
+	return file_payment_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetTransactionRequest) GetPaymentId() string {
@@ -336,7 +345,7 @@ type GetTransactionResponse struct {
 
 func (x *GetTransactionResponse) Reset() {
 	*x = GetTransactionResponse{}
-	mi := &file_payment_payment_proto_msgTypes[5]
+	mi := &file_payment_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -348,7 +357,7 @@ func (x *GetTransactionResponse) String() string {
 func (*GetTransactionResponse) ProtoMessage() {}
 
 func (x *GetTransactionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payment_payment_proto_msgTypes[5]
+	mi := &file_payment_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -361,7 +370,7 @@ func (x *GetTransactionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTransactionResponse.ProtoReflect.Descriptor instead.
 func (*GetTransactionResponse) Descriptor() ([]byte, []int) {
-	return file_payment_payment_proto_rawDescGZIP(), []int{5}
+	return file_payment_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetTransactionResponse) GetPaymentId() string {
@@ -413,17 +422,18 @@ func (x *GetTransactionResponse) GetErrorMessage() string {
 	return ""
 }
 
-var File_payment_payment_proto protoreflect.FileDescriptor
+var File_payment_proto protoreflect.FileDescriptor
 
-const file_payment_payment_proto_rawDesc = "" +
+const file_payment_proto_rawDesc = "" +
 	"\n" +
-	"\x15payment/payment.proto\x12\apayment\"\xa4\x01\n" +
+	"\rpayment.proto\x12\apayment\"\xd0\x01\n" +
 	"\x11ChargeCardRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x16\n" +
 	"\x06amount\x18\x03 \x01(\x03R\x06amount\x12\x1a\n" +
 	"\bcurrency\x18\x04 \x01(\tR\bcurrency\x12'\n" +
-	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\"p\n" +
+	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\x12*\n" +
+	"\x11payment_method_id\x18\x06 \x01(\tR\x0fpaymentMethodId\"p\n" +
 	"\x12ChargeCardResponse\x12\x1d\n" +
 	"\n" +
 	"payment_id\x18\x01 \x01(\tR\tpaymentId\x12\x16\n" +
@@ -457,19 +467,19 @@ const file_payment_payment_proto_rawDesc = "" +
 	"\x0eGetTransaction\x12\x1e.payment.GetTransactionRequest\x1a\x1f.payment.GetTransactionResponseB<Z:github.com/zapmarket/zapmarket/pkg/proto/payment;paymentpbb\x06proto3"
 
 var (
-	file_payment_payment_proto_rawDescOnce sync.Once
-	file_payment_payment_proto_rawDescData []byte
+	file_payment_proto_rawDescOnce sync.Once
+	file_payment_proto_rawDescData []byte
 )
 
-func file_payment_payment_proto_rawDescGZIP() []byte {
-	file_payment_payment_proto_rawDescOnce.Do(func() {
-		file_payment_payment_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_payment_payment_proto_rawDesc), len(file_payment_payment_proto_rawDesc)))
+func file_payment_proto_rawDescGZIP() []byte {
+	file_payment_proto_rawDescOnce.Do(func() {
+		file_payment_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_payment_proto_rawDesc), len(file_payment_proto_rawDesc)))
 	})
-	return file_payment_payment_proto_rawDescData
+	return file_payment_proto_rawDescData
 }
 
-var file_payment_payment_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_payment_payment_proto_goTypes = []any{
+var file_payment_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_payment_proto_goTypes = []any{
 	(*ChargeCardRequest)(nil),      // 0: payment.ChargeCardRequest
 	(*ChargeCardResponse)(nil),     // 1: payment.ChargeCardResponse
 	(*RefundPaymentRequest)(nil),   // 2: payment.RefundPaymentRequest
@@ -477,7 +487,7 @@ var file_payment_payment_proto_goTypes = []any{
 	(*GetTransactionRequest)(nil),  // 4: payment.GetTransactionRequest
 	(*GetTransactionResponse)(nil), // 5: payment.GetTransactionResponse
 }
-var file_payment_payment_proto_depIdxs = []int32{
+var file_payment_proto_depIdxs = []int32{
 	0, // 0: payment.PaymentService.ChargeCard:input_type -> payment.ChargeCardRequest
 	2, // 1: payment.PaymentService.RefundPayment:input_type -> payment.RefundPaymentRequest
 	4, // 2: payment.PaymentService.GetTransaction:input_type -> payment.GetTransactionRequest
@@ -491,26 +501,26 @@ var file_payment_payment_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_payment_payment_proto_init() }
-func file_payment_payment_proto_init() {
-	if File_payment_payment_proto != nil {
+func init() { file_payment_proto_init() }
+func file_payment_proto_init() {
+	if File_payment_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_payment_payment_proto_rawDesc), len(file_payment_payment_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_payment_proto_rawDesc), len(file_payment_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_payment_payment_proto_goTypes,
-		DependencyIndexes: file_payment_payment_proto_depIdxs,
-		MessageInfos:      file_payment_payment_proto_msgTypes,
+		GoTypes:           file_payment_proto_goTypes,
+		DependencyIndexes: file_payment_proto_depIdxs,
+		MessageInfos:      file_payment_proto_msgTypes,
 	}.Build()
-	File_payment_payment_proto = out.File
-	file_payment_payment_proto_goTypes = nil
-	file_payment_payment_proto_depIdxs = nil
+	File_payment_proto = out.File
+	file_payment_proto_goTypes = nil
+	file_payment_proto_depIdxs = nil
 }

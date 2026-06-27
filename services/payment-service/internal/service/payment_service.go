@@ -18,7 +18,7 @@ const paymentIdempotencyTTL = 24 * time.Hour
 
 // PaymentService defines the interface for payment operations.
 type PaymentService interface {
-	ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (*domain.Payment, error)
+	ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (*domain.Payment, error)
 	RefundPayment(ctx context.Context, paymentID uuid.UUID, amount int64, reason string) (*domain.Refund, error)
 	GetTransaction(ctx context.Context, paymentID uuid.UUID) (*domain.Payment, error)
 
@@ -44,7 +44,7 @@ func paymentIdempKey(key uuid.UUID) string {
 	return fmt.Sprintf("payment:idem:%s", key)
 }
 
-func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID) (*domain.Payment, error) {
+func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (*domain.Payment, error) {
 	if orderID == uuid.Nil {
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "order_id is required")
 	}
@@ -104,6 +104,10 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		return nil, err
 	}
 
+	gatewayName := "fake"
+	if paymentMethodID != "" {
+		gatewayName = "stripe"
+	}
 	payment := &domain.Payment{
 		OrderID:        orderID,
 		UserID:         userID,
@@ -111,7 +115,7 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 		Status:         domain.PaymentPending,
 		Amount:         amount,
 		Currency:       currency,
-		Gateway:        "fake",
+		Gateway:        gatewayName,
 	}
 	if err := s.repo.CreatePayment(ctx, payment); err != nil {
 		return nil, err
@@ -119,7 +123,7 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 
 	s.logger.Info("charging card", "payment_id", payment.ID, "order_id", orderID, "amount", amount, "currency", currency)
 
-	result, chargeErr := s.gateway.Charge(ctx, amount, currency, idempotencyKey)
+	result, chargeErr := s.gateway.Charge(ctx, amount, currency, idempotencyKey, paymentMethodID)
 	if chargeErr != nil {
 		s.logger.Info("charge declined", "payment_id", payment.ID, "error", chargeErr)
 		if err := s.repo.MarkFailed(ctx, payment.ID, chargeErr.Error()); err != nil {

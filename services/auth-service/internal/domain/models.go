@@ -101,6 +101,27 @@ type PasswordResetToken struct {
 	CreatedAt time.Time
 }
 
+// OTPPurpose is the reason an OTP was issued.
+type OTPPurpose string
+
+const (
+	OTPPurposeEmailVerify         OTPPurpose = "email_verify"
+	OTPPurposePhoneVerify         OTPPurpose = "phone_verify"
+	OTPPurposePhonePasswordReset  OTPPurpose = "phone_password_reset"
+)
+
+// OTPVerification represents a one-time password issued to a user.
+type OTPVerification struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	CodeHash  string
+	Purpose   OTPPurpose
+	Recipient string // email address or E.164 phone number
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
 // Claims represents JWT claims
 type Claims struct {
 	UserID    uuid.UUID `json:"user_id"`

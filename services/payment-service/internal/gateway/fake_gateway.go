@@ -26,7 +26,7 @@ func NewFakePaymentGateway() *FakePaymentGateway {
 	return &FakePaymentGateway{}
 }
 
-func (g *FakePaymentGateway) Charge(ctx context.Context, amount int64, currency string, idempotencyKey uuid.UUID) (*contracts.ChargeResult, error) {
+func (g *FakePaymentGateway) Charge(ctx context.Context, amount int64, currency string, idempotencyKey uuid.UUID, _ string) (*contracts.ChargeResult, error) {
 	if amount%100 == 13 {
 		return nil, pkgerrors.NewValidation("CARD_DECLINED", "the card was declined by the issuing bank")
 	}

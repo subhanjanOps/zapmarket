@@ -59,6 +59,7 @@ import (
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/infrastructure/redisstore"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/auth-service/internal/service"
+	"github.com/zapmarket/zapmarket/services/auth-service/internal/sms"
 )
 
 func main() {
@@ -106,6 +107,7 @@ func main() {
 	oauthRepo := repository.NewOAuthRepository(db)
 	tokenRepo := repository.NewRefreshTokenRepository(db)
 	resetRepo := repository.NewPasswordResetRepository(db)
+	otpRepo := repository.NewOTPRepository(db)
 	prefsRepo := repository.NewPreferencesRepository(db)
 
 	// ── Redis (optional — auth still works without it) ───────────────────────
@@ -120,12 +122,18 @@ func main() {
 		slog.Info("connected to Redis", "addr", cfg.RedisURL)
 	}
 
-	// Choose emailer based on environment; SMTP only when fully configured.
+	// Choose emailer: Resend > SMTP > LogEmailer (dev fallback).
 	var emailer email.Emailer
-	if cfg.SMTPHost != "" && cfg.SMTPUser != "" {
+	switch {
+	case cfg.ResendAPIKey != "":
+		emailer = email.NewResendEmailer(cfg.ResendAPIKey, cfg.EmailFrom)
+		slog.Info("using Resend emailer", "from", cfg.EmailFrom)
+	case cfg.SMTPHost != "" && cfg.SMTPUser != "":
 		emailer = email.NewSMTPEmailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword, cfg.SMTPFrom)
-	} else {
+		slog.Info("using SMTP emailer", "host", cfg.SMTPHost)
+	default:
 		emailer = email.NewLogEmailer()
+		slog.Info("using log emailer (set RESEND_API_KEY or SMTP_HOST to enable email)")
 	}
 
 	// Wire Redis-backed or no-op stores depending on Redis availability.
@@ -139,8 +147,18 @@ func main() {
 		oauthStateStore = &redisstore.NoopOAuthStateStore{}
 	}
 
+	// Wire SMS sender: Twilio if configured, else log-only.
+	var smser sms.SMSer
+	if cfg.TwilioAccountSID != "" && cfg.TwilioAuthToken != "" {
+		smser = sms.NewTwilioSMSer(cfg.TwilioAccountSID, cfg.TwilioAuthToken, cfg.TwilioFromNumber)
+		slog.Info("using Twilio SMS sender")
+	} else {
+		smser = sms.NewLogSMSer()
+		slog.Info("using log SMS sender (set TWILIO_ACCOUNT_SID to enable SMS)")
+	}
+
 	// Initialize services
-	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, emailer, cfg, blacklist, oauthStateStore)
+	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, otpRepo, emailer, smser, cfg, blacklist, oauthStateStore)
 	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, authService, cfg)
 
 	// Initialize HTTP handlers
@@ -164,6 +182,10 @@ func main() {
 	mux.HandleFunc("/v1/auth/oauth/facebook/callback", httpHandler.LoggingMiddleware(httpHandler.FacebookOAuthCallback))
 	mux.HandleFunc("/v1/auth/password/forgot", httpHandler.LoggingMiddleware(httpHandler.ForgotPassword))
 	mux.HandleFunc("/v1/auth/password/reset", httphandler.IPRateLimit(rdb, "password-reset")(httpHandler.LoggingMiddleware(httpHandler.ResetPassword)))
+	mux.HandleFunc("/v1/auth/password/forgot-otp", httphandler.IPRateLimit(rdb, "forgot-otp")(httpHandler.LoggingMiddleware(httpHandler.ForgotPasswordOTP)))
+	mux.HandleFunc("/v1/auth/password/reset-otp", httphandler.IPRateLimit(rdb, "reset-otp")(httpHandler.LoggingMiddleware(httpHandler.ResetPasswordOTP)))
+	mux.HandleFunc("/v1/auth/otp/send", httphandler.IPRateLimit(rdb, "otp-send")(httpHandler.LoggingMiddleware(httpHandler.SendOTP)))
+	mux.HandleFunc("/v1/auth/otp/verify", httpHandler.LoggingMiddleware(httpHandler.VerifyOTP))
 
 	// Swagger: spec served from the embedded swag doc (see docs/docs.go,
 	// regenerated via `swag init -g cmd/main.go`), not a file on disk.

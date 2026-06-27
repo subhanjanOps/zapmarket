@@ -122,6 +122,28 @@ func (r *UserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*do
 	return user, nil
 }
 
+// GetUserByPhone retrieves a user by their phone number.
+func (r *UserRepository) GetUserByPhone(ctx context.Context, phone string) (*domain.User, error) {
+	query := `
+		SELECT id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at, deleted_at
+		FROM users
+		WHERE phone = $1 AND deleted_at IS NULL
+	`
+	user := &domain.User{}
+	err := r.db.QueryRowContext(ctx, query, phone).Scan(
+		&user.ID, &user.Email, &user.Phone, &user.PasswordHash,
+		&user.FullName, &user.Role, &user.IsVerified, &user.SellerStatus,
+		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
+		}
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get user by phone: %v", err), err)
+	}
+	return user, nil
+}
+
 // UpdateUser updates a user's information
 func (r *UserRepository) UpdateUser(ctx context.Context, user *domain.User) error {
 	query := `

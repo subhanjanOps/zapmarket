@@ -81,7 +81,14 @@ func main() {
 
 	// ── Repository / Gateway / Service / gRPC handler ───────────────────────────
 	repo := repository.NewPaymentRepository(db)
-	paymentGateway := gateway.NewFakePaymentGateway()
+	var paymentGateway contracts.PaymentGateway
+	if cfg.StripeSecretKey != "" {
+		paymentGateway = gateway.NewStripePaymentGateway(cfg.StripeSecretKey)
+		log.Info("using Stripe payment gateway")
+	} else {
+		paymentGateway = gateway.NewFakePaymentGateway()
+		log.Info("using fake payment gateway (set STRIPE_SECRET_KEY to enable Stripe)")
+	}
 	svc := service.NewPaymentService(repo, paymentGateway, idemCache, log)
 	grpcHandler := grpchandler.NewPaymentGRPCHandler(svc)
 	webhookHandler := httphandler.NewWebhookHandler(svc, cfg.PaymentWebhookSecret, log)
@@ -90,6 +97,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", webhookHandler.Health)
 	mux.HandleFunc("/webhooks/payment", webhookHandler.HandlePaymentWebhook)
+	mux.HandleFunc("/webhooks/stripe", webhookHandler.HandleStripeWebhook)
 	mux.Handle("/metrics", m.Handler())
 
 	httpServer := &http.Server{
