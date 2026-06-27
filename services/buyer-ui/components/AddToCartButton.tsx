@@ -15,6 +15,8 @@ interface Props {
 
 export default function AddToCartButton({ sku, productName, productImage, qty = 1 }: Props) {
   const addItem = useCartStore((s) => s.addItem);
+  const updateQty = useCartStore((s) => s.updateQty);
+  const items = useCartStore((s) => s.items);
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
 
@@ -38,7 +40,10 @@ export default function AddToCartButton({ sku, productName, productImage, qty = 
 
   function handleBuyNow() {
     if (!sku) return;
-    for (let i = 0; i < qty; i++) {
+    const existing = items.find((i) => i.skuId === sku.id);
+    if (existing) {
+      updateQty(sku.id, qty);
+    } else {
       addItem({
         skuId: sku.id,
         name: `${productName} — ${sku.sku_code}`,
@@ -46,6 +51,7 @@ export default function AddToCartButton({ sku, productName, productImage, qty = 
         price: sku.price_amount,
         currency: sku.currency,
       });
+      if (qty > 1) updateQty(sku.id, qty);
     }
     router.push("/checkout");
   }

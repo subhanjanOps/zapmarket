@@ -166,13 +166,14 @@ interface CheckoutFormProps {
   subtotal: number;
   clearCart: () => void;
   getIdempotencyKey: () => string;
+  resetIdempotencyKey: () => void;
 }
 
 function CheckoutForm({
   address, setAddress, paymentMethod, setPaymentMethod,
   promoCode, setPromoCode, promoMsg, setPromoMsg,
   error, setError, loading, setLoading,
-  items, subtotal, clearCart, getIdempotencyKey,
+  items, subtotal, clearCart, getIdempotencyKey, resetIdempotencyKey,
 }: CheckoutFormProps) {
   const router = useRouter();
   const stripe = useStripe();
@@ -252,12 +253,14 @@ function CheckoutForm({
       }
 
       const err = await res.json().catch(() => ({}));
+      resetIdempotencyKey();
       setError(
         (err as Record<string, string>).error ??
           (err as Record<string, string>).message ??
           "Failed to place order. Please try again."
       );
     } catch {
+      resetIdempotencyKey();
       setError("Network error. Please check your connection.");
     } finally {
       setLoading(false);
@@ -484,6 +487,10 @@ export default function CheckoutPage() {
     idempotencyKey.current = fresh;
     return fresh;
   }, []);
+  const resetIdempotencyKey = useCallback(() => {
+    sessionStorage.removeItem("checkout_idempotency_key");
+    idempotencyKey.current = "";
+  }, []);
 
   const [address, setAddress] = useState({ name: "", phone: "", line1: "", city: "", pincode: "" });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("card");
@@ -503,7 +510,7 @@ export default function CheckoutPage() {
     address, setAddress, paymentMethod, setPaymentMethod,
     promoCode, setPromoCode, promoMsg, setPromoMsg,
     error, setError, loading, setLoading,
-    items, subtotal, clearCart, getIdempotencyKey,
+    items, subtotal, clearCart, getIdempotencyKey, resetIdempotencyKey,
   };
 
   return (

@@ -57,10 +57,11 @@ export default async function OrderDetailPage({
 
   let order: Record<string, unknown> | null = null;
   if (token) {
-    order = await apiFetch<Record<string, unknown>>(
+    const env = await apiFetch<{ data?: Record<string, unknown> } & Record<string, unknown>>(
       `/v1/orders/${id}`,
       { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
     );
+    order = env?.data ?? (env as Record<string, unknown> | null);
   }
 
   if (!order) notFound();
