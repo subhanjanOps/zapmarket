@@ -37,7 +37,8 @@ export async function generateMetadata({
       next: { revalidate: 300 },
     });
     if (!r.ok) return { title: "Product" };
-    const p = await r.json();
+    const env = await r.json();
+    const p = env?.data ?? env;
     return { title: p.name ?? "Product", description: p.description };
   } catch {
     return { title: "Product" };
@@ -90,7 +91,7 @@ export default async function ProductDetailPage({
 }) {
   const { id } = await params;
 
-  const [productRes, skusRes, imagesRes] = await Promise.all([
+  const [productEnv, skusRes, imagesRes] = await Promise.all([
     fetch(`${GW}/v1/products/${id}`, { next: { revalidate: 300 } })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null),
@@ -101,6 +102,7 @@ export default async function ProductDetailPage({
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .catch(() => ({ data: [] })),
   ]);
+  const productRes = productEnv?.data ?? productEnv;
 
   if (!productRes) {
     return (
