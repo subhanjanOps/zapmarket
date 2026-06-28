@@ -26,6 +26,8 @@ type UserRepository interface {
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
 	GetUserByPhone(ctx context.Context, phone string) (*domain.User, error)
 	UpdateUser(ctx context.Context, user *domain.User) error
+	UpdateProfile(ctx context.Context, userID uuid.UUID, dob *time.Time, gender, pfpURL *string, phoneVerified *bool, registrationStep *int) error
+	CompleteRegistration(ctx context.Context, userID uuid.UUID) error
 	VerifyUser(ctx context.Context, userID uuid.UUID) error
 	DeleteUser(ctx context.Context, userID uuid.UUID) error
 
@@ -76,5 +78,12 @@ type RefreshTokenRepository interface {
 // SellerProfileRepository defines persistence for seller onboarding data.
 type SellerProfileRepository interface {
 	Create(ctx context.Context, profile *domain.SellerProfile) error
+	Update(ctx context.Context, profile *domain.SellerProfile) error
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.SellerProfile, error)
+}
+
+// AddressRepository defines persistence for user addresses.
+type AddressRepository interface {
+	Create(ctx context.Context, addr *domain.Address) error
+	GetDefaultByUserID(ctx context.Context, userID uuid.UUID) (*domain.Address, error)
 }

@@ -23,6 +23,10 @@ type OAuthServicer interface {
 type AuthServicer interface {
 	RegisterUserPassword(ctx context.Context, email, password, fullName, role string) (*domain.User, *domain.RefreshToken, error)
 	RegisterSeller(ctx context.Context, email, password, fullName string, profile domain.SellerProfile) (*domain.User, error)
+	SendPhoneOTP(ctx context.Context, userID uuid.UUID, phone string) error
+	VerifyPhoneOTP(ctx context.Context, userID uuid.UUID, code string) error
+	UpdateRegistrationProfile(ctx context.Context, userID uuid.UUID, dob time.Time, gender, pfpURL *string, addr domain.Address, sellerProfile *domain.SellerProfile) error
+	CompleteRegistration(ctx context.Context, userID uuid.UUID) error
 	BootstrapAdmin(ctx context.Context, email, password, fullName string) (*domain.User, *domain.RefreshToken, error)
 	LoginPassword(ctx context.Context, email, password string) (*domain.User, *domain.RefreshToken, error)
 	RefreshAccessToken(ctx context.Context, refreshTokenString string) (string, error)

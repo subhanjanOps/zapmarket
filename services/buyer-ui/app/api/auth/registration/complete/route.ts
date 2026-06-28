@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GW } from "@/lib/gateway";
+import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
-  let body: Record<string, unknown>;
+  let body: unknown;
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  body = { ...body, role: "buyer" };
   let upstream: Response;
   try {
-    upstream = await fetch(`${GW}/v1/auth/register`, {
+    upstream = await fetch(`${GW}/v1/auth/registration/complete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -19,16 +19,14 @@ export async function POST(req: NextRequest) {
   }
   const data = await upstream.json().catch(() => ({})) as Record<string, unknown>;
   if (!upstream.ok) {
-    return NextResponse.json(
-      { error: data.error ?? data.message ?? `HTTP ${upstream.status}` },
-      { status: upstream.status },
-    );
+    return NextResponse.json({ error: (data.error ?? `HTTP ${upstream.status}`) as string }, { status: upstream.status });
   }
+  // If backend returns a fresh access token, refresh the cookie
   const accessToken = data.access_token as string | undefined;
-  const user = data.user as Record<string, unknown> | undefined;
-  const res = NextResponse.json({ ok: true, user_id: user?.id, registration_step: user?.registration_step }, { status: 201 });
+  const jar = await cookies();
+  const res = NextResponse.json({ ok: true });
   if (accessToken) {
-    res.cookies.set("buyer_token", accessToken, {
+    jar.set("buyer_token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",

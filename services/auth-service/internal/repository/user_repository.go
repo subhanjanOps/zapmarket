@@ -28,8 +28,9 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // CreateUser creates a new user in the database
 func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO users (id, email, phone, password_hash, full_name, role, is_verified, seller_status,
+		                   phone_verified, registration_step, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -41,6 +42,8 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) erro
 		user.Role,
 		user.IsVerified,
 		user.SellerStatus,
+		user.PhoneVerified,
+		user.RegistrationStep,
 		user.CreatedAt,
 		user.UpdatedAt,
 	)
@@ -58,90 +61,41 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) erro
 
 // GetUserByEmail retrieves a user by email
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
-	query := `
-		SELECT id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at, deleted_at
-		FROM users
-		WHERE email = $1 AND deleted_at IS NULL
-	`
-
-	user := &domain.User{}
-	err := r.db.QueryRowContext(ctx, query, email).Scan(
-		&user.ID,
-		&user.Email,
-		&user.Phone,
-		&user.PasswordHash,
-		&user.FullName,
-		&user.Role,
-		&user.IsVerified,
-		&user.SellerStatus,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&user.DeletedAt,
-	)
-
+	row := r.db.QueryRowContext(ctx, `SELECT `+userSelectCols+` FROM users WHERE email = $1 AND deleted_at IS NULL`, email)
+	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
 		}
-		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get user: %v", err), err)
+		return nil, err
 	}
-
-	return user, nil
+	return u, nil
 }
 
 // GetUserByID retrieves a user by ID
 func (r *UserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
-	query := `
-		SELECT id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at, deleted_at
-		FROM users
-		WHERE id = $1 AND deleted_at IS NULL
-	`
-
-	user := &domain.User{}
-	err := r.db.QueryRowContext(ctx, query, userID).Scan(
-		&user.ID,
-		&user.Email,
-		&user.Phone,
-		&user.PasswordHash,
-		&user.FullName,
-		&user.Role,
-		&user.IsVerified,
-		&user.SellerStatus,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&user.DeletedAt,
-	)
-
+	row := r.db.QueryRowContext(ctx, `SELECT `+userSelectCols+` FROM users WHERE id = $1 AND deleted_at IS NULL`, userID)
+	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
 		}
-		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get user: %v", err), err)
+		return nil, err
 	}
-
-	return user, nil
+	return u, nil
 }
 
 // GetUserByPhone retrieves a user by their phone number.
 func (r *UserRepository) GetUserByPhone(ctx context.Context, phone string) (*domain.User, error) {
-	query := `
-		SELECT id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at, deleted_at
-		FROM users
-		WHERE phone = $1 AND deleted_at IS NULL
-	`
-	user := &domain.User{}
-	err := r.db.QueryRowContext(ctx, query, phone).Scan(
-		&user.ID, &user.Email, &user.Phone, &user.PasswordHash,
-		&user.FullName, &user.Role, &user.IsVerified, &user.SellerStatus,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
-	)
+	row := r.db.QueryRowContext(ctx, `SELECT `+userSelectCols+` FROM users WHERE phone = $1 AND deleted_at IS NULL`, phone)
+	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, pkgerrors.NewNotFound("USER_NOT_FOUND", "user not found")
 		}
-		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to get user by phone: %v", err), err)
+		return nil, err
 	}
-	return user, nil
+	return u, nil
 }
 
 // UpdateUser updates a user's information
@@ -178,6 +132,42 @@ func (r *UserRepository) UpdateUser(ctx context.Context, user *domain.User) erro
 	}
 
 	return nil
+}
+
+// UpdateProfile updates profile fields set during registration wizard steps.
+func (r *UserRepository) UpdateProfile(ctx context.Context, userID uuid.UUID, dob *time.Time, gender, pfpURL *string, phoneVerified *bool, registrationStep *int) error {
+	sets := []string{"updated_at = $1"}
+	args := []any{time.Now()}
+	i := 2
+	if dob != nil {
+		sets = append(sets, fmt.Sprintf("dob = $%d", i)); args = append(args, *dob); i++
+	}
+	if gender != nil {
+		sets = append(sets, fmt.Sprintf("gender = $%d", i)); args = append(args, *gender); i++
+	}
+	if pfpURL != nil {
+		sets = append(sets, fmt.Sprintf("pfp_url = $%d", i)); args = append(args, *pfpURL); i++
+	}
+	if phoneVerified != nil {
+		sets = append(sets, fmt.Sprintf("phone_verified = $%d", i)); args = append(args, *phoneVerified); i++
+	}
+	if registrationStep != nil {
+		sets = append(sets, fmt.Sprintf("registration_step = $%d", i)); args = append(args, *registrationStep); i++
+	}
+	args = append(args, userID)
+	q := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d AND deleted_at IS NULL", strings.Join(sets, ", "), i)
+	_, err := r.db.ExecContext(ctx, q, args...)
+	return err
+}
+
+// CompleteRegistration sets terms_accepted_at and registration_step=4 atomically.
+func (r *UserRepository) CompleteRegistration(ctx context.Context, userID uuid.UUID) error {
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET terms_accepted_at = $1, registration_step = 4, updated_at = $1 WHERE id = $2 AND deleted_at IS NULL`,
+		now, userID,
+	)
+	return err
 }
 
 // VerifyUser marks a user as verified
@@ -232,13 +222,18 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userID uuid.UUID) error
 
 // ── Admin methods ─────────────────────────────────────────────────────────────
 
-const userSelectCols = `id, email, phone, password_hash, full_name, role, is_verified, seller_status, created_at, updated_at, deleted_at`
+const userSelectCols = `id, email, phone, password_hash, full_name, role, is_verified, seller_status,
+	phone_verified, registration_step, dob, gender, pfp_url, terms_accepted_at, created_at, updated_at, deleted_at`
 
 func scanUserRow(row interface {
 	Scan(...any) error
 }) (*domain.User, error) {
 	u := &domain.User{}
-	err := row.Scan(&u.ID, &u.Email, &u.Phone, &u.PasswordHash, &u.FullName, &u.Role, &u.IsVerified, &u.SellerStatus, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt)
+	err := row.Scan(
+		&u.ID, &u.Email, &u.Phone, &u.PasswordHash, &u.FullName, &u.Role, &u.IsVerified, &u.SellerStatus,
+		&u.PhoneVerified, &u.RegistrationStep, &u.DOB, &u.Gender, &u.PfpURL, &u.TermsAcceptedAt,
+		&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
+	)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to scan user: %v", err), err)
 	}

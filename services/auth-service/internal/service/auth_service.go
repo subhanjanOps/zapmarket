@@ -27,6 +27,7 @@ type AuthRepos struct {
 	Resets         contracts.PasswordResetRepository
 	OTPs           contracts.OTPRepository
 	SellerProfiles contracts.SellerProfileRepository
+	Addresses      contracts.AddressRepository
 }
 
 // AuthInfra groups infrastructure dependencies for AuthService.
@@ -45,6 +46,7 @@ type AuthService struct {
 	resetRepo         contracts.PasswordResetRepository
 	otpRepo           contracts.OTPRepository
 	sellerProfileRepo contracts.SellerProfileRepository
+	addressRepo       contracts.AddressRepository
 	emailer           email.Emailer
 	smser             sms.SMSer
 	cfg               *config.Config
@@ -60,6 +62,7 @@ func NewAuthService(
 	resetRepo contracts.PasswordResetRepository,
 	otpRepo contracts.OTPRepository,
 	sellerProfileRepo contracts.SellerProfileRepository,
+	addressRepo contracts.AddressRepository,
 	emailer email.Emailer,
 	smser sms.SMSer,
 	cfg *config.Config,
@@ -73,6 +76,7 @@ func NewAuthService(
 		resetRepo:         resetRepo,
 		otpRepo:           otpRepo,
 		sellerProfileRepo: sellerProfileRepo,
+		addressRepo:       addressRepo,
 		emailer:           emailer,
 		smser:             smser,
 		cfg:               cfg,
@@ -82,11 +86,10 @@ func NewAuthService(
 }
 
 // NewAuthServiceFromGroups is the preferred constructor for new call-sites.
-// It groups the 11 dependencies into two typed structs, making wiring readable.
 func NewAuthServiceFromGroups(repos AuthRepos, infra AuthInfra, cfg *config.Config) *AuthService {
 	return NewAuthService(
 		repos.Users, repos.OAuth, repos.Tokens, repos.Resets, repos.OTPs,
-		repos.SellerProfiles,
+		repos.SellerProfiles, repos.Addresses,
 		infra.Emailer, infra.SMSer, cfg, infra.Blacklist, infra.OAuthState,
 	)
 }
@@ -117,15 +120,16 @@ func (s *AuthService) RegisterUserPassword(ctx context.Context, email, password,
 	}
 
 	user := &domain.User{
-		ID:           uuid.New(),
-		Email:        email,
-		PasswordHash: &passwordHash,
-		FullName:     fullName,
-		Role:         role,
-		IsVerified:   false, // flipped to true after email OTP is verified
-		SellerStatus: sellerStatus,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:               uuid.New(),
+		Email:            email,
+		PasswordHash:     &passwordHash,
+		FullName:         fullName,
+		Role:             role,
+		IsVerified:       false,
+		SellerStatus:     sellerStatus,
+		RegistrationStep: 1,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	if err := s.userRepo.CreateUser(ctx, user); err != nil {
@@ -221,6 +225,10 @@ func (s *AuthService) LoginPassword(ctx context.Context, email, password string)
 
 	if !crypto.VerifyPassword(*user.PasswordHash, password) {
 		return nil, nil, pkgerrors.NewUnauthorized("INVALID_CREDENTIALS", "invalid email or password")
+	}
+
+	if user.RegistrationStep > 0 && user.RegistrationStep < 4 {
+		return nil, nil, pkgerrors.NewValidation("REGISTRATION_INCOMPLETE", fmt.Sprintf("registration not complete (step %d/4)", user.RegistrationStep))
 	}
 
 	refreshToken, err := s.generateRefreshToken(ctx, user.ID)
@@ -513,6 +521,104 @@ func (s *AuthService) ResetPasswordWithOTP(ctx context.Context, phone, code, new
 	}
 	_ = s.tokenRepo.InvalidateUserTokens(ctx, user.ID)
 	return nil
+}
+
+// SendPhoneOTP issues a 6-digit OTP to the given phone number for phone verification.
+func (s *AuthService) SendPhoneOTP(ctx context.Context, userID uuid.UUID, phone string) error {
+	code, codeHash, err := generateOTP()
+	if err != nil {
+		return err
+	}
+	otp := &domain.OTPVerification{
+		ID:        uuid.New(),
+		UserID:    userID,
+		CodeHash:  codeHash,
+		Purpose:   domain.OTPPurposePhoneVerify,
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+		CreatedAt: time.Now(),
+	}
+	if err := s.otpRepo.CreateOTP(ctx, otp); err != nil {
+		return err
+	}
+	_ = s.smser.SendOTP(ctx, phone, code)
+	return nil
+}
+
+// VerifyPhoneOTP verifies the OTP sent to a user's phone and marks phone as verified.
+func (s *AuthService) VerifyPhoneOTP(ctx context.Context, userID uuid.UUID, code string) error {
+	otp, err := s.otpRepo.GetLatestUnusedOTP(ctx, userID, domain.OTPPurposePhoneVerify)
+	if err != nil {
+		return pkgerrors.NewValidation("INVALID_OTP", "invalid or expired OTP")
+	}
+	if time.Now().After(otp.ExpiresAt) {
+		return pkgerrors.NewValidation("OTP_EXPIRED", "OTP has expired")
+	}
+	if hashOTP(code) != otp.CodeHash {
+		return pkgerrors.NewValidation("INVALID_OTP", "invalid OTP")
+	}
+	if err := s.otpRepo.MarkOTPUsed(ctx, otp.ID); err != nil {
+		return err
+	}
+	verified := true
+	step := 2
+	return s.userRepo.UpdateProfile(ctx, userID, nil, nil, nil, &verified, &step)
+}
+
+// UpdateRegistrationProfile saves step-3 profile data.
+func (s *AuthService) UpdateRegistrationProfile(
+	ctx context.Context,
+	userID uuid.UUID,
+	dob time.Time,
+	gender *string,
+	pfpURL *string,
+	addr domain.Address,
+	sellerProfile *domain.SellerProfile,
+) error {
+	var dobPtr *time.Time
+	var addrToSave *domain.Address
+
+	if !dob.IsZero() {
+		// Age check: must be ≥18
+		eighteenYearsAgo := time.Now().AddDate(-18, 0, 0)
+		if dob.After(eighteenYearsAgo) {
+			return pkgerrors.NewValidation("UNDERAGE", "you must be at least 18 years old to register")
+		}
+		dobPtr = &dob
+		addr.UserID = userID
+		addr.IsDefault = true
+		addrToSave = &addr
+	}
+
+	var stepPtr *int
+	if !dob.IsZero() {
+		step := 3
+		stepPtr = &step
+	}
+	if err := s.userRepo.UpdateProfile(ctx, userID, dobPtr, gender, pfpURL, nil, stepPtr); err != nil {
+		return err
+	}
+
+	if addrToSave != nil {
+		if err := s.addressRepo.Create(ctx, addrToSave); err != nil {
+			return err
+		}
+	}
+
+	if sellerProfile != nil {
+		sellerProfile.UserID = userID
+		existing, err := s.sellerProfileRepo.GetByUserID(ctx, userID)
+		if err == nil && existing != nil {
+			sellerProfile.ID = existing.ID
+			return s.sellerProfileRepo.Update(ctx, sellerProfile)
+		}
+		return s.sellerProfileRepo.Create(ctx, sellerProfile)
+	}
+	return nil
+}
+
+// CompleteRegistration finalises the wizard: records terms acceptance and sets step=4.
+func (s *AuthService) CompleteRegistration(ctx context.Context, userID uuid.UUID) error {
+	return s.userRepo.CompleteRegistration(ctx, userID)
 }
 
 // RegisterSeller registers a new seller user and inserts their profile.

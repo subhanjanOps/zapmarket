@@ -17,17 +17,23 @@ const (
 
 // User represents a registered user in the system
 type User struct {
-	ID           uuid.UUID
-	Email        string
-	Phone        *string
-	PasswordHash *string // nil for OAuth-only accounts
-	FullName     string
-	Role         string
-	IsVerified   bool
-	SellerStatus *string // nil for non-sellers; "PENDING" | "APPROVED" | "SUSPENDED"
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    *time.Time
+	ID               uuid.UUID
+	Email            string
+	Phone            *string
+	PasswordHash     *string // nil for OAuth-only accounts
+	FullName         string
+	Role             string
+	IsVerified       bool
+	PhoneVerified    bool
+	SellerStatus     *string    // nil for non-sellers; "PENDING" | "APPROVED" | "SUSPENDED"
+	DOB              *time.Time // date of birth
+	Gender           *string
+	PfpURL           *string
+	TermsAcceptedAt  *time.Time
+	RegistrationStep int // 0–4; login blocked until 4
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	DeletedAt        *time.Time
 }
 
 // OAuthProvider represents OAuth provider types
@@ -143,6 +149,13 @@ type SellerProfile struct {
 	BusinessPhone string     `json:"business_phone"`
 	City          string     `json:"city"`
 	Pincode       string     `json:"pincode"`
+	BusinessType  string     `json:"business_type"` // "individual" | "registered_business"
+	TaxID         *string    `json:"tax_id,omitempty"`
+	BizLine1      *string    `json:"biz_line1,omitempty"`
+	BizCity       *string    `json:"biz_city,omitempty"`
+	BizState      *string    `json:"biz_state,omitempty"`
+	BizCountry    *string    `json:"biz_country,omitempty"`
+	BizPincode    *string    `json:"biz_pincode,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }

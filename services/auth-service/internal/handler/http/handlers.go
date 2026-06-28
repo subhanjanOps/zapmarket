@@ -67,17 +67,21 @@ func (h *Handler) LoggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 // Handler wraps all HTTP handlers
 type Handler struct {
-	authSvc  AuthServicer
-	oauthSvc OAuthServicer
-	cfg      *config.Config
+	authSvc    AuthServicer
+	oauthSvc   OAuthServicer
+	cfg        *config.Config
+	pfpDir     string // filesystem path for PFP uploads
+	pfpBaseURL string // URL prefix to serve PFP files
 }
 
 // NewHandler creates a new HTTP handler
-func NewHandler(authSvc AuthServicer, oauthSvc OAuthServicer, cfg *config.Config) *Handler {
+func NewHandler(authSvc AuthServicer, oauthSvc OAuthServicer, cfg *config.Config, pfpDir, pfpBaseURL string) *Handler {
 	return &Handler{
-		authSvc:  authSvc,
-		oauthSvc: oauthSvc,
-		cfg:      cfg,
+		authSvc:    authSvc,
+		oauthSvc:   oauthSvc,
+		cfg:        cfg,
+		pfpDir:     pfpDir,
+		pfpBaseURL: pfpBaseURL,
 	}
 }
 
@@ -145,22 +149,19 @@ type AuthResponse struct {
 
 // UserResponse represents a user in the system
 type UserResponse struct {
-	// Unique identifier
-	ID string `json:"id" example:"3fa85f64-5717-4562-b3fc-2c963f66afa6"`
-	// Email address
-	Email string `json:"email" example:"user@example.com"`
-	// Phone number (optional)
-	Phone *string `json:"phone,omitempty" example:"+1234567890"`
-	// Full name
-	FullName string `json:"full_name" example:"John Doe"`
-	// Role (buyer, seller, admin)
-	Role string `json:"role" example:"buyer"`
-	// Email verification status
-	IsVerified bool `json:"is_verified" example:"true"`
-	// Seller approval status (PENDING, APPROVED, SUSPENDED) — only present for seller role
-	SellerStatus *string `json:"seller_status,omitempty" example:"PENDING"`
-	// Creation timestamp
-	CreatedAt string `json:"created_at" example:"2023-01-01T00:00:00Z"`
+	ID               string  `json:"id"`
+	Email            string  `json:"email"`
+	Phone            *string `json:"phone,omitempty"`
+	FullName         string  `json:"full_name"`
+	Role             string  `json:"role"`
+	IsVerified       bool    `json:"is_verified"`
+	PhoneVerified    bool    `json:"phone_verified"`
+	SellerStatus     *string `json:"seller_status,omitempty"`
+	RegistrationStep int     `json:"registration_step"`
+	DOB              *string `json:"dob,omitempty"`
+	Gender           *string `json:"gender,omitempty"`
+	PfpURL           *string `json:"pfp_url,omitempty"`
+	CreatedAt        string  `json:"created_at"`
 }
 
 // writeResponse writes a JSON response. Delegates to pkg/httpx so the
@@ -191,16 +192,22 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, errMsg strin
 // userToResponse converts domain User to API response
 func userToResponse(user *domain.User) *UserResponse {
 	resp := &UserResponse{
-		ID:         user.ID.String(),
-		Email:      user.Email,
-		Phone:      user.Phone,
-		FullName:   user.FullName,
-		Role:       user.Role,
-		IsVerified: user.IsVerified,
-		CreatedAt:  user.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		ID:               user.ID.String(),
+		Email:            user.Email,
+		Phone:            user.Phone,
+		FullName:         user.FullName,
+		Role:             user.Role,
+		IsVerified:       user.IsVerified,
+		PhoneVerified:    user.PhoneVerified,
+		SellerStatus:     user.SellerStatus,
+		RegistrationStep: user.RegistrationStep,
+		Gender:           user.Gender,
+		PfpURL:           user.PfpURL,
+		CreatedAt:        user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}
-	if user.Role == "seller" && user.SellerStatus != nil {
-		resp.SellerStatus = user.SellerStatus
+	if user.DOB != nil {
+		s := user.DOB.Format("2006-01-02")
+		resp.DOB = &s
 	}
 	return resp
 }

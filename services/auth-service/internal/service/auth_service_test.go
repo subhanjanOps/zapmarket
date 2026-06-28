@@ -34,6 +34,7 @@ func (r *fakeUserRepo) CreateUser(_ context.Context, u *domain.User) error {
 	if _, ok := r.users[u.Email]; ok {
 		return pkgerrors.NewConflict("USER_ALREADY_EXISTS", "duplicate")
 	}
+	u.RegistrationStep = 4 // tests bypass the wizard
 	r.users[u.Email] = u
 	r.byID[u.ID] = u
 	return nil
@@ -82,6 +83,10 @@ func (r *fakeUserRepo) GetUserByPhone(_ context.Context, _ string) (*domain.User
 func (r *fakeUserRepo) ListSellers(_ context.Context, _ string, _, _ int) ([]*domain.User, int64, error) {
 	return nil, 0, nil
 }
+func (r *fakeUserRepo) UpdateProfile(_ context.Context, _ uuid.UUID, _ *time.Time, _, _ *string, _ *bool, _ *int) error {
+	return nil
+}
+func (r *fakeUserRepo) CompleteRegistration(_ context.Context, _ uuid.UUID) error { return nil }
 
 type fakeOAuthRepo struct{}
 
@@ -227,7 +232,7 @@ func newFixture() *testFixture {
 	bl := newFakeBlacklist()
 	svc := service.NewAuthService(
 		userRepo, &fakeOAuthRepo{}, tokenRepo, resetRepo,
-		&fakeOTPRepo{}, nil, emailer, &fakeSMSer{}, testConfig(), bl, &fakeOAuthState{},
+		&fakeOTPRepo{}, nil, nil, emailer, &fakeSMSer{}, testConfig(), bl, &fakeOAuthState{},
 	)
 	return &testFixture{svc, userRepo, tokenRepo, resetRepo, emailer, bl}
 }

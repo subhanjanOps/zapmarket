@@ -109,6 +109,7 @@ func main() {
 	otpRepo := repository.NewOTPRepository(db)
 	prefsRepo := repository.NewPreferencesRepository(db)
 	sellerProfileRepo := repository.NewSellerProfileRepository(db)
+	addressRepo := repository.NewAddressRepository(db)
 
 	// ── Redis (optional — auth still works without it) ───────────────────────
 	var rdb *goredis.Client
@@ -158,11 +159,13 @@ func main() {
 	}
 
 	// Initialize services
-	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, otpRepo, sellerProfileRepo, emailer, smser, cfg, blacklist, oauthStateStore)
+	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, otpRepo, sellerProfileRepo, addressRepo, emailer, smser, cfg, blacklist, oauthStateStore)
 	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, authService, cfg)
 
 	// Initialize HTTP handlers
-	httpHandler := httphandler.NewHandler(authService, oauthService, cfg)
+	pfpDir := "./uploads/pfp"
+	pfpBaseURL := fmt.Sprintf("http://localhost:%d/v1/auth/pfp", cfg.HTTPPort)
+	httpHandler := httphandler.NewHandler(authService, oauthService, cfg, pfpDir, pfpBaseURL)
 	adminSvc := service.NewAdminService(userRepo)
 	adminHandler := httphandler.NewAdminHandler(adminSvc, authService, cfg)
 	prefsHandler := httphandler.NewPreferencesHandler(prefsRepo, authService)
@@ -187,6 +190,13 @@ func main() {
 	mux.HandleFunc("/v1/auth/password/reset-otp", httphandler.IPRateLimit(rdb, "reset-otp")(httpHandler.LoggingMiddleware(httpHandler.ResetPasswordOTP)))
 	mux.HandleFunc("/v1/auth/otp/send", httphandler.IPRateLimit(rdb, "otp-send")(httpHandler.LoggingMiddleware(httpHandler.SendOTP)))
 	mux.HandleFunc("/v1/auth/otp/verify", httpHandler.LoggingMiddleware(httpHandler.VerifyOTP))
+	mux.HandleFunc("/v1/auth/phone-otp/send", httphandler.IPRateLimit(rdb, "otp-send")(httpHandler.LoggingMiddleware(httpHandler.SendPhoneOTP)))
+	mux.HandleFunc("/v1/auth/phone-otp/verify", httpHandler.LoggingMiddleware(httpHandler.VerifyPhoneOTP))
+	mux.HandleFunc("/v1/auth/registration/profile", httpHandler.LoggingMiddleware(httpHandler.UpdateRegistrationProfile))
+	mux.HandleFunc("/v1/auth/registration/complete", httpHandler.LoggingMiddleware(httpHandler.CompleteRegistration))
+	mux.HandleFunc("/v1/auth/profile/picture", httpHandler.LoggingMiddleware(httpHandler.UploadProfilePicture))
+	// Serve PFP static files
+	mux.Handle("/v1/auth/pfp/", http.StripPrefix("/v1/auth/pfp/", http.FileServer(http.Dir(pfpDir))))
 
 	// Swagger: spec served from the embedded swag doc (see docs/docs.go,
 	// regenerated via `swag init -g cmd/main.go`), not a file on disk.
