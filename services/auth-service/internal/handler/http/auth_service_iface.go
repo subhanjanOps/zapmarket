@@ -22,6 +22,7 @@ type OAuthServicer interface {
 // Holding an interface instead of the concrete struct enables testing with mocks.
 type AuthServicer interface {
 	RegisterUserPassword(ctx context.Context, email, password, fullName, role string) (*domain.User, *domain.RefreshToken, error)
+	RegisterSeller(ctx context.Context, email, password, fullName string, profile domain.SellerProfile) (*domain.User, error)
 	BootstrapAdmin(ctx context.Context, email, password, fullName string) (*domain.User, *domain.RefreshToken, error)
 	LoginPassword(ctx context.Context, email, password string) (*domain.User, *domain.RefreshToken, error)
 	RefreshAccessToken(ctx context.Context, refreshTokenString string) (string, error)

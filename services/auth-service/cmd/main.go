@@ -108,6 +108,7 @@ func main() {
 	resetRepo := repository.NewPasswordResetRepository(db)
 	otpRepo := repository.NewOTPRepository(db)
 	prefsRepo := repository.NewPreferencesRepository(db)
+	sellerProfileRepo := repository.NewSellerProfileRepository(db)
 
 	// ── Redis (optional — auth still works without it) ───────────────────────
 	var rdb *goredis.Client
@@ -157,7 +158,7 @@ func main() {
 	}
 
 	// Initialize services
-	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, otpRepo, emailer, smser, cfg, blacklist, oauthStateStore)
+	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, otpRepo, sellerProfileRepo, emailer, smser, cfg, blacklist, oauthStateStore)
 	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, authService, cfg)
 
 	// Initialize HTTP handlers
@@ -171,6 +172,7 @@ func main() {
 
 	mux.HandleFunc("/v1/auth/admin/bootstrap", httpHandler.LoggingMiddleware(httpHandler.AdminBootstrap))
 	mux.HandleFunc("/v1/auth/register", httphandler.IPRateLimit(rdb, "register")(httpHandler.LoggingMiddleware(httpHandler.Register)))
+	mux.HandleFunc("/v1/auth/register/seller", httphandler.IPRateLimit(rdb, "register")(httpHandler.LoggingMiddleware(httpHandler.RegisterSeller)))
 	mux.HandleFunc("/v1/auth/login", httphandler.IPRateLimit(rdb, "login")(httpHandler.LoggingMiddleware(httpHandler.Login)))
 	mux.HandleFunc("/v1/auth/refresh", httpHandler.LoggingMiddleware(httpHandler.Refresh))
 	mux.HandleFunc("/v1/auth/me", httpHandler.LoggingMiddleware(httpHandler.Me))

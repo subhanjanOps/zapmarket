@@ -21,11 +21,12 @@ import (
 
 // AuthRepos groups all repository dependencies for AuthService.
 type AuthRepos struct {
-	Users    contracts.UserRepository
-	OAuth    contracts.OAuthRepository
-	Tokens   contracts.RefreshTokenRepository
-	Resets   contracts.PasswordResetRepository
-	OTPs     contracts.OTPRepository
+	Users          contracts.UserRepository
+	OAuth          contracts.OAuthRepository
+	Tokens         contracts.RefreshTokenRepository
+	Resets         contracts.PasswordResetRepository
+	OTPs           contracts.OTPRepository
+	SellerProfiles contracts.SellerProfileRepository
 }
 
 // AuthInfra groups infrastructure dependencies for AuthService.
@@ -38,16 +39,17 @@ type AuthInfra struct {
 
 // AuthService handles authentication business logic
 type AuthService struct {
-	userRepo      contracts.UserRepository
-	oauthRepo     contracts.OAuthRepository
-	tokenRepo     contracts.RefreshTokenRepository
-	resetRepo     contracts.PasswordResetRepository
-	otpRepo       contracts.OTPRepository
-	emailer       email.Emailer
-	smser         sms.SMSer
-	cfg           *config.Config
-	blacklist     contracts.TokenBlacklist
-	oauthState    contracts.OAuthStateStore
+	userRepo          contracts.UserRepository
+	oauthRepo         contracts.OAuthRepository
+	tokenRepo         contracts.RefreshTokenRepository
+	resetRepo         contracts.PasswordResetRepository
+	otpRepo           contracts.OTPRepository
+	sellerProfileRepo contracts.SellerProfileRepository
+	emailer           email.Emailer
+	smser             sms.SMSer
+	cfg               *config.Config
+	blacklist         contracts.TokenBlacklist
+	oauthState        contracts.OAuthStateStore
 }
 
 // NewAuthService creates a new auth service.
@@ -57,6 +59,7 @@ func NewAuthService(
 	tokenRepo contracts.RefreshTokenRepository,
 	resetRepo contracts.PasswordResetRepository,
 	otpRepo contracts.OTPRepository,
+	sellerProfileRepo contracts.SellerProfileRepository,
 	emailer email.Emailer,
 	smser sms.SMSer,
 	cfg *config.Config,
@@ -64,24 +67,26 @@ func NewAuthService(
 	oauthState contracts.OAuthStateStore,
 ) *AuthService {
 	return &AuthService{
-		userRepo:   userRepo,
-		oauthRepo:  oauthRepo,
-		tokenRepo:  tokenRepo,
-		resetRepo:  resetRepo,
-		otpRepo:    otpRepo,
-		emailer:    emailer,
-		smser:      smser,
-		cfg:        cfg,
-		blacklist:  blacklist,
-		oauthState: oauthState,
+		userRepo:          userRepo,
+		oauthRepo:         oauthRepo,
+		tokenRepo:         tokenRepo,
+		resetRepo:         resetRepo,
+		otpRepo:           otpRepo,
+		sellerProfileRepo: sellerProfileRepo,
+		emailer:           emailer,
+		smser:             smser,
+		cfg:               cfg,
+		blacklist:         blacklist,
+		oauthState:        oauthState,
 	}
 }
 
 // NewAuthServiceFromGroups is the preferred constructor for new call-sites.
-// It groups the 10 dependencies into two typed structs, making wiring readable.
+// It groups the 11 dependencies into two typed structs, making wiring readable.
 func NewAuthServiceFromGroups(repos AuthRepos, infra AuthInfra, cfg *config.Config) *AuthService {
 	return NewAuthService(
 		repos.Users, repos.OAuth, repos.Tokens, repos.Resets, repos.OTPs,
+		repos.SellerProfiles,
 		infra.Emailer, infra.SMSer, cfg, infra.Blacklist, infra.OAuthState,
 	)
 }
@@ -243,7 +248,7 @@ func (s *AuthService) RefreshAccessToken(ctx context.Context, refreshTokenString
 		return "", err
 	}
 
-	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, s.cfg.JWTSecretKey, s.cfg.JWTAccessExpiryHours)
+	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, user.IsVerified, s.cfg.JWTSecretKey, s.cfg.JWTAccessExpiryHours)
 	if err != nil {
 		return "", pkgerrors.NewInternal("INTERNAL_ERROR", fmt.Sprintf("failed to generate access token: %v", err), err)
 	}
@@ -508,4 +513,21 @@ func (s *AuthService) ResetPasswordWithOTP(ctx context.Context, phone, code, new
 	}
 	_ = s.tokenRepo.InvalidateUserTokens(ctx, user.ID)
 	return nil
+}
+
+// RegisterSeller registers a new seller user and inserts their profile.
+func (s *AuthService) RegisterSeller(
+	ctx context.Context,
+	email, password, fullName string,
+	profile domain.SellerProfile,
+) (*domain.User, error) {
+	user, _, err := s.RegisterUserPassword(ctx, email, password, fullName, string(domain.RoleSeller))
+	if err != nil {
+		return nil, err
+	}
+	profile.UserID = user.ID
+	if err := s.sellerProfileRepo.Create(ctx, &profile); err != nil {
+		return nil, err
+	}
+	return user, nil
 }

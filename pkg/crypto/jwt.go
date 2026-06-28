@@ -10,12 +10,13 @@ import (
 
 // Claims represents JWT claims
 type Claims struct {
-	UserID    uuid.UUID `json:"user_id"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	Type      string    `json:"type"` // "access" or "refresh"
-	ExpiresAt int64     `json:"exp"`
-	IssuedAt  int64     `json:"iat"`
+	UserID     uuid.UUID `json:"user_id"`
+	Email      string    `json:"email"`
+	Role       string    `json:"role"`
+	IsVerified bool      `json:"is_verified"`
+	Type       string    `json:"type"` // "access" or "refresh"
+	ExpiresAt  int64     `json:"exp"`
+	IssuedAt   int64     `json:"iat"`
 }
 
 // Error types
@@ -41,17 +42,18 @@ func NewDomainError(errType ErrorType, message string) *DomainError {
 }
 
 // GenerateAccessToken creates a new JWT access token
-func GenerateAccessToken(userID uuid.UUID, email, role string, secretKey string, expiryHours int) (string, error) {
+func GenerateAccessToken(userID uuid.UUID, email, role string, isVerified bool, secretKey string, expiryHours int) (string, error) {
 	now := time.Now()
 	expiresAt := now.Add(time.Duration(expiryHours) * time.Hour)
 
 	claims := jwt.MapClaims{
-		"user_id": userID.String(),
-		"email":   email,
-		"role":    role,
-		"type":    "access",
-		"exp":     expiresAt.Unix(),
-		"iat":     now.Unix(),
+		"user_id":     userID.String(),
+		"email":       email,
+		"role":        role,
+		"is_verified": isVerified,
+		"type":        "access",
+		"exp":         expiresAt.Unix(),
+		"iat":         now.Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -133,6 +135,8 @@ func ValidateAccessToken(tokenString, secretKey string) (*Claims, error) {
 		role = "customer"
 	}
 
+	isVerified, _ := claims["is_verified"].(bool)
+
 	exp, ok := claims["exp"].(float64)
 	if !ok {
 		return nil, NewDomainError(ErrInvalidToken, "missing exp in token")
@@ -144,12 +148,13 @@ func ValidateAccessToken(tokenString, secretKey string) (*Claims, error) {
 	}
 
 	return &Claims{
-		UserID:    userID,
-		Email:     email,
-		Role:      role,
-		Type:      "access",
-		ExpiresAt: int64(exp),
-		IssuedAt:  int64(iat),
+		UserID:     userID,
+		Email:      email,
+		Role:       role,
+		IsVerified: isVerified,
+		Type:       "access",
+		ExpiresAt:  int64(exp),
+		IssuedAt:   int64(iat),
 	}, nil
 }
 

@@ -72,3 +72,9 @@ type RefreshTokenRepository interface {
 	RevokeRefreshToken(ctx context.Context, tokenID uuid.UUID) error
 	InvalidateUserTokens(ctx context.Context, userID uuid.UUID) error
 }
+
+// SellerProfileRepository defines persistence for seller onboarding data.
+type SellerProfileRepository interface {
+	Create(ctx context.Context, profile *domain.SellerProfile) error
+	GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.SellerProfile, error)
+}

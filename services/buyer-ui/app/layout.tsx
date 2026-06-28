@@ -5,6 +5,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
+import VerificationBanner from "@/components/VerificationBanner";
 import { decodeJwtUser } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Toaster } from "sonner";
@@ -26,11 +27,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const token = jar.get("buyer_token")?.value;
   const raw = token ? decodeJwtUser(token) : null;
   const user = raw ? { name: raw.name ?? "", email: raw.email ?? "" } : null;
+  const showVerificationBanner = raw && !raw.is_verified && !!raw.email;
 
   return (
     <html lang="en" className={roboto.variable}>
       <body className="min-h-screen flex flex-col" style={{ fontFamily: "var(--font-roboto), system-ui, sans-serif" }}>
         <AnnouncementBar />
+        {showVerificationBanner && <VerificationBanner email={raw!.email!} />}
         <Navbar user={user} />
         <main className="flex-1">{children}</main>
         <Footer />

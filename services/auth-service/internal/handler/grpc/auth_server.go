@@ -253,5 +253,5 @@ func (s *AuthServer) parseUUID(id string) (uuid.UUID, error) {
 }
 
 func (s *AuthServer) generateAccessToken(u *domain.User) (string, error) {
-	return crypto.GenerateAccessToken(u.ID, u.Email, u.Role, s.cfg.JWTSecretKey, s.cfg.JWTAccessExpiryHours)
+	return crypto.GenerateAccessToken(u.ID, u.Email, u.Role, u.IsVerified, s.cfg.JWTSecretKey, s.cfg.JWTAccessExpiryHours)
 }

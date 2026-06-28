@@ -132,3 +132,18 @@ type Claims struct {
 	IssuedAt  int64     `json:"iat"`
 }
 
+type SellerProfile struct {
+	ID            uuid.UUID  `json:"id"`
+	UserID        uuid.UUID  `json:"user_id"`
+	StoreName     string     `json:"store_name"`
+	Tagline       string     `json:"tagline"`
+	Category      string     `json:"category"`
+	GSTIN         *string    `json:"gstin,omitempty"`
+	PAN           *string    `json:"pan,omitempty"`
+	BusinessPhone string     `json:"business_phone"`
+	City          string     `json:"city"`
+	Pincode       string     `json:"pincode"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+

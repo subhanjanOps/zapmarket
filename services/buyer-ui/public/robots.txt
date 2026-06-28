@@ -2,8 +2,15 @@
 User-agent: *
 Allow: /
 
+# *
+User-agent: *
+Disallow: /api/
+Disallow: /account/
+Disallow: /checkout
+Disallow: /cart
+
 # Host
-Host: https://zapmarket.com
+Host: https://zapmarket.in
 
 # Sitemaps
-Sitemap: https://zapmarket.com/sitemap.xml
+Sitemap: https://zapmarket.in/sitemap.xml

@@ -97,6 +97,21 @@ type RegisterRequest struct {
 	Role string `json:"role" example:"buyer"`
 }
 
+// RegisterSellerRequest is the payload for POST /v1/auth/register/seller.
+type RegisterSellerRequest struct {
+	FullName      string  `json:"full_name"`
+	Email         string  `json:"email"`
+	Password      string  `json:"password"`
+	StoreName     string  `json:"store_name"`
+	Tagline       string  `json:"tagline"`
+	Category      string  `json:"category"`
+	GSTIN         *string `json:"gstin,omitempty"`
+	PAN           *string `json:"pan,omitempty"`
+	BusinessPhone string  `json:"business_phone"`
+	City          string  `json:"city"`
+	Pincode       string  `json:"pincode"`
+}
+
 // LoginRequest represents the login request body
 type LoginRequest struct {
 	// User's email address
@@ -157,7 +172,7 @@ func (h *Handler) writeResponse(w http.ResponseWriter, statusCode int, data inte
 // issueAccessToken generates a signed access token for user and returns it,
 // writing an error response and returning ("", false) on failure.
 func (h *Handler) issueAccessToken(w http.ResponseWriter, user *domain.User) (string, bool) {
-	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
+	accessToken, err := crypto.GenerateAccessToken(user.ID, user.Email, user.Role, user.IsVerified, h.cfg.JWTSecretKey, h.cfg.JWTAccessExpiryHours)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return "", false
@@ -255,6 +270,63 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		User:         userToResponse(user),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken.Token,
+	})
+}
+
+// RegisterSeller handles POST /v1/auth/register/seller
+func (h *Handler) RegisterSeller(w http.ResponseWriter, r *http.Request) {
+	var req RegisterSellerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.FullName == "" || req.Email == "" || req.Password == "" {
+		h.writeError(w, http.StatusBadRequest, "full_name, email, and password are required")
+		return
+	}
+	if _, err := mail.ParseAddress(req.Email); err != nil {
+		h.writeError(w, http.StatusBadRequest, "email must be a valid email address")
+		return
+	}
+	if len(req.Password) < 8 || len(req.Password) > 72 {
+		h.writeError(w, http.StatusBadRequest, "password must be between 8 and 72 characters")
+		return
+	}
+	if req.StoreName == "" || req.Category == "" {
+		h.writeError(w, http.StatusBadRequest, "store_name and category are required")
+		return
+	}
+	if req.BusinessPhone == "" || req.City == "" || req.Pincode == "" {
+		h.writeError(w, http.StatusBadRequest, "business_phone, city, and pincode are required")
+		return
+	}
+	gstin := req.GSTIN != nil && *req.GSTIN != ""
+	pan := req.PAN != nil && *req.PAN != ""
+	if !gstin && !pan {
+		h.writeError(w, http.StatusBadRequest, "at least one of gstin or pan is required")
+		return
+	}
+
+	profile := domain.SellerProfile{
+		StoreName:     req.StoreName,
+		Tagline:       req.Tagline,
+		Category:      req.Category,
+		GSTIN:         req.GSTIN,
+		PAN:           req.PAN,
+		BusinessPhone: req.BusinessPhone,
+		City:          req.City,
+		Pincode:       req.Pincode,
+	}
+
+	user, err := h.authSvc.RegisterSeller(r.Context(), req.Email, req.Password, req.FullName, profile)
+	if err != nil {
+		pkgerrors.HandleHTTP(w, err)
+		return
+	}
+
+	h.writeResponse(w, http.StatusCreated, AuthResponse{
+		User: userToResponse(user),
 	})
 }
 

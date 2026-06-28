@@ -227,7 +227,7 @@ func newFixture() *testFixture {
 	bl := newFakeBlacklist()
 	svc := service.NewAuthService(
 		userRepo, &fakeOAuthRepo{}, tokenRepo, resetRepo,
-		&fakeOTPRepo{}, emailer, &fakeSMSer{}, testConfig(), bl, &fakeOAuthState{},
+		&fakeOTPRepo{}, nil, emailer, &fakeSMSer{}, testConfig(), bl, &fakeOAuthState{},
 	)
 	return &testFixture{svc, userRepo, tokenRepo, resetRepo, emailer, bl}
 }
