@@ -561,6 +561,21 @@ services:
       - zapnet
     restart: unless-stopped
 
+  pgbouncer:
+    image: edoburu/pgbouncer:1.22.0
+    container_name: zapmarket-pgbouncer
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./infrastructure/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./infrastructure/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   typesense:
     image: typesense/typesense:26.0
     container_name: zapmarket-typesense

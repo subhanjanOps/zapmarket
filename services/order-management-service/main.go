@@ -139,7 +139,7 @@ func main() {
 	}
 	svc := service.NewOrderService(repo, inventoryClient, catalogClient, orderCache, log)
 	handler := httphandler.NewOrderHandler(svc)
-	adminHandler := httphandler.NewAdminOrderHandler(svc)
+	adminHandler := httphandler.NewAdminOrderHandlerWithDB(svc, db)
 
 	// ── Router ───────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -161,6 +161,13 @@ func main() {
 		r.Get("/", adminHandler.AdminListOrders)
 		r.Get("/{id}", adminHandler.AdminGetOrder)
 		r.Post("/{id}/cancel", adminHandler.AdminCancelOrder)
+	})
+
+	r.Route("/v1/admin/analytics", func(r chi.Router) {
+		r.Use(authMW.Authenticate)
+		r.Use(authMW.RequireRole("admin"))
+		r.Get("/gmv", adminHandler.GetGMV)
+		r.Get("/funnel", adminHandler.GetFunnel)
 	})
 
 	r.Route("/v1/orders", func(r chi.Router) {

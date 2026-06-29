@@ -61,3 +61,5 @@ use ./services/promotions-service
 use ./services/logistics-service
 
 use ./services/wishlist-service
+
+use ./tests/contract

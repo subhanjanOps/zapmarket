@@ -1,6 +1,8 @@
 package http
 
 import (
+	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,10 +17,15 @@ import (
 
 type AdminOrderHandler struct {
 	svc service.OrderService
+	db  *sql.DB
 }
 
 func NewAdminOrderHandler(svc service.OrderService) *AdminOrderHandler {
 	return &AdminOrderHandler{svc: svc}
+}
+
+func NewAdminOrderHandlerWithDB(svc service.OrderService, db *sql.DB) *AdminOrderHandler {
+	return &AdminOrderHandler{svc: svc, db: db}
 }
 
 // AdminListOrders handles GET /v1/admin/orders
@@ -95,6 +102,96 @@ func (h *AdminOrderHandler) AdminGetOrder(w http.ResponseWriter, r *http.Request
 		return
 	}
 	SuccessResponse(w, http.StatusOK, orderResponse{Order: order, Items: items})
+}
+
+// GetGMV handles GET /v1/admin/analytics/gmv?days=N
+func (h *AdminOrderHandler) GetGMV(w http.ResponseWriter, r *http.Request) {
+	if h.db == nil {
+		ErrorResponse(w, http.StatusServiceUnavailable, "NO_DB", "analytics not configured")
+		return
+	}
+	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+	if days <= 0 {
+		days = 7
+	}
+
+	rows, err := h.db.QueryContext(r.Context(), `
+		SELECT DATE(created_at)::TEXT AS date,
+		       COALESCE(SUM(total_amount), 0) AS amount_paise
+		FROM orders
+		WHERE status = 'CONFIRMED'
+		  AND created_at >= NOW() - ($1 || ' days')::INTERVAL
+		GROUP BY DATE(created_at)
+		ORDER BY date
+	`, days)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type dailyEntry struct {
+		Date        string `json:"date"`
+		AmountPaise int64  `json:"amount_paise"`
+	}
+	var daily []dailyEntry
+	for rows.Next() {
+		var e dailyEntry
+		if err := rows.Scan(&e.Date, &e.AmountPaise); err != nil {
+			continue
+		}
+		daily = append(daily, e)
+	}
+	if daily == nil {
+		daily = []dailyEntry{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"daily": daily}) //nolint:errcheck
+}
+
+// GetFunnel handles GET /v1/admin/analytics/funnel?days=N
+func (h *AdminOrderHandler) GetFunnel(w http.ResponseWriter, r *http.Request) {
+	if h.db == nil {
+		ErrorResponse(w, http.StatusServiceUnavailable, "NO_DB", "analytics not configured")
+		return
+	}
+	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+	if days <= 0 {
+		days = 7
+	}
+
+	rows, err := h.db.QueryContext(r.Context(), `
+		SELECT status, COUNT(*) AS count
+		FROM orders
+		WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+		GROUP BY status
+		ORDER BY count DESC
+	`, days)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "QUERY_FAILED", err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type stage struct {
+		Stage string `json:"stage"`
+		Count int64  `json:"count"`
+	}
+	var stages []stage
+	for rows.Next() {
+		var s stage
+		if err := rows.Scan(&s.Stage, &s.Count); err != nil {
+			continue
+		}
+		stages = append(stages, s)
+	}
+	if stages == nil {
+		stages = []stage{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"stages": stages}) //nolint:errcheck
 }
 
 // AdminCancelOrder handles POST /v1/admin/orders/{id}/cancel
