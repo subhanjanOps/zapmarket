@@ -231,7 +231,10 @@ func (r *OrderRepository) SetItemReservationID(ctx context.Context, orderID, sku
 		 WHERE order_id = $2 AND sku_id = $3`,
 		reservationID, orderID, skuID,
 	)
-	return err
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to set reservation ID on order item", err)
+	}
+	return nil
 }
 
 // UpdateStatus sets the order status and saga_status columns directly.
