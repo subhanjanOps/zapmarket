@@ -151,6 +151,8 @@ services:
       - MINIO_BUCKET=zapmarket
       - MINIO_USE_SSL=false
       - REDIS_URL=zapmarket-redis:6379
+      - TYPESENSE_HOST=http://zapmarket-typesense:8108
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-xyz-local-key}
     ports:
       - "8081:8081"
       - "50052:50052"
@@ -436,6 +438,49 @@ services:
       - zapnet
     restart: unless-stopped
 
+  typesense:
+    image: typesense/typesense:26.0
+    container_name: zapmarket-typesense
+    ports:
+      - "8108:8108"
+    environment:
+      - TYPESENSE_DATA_DIR=/data
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-xyz-local-key}
+      - TYPESENSE_ENABLE_CORS=true
+    volumes:
+      - typesense-data:/data
+    command: --data-dir /data --api-key=${TYPESENSE_API_KEY:-xyz-local-key} --enable-cors
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  cart-service:
+    build:
+      context: .
+      dockerfile: services/cart-service/Dockerfile
+    container_name: zapmarket-cart-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=cart
+      - HTTP_PORT=8087
+      - APP_ENV=development
+      - REDIS_URL=zapmarket-redis:6379
+      - CATALOG_GRPC_ADDR=zapmarket-product-catalog-service:50052
+      - MIGRATE_ON_BOOT=true
+    ports:
+      - "8087:8087"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     container_name: zapmarket-postgres
@@ -558,6 +603,7 @@ volumes:
   postgres-data:
   redisinsight-data:
   pgadmin-data:
+  typesense-data:
   elasticsearch-data:
   prometheus-data:
   grafana-data:

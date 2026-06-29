@@ -46,6 +46,7 @@ import (
 	httpHandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/middleware"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/repository"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/search"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/service"
 )
 
@@ -129,6 +130,18 @@ func main() {
 	skuSvc := service.NewSKUService(skuRepo, log)
 	imageSvc := service.NewProductImageService(imageRepo, objectStorage, log)
 
+	// ── Typesense search (optional — skipped when TYPESENSE_HOST is unset) ──────
+	var searchH *httpHandler.SearchHandler
+	if tsHost := os.Getenv("TYPESENSE_HOST"); tsHost != "" {
+		tsKey := os.Getenv("TYPESENSE_API_KEY")
+		tsAdapter := search.NewTypesenseAdapter(tsHost, tsKey)
+		if err := tsAdapter.EnsureSchema(context.Background()); err != nil {
+			log.Warn("typesense schema init failed", "error", err)
+		}
+		tsClient := search.NewTypesenseClient(tsAdapter)
+		searchH = httpHandler.NewSearchHandler(tsClient)
+	}
+
 	// ── HTTP handlers ──────────────────────────────────────────────────────────
 	categoryH := httpHandler.NewCategoryHandler(categorySvc)
 	productH := httpHandler.NewProductHandler(productSvc)
@@ -149,6 +162,10 @@ func main() {
 		r.Get("/categories", categoryH.GetCategoryList)
 		r.Get("/categories/slug/{slug}", categoryH.GetCategoryBySlug)
 		r.Get("/categories/{id}", categoryH.GetCategoryByID)
+
+		if searchH != nil {
+			r.Get("/products/search", searchH.Search)
+		}
 
 		r.With(authMW.AuthenticateOptional).Get("/products", productH.GetProductList)
 		r.Get("/products/slug/{slug}", productH.GetProductBySlug)

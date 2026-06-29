@@ -1,4 +1,5 @@
 CREATE DATABASE userauth;
+CREATE DATABASE cart;
 CREATE DATABASE apigateway;
 CREATE DATABASE ordermgmt;
 CREATE DATABASE inventory;
@@ -40,4 +41,9 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- apigateway schema is owned by golang-migrate:
 -- see services/api-gateway/migrations.
 \connect apigateway
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- cart schema is owned by golang-migrate:
+-- see services/cart-service/migrations.
+\connect cart
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

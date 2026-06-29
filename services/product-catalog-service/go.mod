@@ -64,6 +64,7 @@ require (
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
+	github.com/typesense/typesense-go/v2 v2.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.44.0 // indirect

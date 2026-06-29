@@ -49,3 +49,5 @@ use ./pkg/telemetry
 use ./services/api-gateway
 
 use ./services/currency-service
+
+use ./services/cart-service
