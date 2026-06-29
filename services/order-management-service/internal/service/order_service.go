@@ -10,19 +10,14 @@ import (
 
 	"github.com/google/uuid"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
-	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/events"
 )
 
-// Per-call timeouts for downstream gRPC calls in the checkout saga.
-// These prevent a hung downstream service from blocking the order request indefinitely.
-const (
-	catalogCallTimeout   = 5 * time.Second
-	inventoryCallTimeout = 5 * time.Second
-	paymentCallTimeout   = 30 * time.Second
-)
+// Per-call timeout for catalog gRPC calls in the checkout path.
+// Prevents a hung catalog service from blocking the order request indefinitely.
+const catalogCallTimeout = 5 * time.Second
 
 // inventoryGateway is the subset of clients.InventoryClient the saga needs.
 // Keeping it here avoids importing the clients package in tests.
@@ -40,11 +35,6 @@ type paymentGateway interface {
 // catalogGateway fetches authoritative SKU prices to prevent client-supplied price injection.
 type catalogGateway interface {
 	GetSKUPrice(ctx context.Context, skuID uuid.UUID) (int64, error)
-}
-
-// checkoutPublisher publishes the checkout.requested event to Kafka.
-type checkoutPublisher interface {
-	Publish(ctx context.Context, topic, key string, payload []byte) error
 }
 
 // OrderService defines the public interface for order operations.
@@ -81,7 +71,6 @@ type orderService struct {
 	payment   paymentGateway
 	catalog   catalogGateway
 	cache     contracts.OrderCache
-	publisher checkoutPublisher
 	logger    *slog.Logger
 }
 
@@ -91,10 +80,9 @@ func NewOrderService(
 	payment paymentGateway,
 	catalog catalogGateway,
 	cache contracts.OrderCache,
-	publisher checkoutPublisher,
 	logger *slog.Logger,
 ) OrderService {
-	return &orderService{repo: repo, inventory: inventory, payment: payment, catalog: catalog, cache: cache, publisher: publisher, logger: logger}
+	return &orderService{repo: repo, inventory: inventory, payment: payment, catalog: catalog, cache: cache, logger: logger}
 }
 
 func idempCacheKey(key uuid.UUID) string {
@@ -141,6 +129,7 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 	}
 
 	order := &domain.Order{
+		ID:             uuid.New(), // pre-assign so the event payload carries the correct order_id
 		UserID:         userID,
 		IdempotencyKey: idempotencyKey,
 		Status:         domain.OrderPending,
@@ -148,12 +137,9 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		TotalAmount:    totalAmount,
 		Currency:       currency,
 	}
-	if err := s.repo.CreateOrder(ctx, order, domainItems); err != nil {
-		return nil, err
-	}
-	s.logger.Info("order created — publishing checkout.requested", "order_id", order.ID, "total", totalAmount)
 
-	// Build the saga event with all information downstream services need.
+	// Build the checkout.requested event payload before the DB write so the
+	// outbox row is written atomically with the order — no separate Kafka publish.
 	checkoutItems := make([]events.CheckoutItem, len(domainItems))
 	for i, it := range domainItems {
 		checkoutItems[i] = events.CheckoutItem{
@@ -170,12 +156,20 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		Currency:        currency,
 		PaymentMethodID: paymentMethodID,
 	}
-	b, err := json.Marshal(evt)
+	outboxPayload, err := json.Marshal(evt)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("INTERNAL_ERROR", "failed to marshal checkout event", err)
 	}
-	if err := s.publisher.Publish(ctx, pkgkafka.TopicCheckoutRequested, order.ID.String(), b); err != nil {
-		return nil, pkgerrors.NewInternal("KAFKA_ERROR", "failed to publish checkout.requested", err)
+
+	if err := s.repo.CreateOrder(ctx, order, domainItems, outboxPayload); err != nil {
+		return nil, err
+	}
+	s.logger.Info("order created — checkout.requested written to outbox", "order_id", order.ID, "total", totalAmount)
+
+	// Cache the PENDING order so duplicate requests with the same idempotency
+	// key get an immediate response without hitting the DB unique constraint.
+	if b, marshalErr := json.Marshal(order); marshalErr == nil {
+		_ = s.cache.Set(ctx, idempCacheKey(idempotencyKey), b, idempotencyTTL)
 	}
 
 	return order, nil
@@ -217,72 +211,6 @@ func (s *orderService) checkIdempotency(ctx context.Context, idempotencyKey uuid
 		return nil, err
 	}
 	return nil, nil
-}
-
-// reserveStockForOrder reserves inventory for all items, using per-call timeouts.
-// Compensates and returns error on failure.
-func (s *orderService) reserveStockForOrder(ctx context.Context, orderID uuid.UUID, items []*domain.OrderItem) error {
-	var reserved []*domain.OrderItem
-	for _, item := range items {
-		invCtx, invCancel := context.WithTimeout(ctx, inventoryCallTimeout)
-		reservationID, ok, err := s.inventory.ReserveStock(invCtx, item.SKUID, orderID, item.Quantity)
-		invCancel()
-		if err != nil {
-			s.logger.Error("inventory ReserveStock error", "sku_id", item.SKUID, "error", err)
-			s.compensate(ctx, orderID, reserved)
-			return pkgerrors.NewInternal("INVENTORY_ERROR", "failed to reserve stock", err)
-		}
-		if !ok {
-			s.logger.Info("insufficient stock", "sku_id", item.SKUID)
-			s.compensate(ctx, orderID, reserved)
-			return pkgerrors.NewConflict("INSUFFICIENT_STOCK", "insufficient stock for sku "+item.SKUID.String())
-		}
-		item.ReservationID = &reservationID
-		reserved = append(reserved, item)
-	}
-	if err := s.repo.MarkReserved(ctx, orderID, items); err != nil {
-		s.compensate(ctx, orderID, reserved)
-		return err
-	}
-	return nil
-}
-
-// finalisePayment charges the card and, on success, deducts stock and confirms the order.
-// On failure it compensates inventory and marks the order cancelled before returning.
-func (s *orderService) finalisePayment(ctx context.Context, order *domain.Order, items []*domain.OrderItem, userID uuid.UUID, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, error) {
-	paymentID, paymentStatus, err := s.payment.ChargeCard(ctx, order.ID, userID, order.TotalAmount, currency, idempotencyKey, paymentMethodID)
-	if err != nil {
-		s.logger.Error("payment ChargeCard error", "order_id", order.ID, "error", err)
-		s.compensate(ctx, order.ID, items)
-		s.cancelWithPayload(ctx, order.ID, map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_error"})
-		return uuid.Nil, pkgerrors.NewInternal("PAYMENT_ERROR", "payment service error", err)
-	}
-	if paymentStatus != "CAPTURED" {
-		s.logger.Info("payment not captured", "order_id", order.ID, "payment_status", paymentStatus)
-		s.compensate(ctx, order.ID, items)
-		s.cancelWithPayload(ctx, order.ID, map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "reason": "payment_failed", "payment_status": paymentStatus})
-		return uuid.Nil, pkgerrors.NewConflict("PAYMENT_FAILED", "payment was not captured (status: "+paymentStatus+")")
-	}
-
-	for _, item := range items {
-		if item.ReservationID == nil {
-			continue
-		}
-		invCtx, invCancel := context.WithTimeout(ctx, inventoryCallTimeout)
-		if err := s.inventory.DeductStock(invCtx, *item.ReservationID); err != nil {
-			s.logger.Error("failed to deduct stock after payment", "reservation_id", item.ReservationID, "error", err)
-		}
-		invCancel()
-	}
-
-	confirmPayload, marshalErr := json.Marshal(map[string]string{"order_id": order.ID.String(), "user_id": userID.String(), "payment_id": paymentID.String()})
-	if marshalErr != nil {
-		return uuid.Nil, pkgerrors.NewInternal("INTERNAL_ERROR", "internal serialization error", marshalErr)
-	}
-	if err := s.repo.MarkConfirmed(ctx, order.ID, paymentID, confirmPayload); err != nil {
-		return uuid.Nil, err
-	}
-	return paymentID, nil
 }
 
 // cancelWithPayload marshals the payload and marks the order cancelled, logging any error.

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/consumer"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/events"
@@ -18,7 +19,7 @@ type fakeOrderRepo struct {
 	updatedSagaStatus string
 }
 
-func (f *fakeOrderRepo) UpdateStatus(_ context.Context, _ string, status, sagaStatus string) error {
+func (f *fakeOrderRepo) UpdateStatus(_ context.Context, _ uuid.UUID, status, sagaStatus string) error {
 	f.updatedStatus = status
 	f.updatedSagaStatus = sagaStatus
 	return nil
@@ -50,7 +51,7 @@ func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-func makeMsg(v interface{}) kafka.Message {
+func makeMsg(v any) kafka.Message {
 	b, _ := json.Marshal(v)
 	return kafka.Message{Value: b}
 }
@@ -61,7 +62,8 @@ func TestSagaConsumer_ConfirmsOrderOnPaymentCaptured(t *testing.T) {
 	pub := &fakePublisher{}
 	c := consumer.NewSagaConsumer(repo, comp, pub, newTestLogger())
 
-	evt := events.PaymentCapturedEvent{OrderID: "ord-1", PaymentID: "pay-1", CapturedAt: time.Now()}
+	orderID := uuid.New().String()
+	evt := events.PaymentCapturedEvent{OrderID: orderID, PaymentID: "pay-1", CapturedAt: time.Now()}
 	if err := c.HandlePaymentCaptured(context.Background(), makeMsg(evt)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,7 +84,8 @@ func TestSagaConsumer_CancelsOrderAndNoReleaseOnInventoryFailed(t *testing.T) {
 	pub := &fakePublisher{}
 	c := consumer.NewSagaConsumer(repo, comp, pub, newTestLogger())
 
-	evt := events.InventoryReservationFailedEvent{OrderID: "ord-2", Reason: "out of stock"}
+	orderID := uuid.New().String()
+	evt := events.InventoryReservationFailedEvent{OrderID: orderID, Reason: "out of stock"}
 	if err := c.HandleInventoryFailed(context.Background(), makeMsg(evt)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -104,17 +107,33 @@ func TestSagaConsumer_CancelsAndReleasesOnPaymentFailed(t *testing.T) {
 	pub := &fakePublisher{}
 	c := consumer.NewSagaConsumer(repo, comp, pub, newTestLogger())
 
-	evt := events.PaymentFailedEvent{OrderID: "ord-3", Reason: "card declined"}
+	orderID := uuid.New().String()
+	evt := events.PaymentFailedEvent{OrderID: orderID, Reason: "card declined"}
 	if err := c.HandlePaymentFailed(context.Background(), makeMsg(evt)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if repo.updatedStatus != "CANCELLED" {
 		t.Fatalf("expected CANCELLED, got %q", repo.updatedStatus)
 	}
-	if comp.releasedOrderID != "ord-3" {
-		t.Fatalf("expected inventory release for ord-3, got %q", comp.releasedOrderID)
+	if comp.releasedOrderID != orderID {
+		t.Fatalf("expected inventory release for %s, got %q", orderID, comp.releasedOrderID)
 	}
 	if pub.topic != kafka.TopicOrderCancelled {
 		t.Fatalf("expected %q, got %q", kafka.TopicOrderCancelled, pub.topic)
+	}
+}
+
+func TestSagaConsumer_SkipsInvalidOrderID(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	comp := &fakeCompensator{}
+	pub := &fakePublisher{}
+	c := consumer.NewSagaConsumer(repo, comp, pub, newTestLogger())
+
+	evt := events.PaymentCapturedEvent{OrderID: "not-a-uuid", PaymentID: "pay-1", CapturedAt: time.Now()}
+	if err := c.HandlePaymentCaptured(context.Background(), makeMsg(evt)); err != nil {
+		t.Fatalf("expected nil error for invalid UUID, got %v", err)
+	}
+	if repo.updatedStatus != "" {
+		t.Fatal("UpdateStatus should not be called for an invalid order_id")
 	}
 }

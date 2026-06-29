@@ -35,9 +35,9 @@ type OrderRepository interface {
 	// GetByIdempotencyKey returns the existing order, or pkgerrors.NotFound.
 	GetByIdempotencyKey(ctx context.Context, key uuid.UUID) (*domain.Order, error)
 
-	// CreateOrder inserts the order row (status PENDING) and all items in one
-	// DB transaction.
-	CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error
+	// CreateOrder inserts the order row (status PENDING), all items, and the
+	// checkout.requested outbox event in one DB transaction.
+	CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem, outboxPayload []byte) error
 
 	// GetByID returns pkgerrors.NotFound if no such order exists.
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.Order, error)
@@ -73,5 +73,5 @@ type OrderRepository interface {
 	// downstream Kafka events (payment.captured / payment.failed / inventory.reservation_failed).
 	// Unlike MarkConfirmed/MarkCancelled it does not write an outbox row — the
 	// saga consumer publishes the resulting event directly to Kafka.
-	UpdateStatus(ctx context.Context, orderID, status, sagaStatus string) error
+	UpdateStatus(ctx context.Context, orderID uuid.UUID, status, sagaStatus string) error
 }

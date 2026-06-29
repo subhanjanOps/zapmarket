@@ -124,9 +124,12 @@ func pageArgs(p contracts.OrderPageParams) (limit, offset int) {
 	return
 }
 
-func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error {
+func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem, outboxPayload []byte) error {
 	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
-		id := uuid.New()
+		id := order.ID
+		if id == uuid.Nil {
+			id = uuid.New()
+		}
 		sagaStatus := order.SagaStatus
 		if sagaStatus == "" {
 			sagaStatus = "AWAITING_INVENTORY"
@@ -156,7 +159,8 @@ func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order, 
 			item.ID = itemID
 			item.OrderID = id
 		}
-		return nil
+
+		return insertOutboxEvent(ctx, tx, id, "order", "checkout.requested", outboxPayload)
 	})
 }
 
@@ -228,7 +232,7 @@ func (r *OrderRepository) MarkCancelled(ctx context.Context, orderID uuid.UUID, 
 // UpdateStatus sets the order status and saga_status columns directly.
 // Used by the saga consumer after receiving payment/inventory Kafka events.
 // No outbox row is written — the consumer publishes events to Kafka directly.
-func (r *OrderRepository) UpdateStatus(ctx context.Context, orderID, status, sagaStatus string) error {
+func (r *OrderRepository) UpdateStatus(ctx context.Context, orderID uuid.UUID, status, sagaStatus string) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE orders SET status = $2, saga_status = $3, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL

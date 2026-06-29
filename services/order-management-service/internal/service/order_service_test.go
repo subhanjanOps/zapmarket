@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ import (
 
 type mockOrderRepo struct {
 	getByIdempotencyKeyFn func(ctx context.Context, key uuid.UUID) (*domain.Order, error)
-	createOrderFn         func(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error
+	createOrderFn         func(ctx context.Context, order *domain.Order, items []*domain.OrderItem, outboxPayload []byte) error
 	getByIDFn             func(ctx context.Context, id uuid.UUID) (*domain.Order, error)
 	getOrderItemsFn       func(ctx context.Context, orderID uuid.UUID) ([]*domain.OrderItem, error)
 	getByUserIDFn         func(ctx context.Context, userID uuid.UUID, p contracts.OrderPageParams) ([]*domain.Order, int64, error)
@@ -38,11 +37,13 @@ func (m *mockOrderRepo) GetByIdempotencyKey(ctx context.Context, key uuid.UUID) 
 	}
 	return nil, pkgerrors.NewNotFound("ORDER_NOT_FOUND", "not found")
 }
-func (m *mockOrderRepo) CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error {
+func (m *mockOrderRepo) CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem, outboxPayload []byte) error {
 	if m.createOrderFn != nil {
-		return m.createOrderFn(ctx, order, items)
+		return m.createOrderFn(ctx, order, items, outboxPayload)
 	}
-	order.ID = uuid.New()
+	if order.ID == uuid.Nil {
+		order.ID = uuid.New()
+	}
 	return nil
 }
 func (m *mockOrderRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Order, error) {
@@ -93,7 +94,7 @@ func (m *mockOrderRepo) ListAll(ctx context.Context, params contracts.OrderListP
 	}
 	return nil, 0, nil
 }
-func (m *mockOrderRepo) UpdateStatus(_ context.Context, _, _, _ string) error { return nil }
+func (m *mockOrderRepo) UpdateStatus(_ context.Context, _ uuid.UUID, _, _ string) error { return nil }
 
 // ── mock clients ─────────────────────────────────────────────────────────────
 
@@ -144,15 +145,6 @@ func (m *mockCatalog) GetSKUPrice(ctx context.Context, skuID uuid.UUID) (int64, 
 	return 500, nil
 }
 
-// ── mock publisher ────────────────────────────────────────────────────────────
-
-type mockPublisher struct{ publishedTopic string }
-
-func (m *mockPublisher) Publish(_ context.Context, topic, _ string, _ []byte) error {
-	m.publishedTopic = topic
-	return nil
-}
-
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func newTestRedis(t *testing.T) *redis.Client {
@@ -163,7 +155,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 
 func newTestService(t *testing.T, repo contracts.OrderRepository, inv inventoryGateway, pay paymentGateway, rdb *redis.Client) OrderService {
 	t.Helper()
-	return NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), &mockPublisher{}, slog.Default())
+	return NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
 }
 
 func defaultItems() []CheckoutItem {
@@ -180,9 +172,8 @@ func TestCheckout_HappyPath(t *testing.T) {
 	repo := &mockOrderRepo{}
 	inv := &mockInventory{}
 	pay := &mockPayment{}
-	pub := &mockPublisher{}
 
-	svc := NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), pub, slog.Default())
+	svc := NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
 
 	userID := uuid.New()
 	idemKey := uuid.New()
@@ -198,8 +189,8 @@ func TestCheckout_HappyPath(t *testing.T) {
 	if order.SagaStatus != "AWAITING_INVENTORY" {
 		t.Errorf("expected AWAITING_INVENTORY, got %s", order.SagaStatus)
 	}
-	if pub.publishedTopic != "checkout.requested" {
-		t.Errorf("expected checkout.requested published, got %q", pub.publishedTopic)
+	if order.ID == uuid.Nil {
+		t.Error("expected order.ID to be set")
 	}
 }
 
@@ -231,27 +222,6 @@ func TestCheckout_ValidationErrors(t *testing.T) {
 	// unit_price is now fetched from catalog; client-supplied value is ignored
 }
 
-func TestCheckout_PublisherError_ReturnsError(t *testing.T) {
-	rdb := newTestRedis(t)
-	repo := &mockOrderRepo{}
-	inv := &mockInventory{}
-	pay := &mockPayment{}
-
-	failPub := &failingPublisher{}
-	svc := NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), failPub, slog.Default())
-
-	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR", "")
-	if err == nil {
-		t.Fatal("expected error when publisher fails")
-	}
-}
-
-type failingPublisher struct{}
-
-func (f *failingPublisher) Publish(_ context.Context, _, _ string, _ []byte) error {
-	return fmt.Errorf("kafka unavailable")
-}
-
 func TestCheckout_IdempotencyReplay(t *testing.T) {
 	rdb := newTestRedis(t)
 	idemKey := uuid.New()
@@ -273,7 +243,7 @@ func TestCheckout_IdempotencyReplay(t *testing.T) {
 
 	createCalled := false
 	repo := &mockOrderRepo{
-		createOrderFn: func(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error {
+		createOrderFn: func(ctx context.Context, order *domain.Order, items []*domain.OrderItem, outboxPayload []byte) error {
 			createCalled = true
 			return nil
 		},
@@ -313,7 +283,7 @@ func TestCheckout_IdempotencyReplay_DBFallback(t *testing.T) {
 		getByIdempotencyKeyFn: func(ctx context.Context, key uuid.UUID) (*domain.Order, error) {
 			return existing, nil
 		},
-		createOrderFn: func(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error {
+		createOrderFn: func(ctx context.Context, order *domain.Order, items []*domain.OrderItem, outboxPayload []byte) error {
 			createCalled = true
 			return nil
 		},
@@ -334,6 +304,34 @@ func TestCheckout_IdempotencyReplay_DBFallback(t *testing.T) {
 	}
 }
 
+func TestCheckout_SetsIdempotencyCacheAfterCreate(t *testing.T) {
+	rdb := newTestRedis(t)
+	idemKey := uuid.New()
+	repo := &mockOrderRepo{}
+	svc := newTestService(t, repo, &mockInventory{}, &mockPayment{}, rdb)
+
+	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The cache should now hold the PENDING order for subsequent duplicate requests.
+	cached, err := rdb.Get(context.Background(), idempCacheKey(idemKey)).Bytes()
+	if err != nil {
+		t.Fatalf("expected cache entry, got error: %v", err)
+	}
+	var cachedOrder domain.Order
+	if err := json.Unmarshal(cached, &cachedOrder); err != nil {
+		t.Fatalf("failed to unmarshal cached order: %v", err)
+	}
+	if cachedOrder.ID != order.ID {
+		t.Errorf("cached order ID %s does not match returned order ID %s", cachedOrder.ID, order.ID)
+	}
+	if cachedOrder.Status != domain.OrderPending {
+		t.Errorf("expected PENDING in cache, got %s", cachedOrder.Status)
+	}
+}
+
 // ── assertion helpers ─────────────────────────────────────────────────────────
 
 func assertValidationError(t *testing.T, err error) {
@@ -345,14 +343,6 @@ func assertValidationError(t *testing.T, err error) {
 	if !isAppError(err, &appErr) || appErr.Type != pkgerrors.Validation {
 		t.Errorf("expected Validation AppError, got %T: %v", err, err)
 	}
-}
-
-func isConflictError(err error, code string) bool {
-	var appErr *pkgerrors.AppError
-	if !isAppError(err, &appErr) {
-		return false
-	}
-	return appErr.Type == pkgerrors.Conflict && appErr.Code == code
 }
 
 func isAppError(err error, target **pkgerrors.AppError) bool {

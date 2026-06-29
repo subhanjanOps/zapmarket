@@ -7,13 +7,14 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/events"
 )
 
 // orderStatusUpdater is the narrow repo interface the saga consumer needs.
 type orderStatusUpdater interface {
-	UpdateStatus(ctx context.Context, orderID, status, sagaStatus string) error
+	UpdateStatus(ctx context.Context, orderID uuid.UUID, status, sagaStatus string) error
 }
 
 // compensator releases held resources when a saga step fails.
@@ -47,10 +48,15 @@ func (c *SagaConsumer) HandlePaymentCaptured(ctx context.Context, msg kafka.Mess
 	if err := json.Unmarshal(msg.Value, &evt); err != nil {
 		return err
 	}
-	if err := c.repo.UpdateStatus(ctx, evt.OrderID, "CONFIRMED", "COMPLETE"); err != nil {
+	orderID, err := uuid.Parse(evt.OrderID)
+	if err != nil {
+		c.logger.ErrorContext(ctx, "saga: invalid order_id in payment.captured — skipping", "order_id", evt.OrderID, "error", err)
+		return nil
+	}
+	if err := c.repo.UpdateStatus(ctx, orderID, "CONFIRMED", "COMPLETE"); err != nil {
 		return err
 	}
-	confirmed := map[string]interface{}{
+	confirmed := map[string]any{
 		"order_id":     evt.OrderID,
 		"payment_id":   evt.PaymentID,
 		"confirmed_at": time.Now(),
@@ -70,11 +76,16 @@ func (c *SagaConsumer) HandleInventoryFailed(ctx context.Context, msg kafka.Mess
 	if err := json.Unmarshal(msg.Value, &evt); err != nil {
 		return err
 	}
+	orderID, err := uuid.Parse(evt.OrderID)
+	if err != nil {
+		c.logger.ErrorContext(ctx, "saga: invalid order_id in inventory.reservation_failed — skipping", "order_id", evt.OrderID, "error", err)
+		return nil
+	}
 	c.logger.WarnContext(ctx, "saga: inventory reservation failed — cancelling order", "order_id", evt.OrderID, "reason", evt.Reason)
-	if err := c.repo.UpdateStatus(ctx, evt.OrderID, "CANCELLED", "COMPENSATED"); err != nil {
+	if err := c.repo.UpdateStatus(ctx, orderID, "CANCELLED", "COMPENSATED"); err != nil {
 		return err
 	}
-	cancelled := map[string]interface{}{
+	cancelled := map[string]any{
 		"order_id":     evt.OrderID,
 		"reason":       evt.Reason,
 		"cancelled_at": time.Now(),
@@ -93,6 +104,11 @@ func (c *SagaConsumer) HandlePaymentFailed(ctx context.Context, msg kafka.Messag
 	if err := json.Unmarshal(msg.Value, &evt); err != nil {
 		return err
 	}
+	orderID, err := uuid.Parse(evt.OrderID)
+	if err != nil {
+		c.logger.ErrorContext(ctx, "saga: invalid order_id in payment.failed — skipping", "order_id", evt.OrderID, "error", err)
+		return nil
+	}
 	c.logger.WarnContext(ctx, "saga: payment failed — releasing inventory and cancelling order", "order_id", evt.OrderID, "reason", evt.Reason)
 
 	// Release inventory even if it errors — log and continue to cancel.
@@ -100,10 +116,10 @@ func (c *SagaConsumer) HandlePaymentFailed(ctx context.Context, msg kafka.Messag
 		c.logger.ErrorContext(ctx, "saga: release stock failed during compensation", "order_id", evt.OrderID, "error", err)
 	}
 
-	if err := c.repo.UpdateStatus(ctx, evt.OrderID, "CANCELLED", "COMPENSATED"); err != nil {
+	if err := c.repo.UpdateStatus(ctx, orderID, "CANCELLED", "COMPENSATED"); err != nil {
 		return err
 	}
-	cancelled := map[string]interface{}{
+	cancelled := map[string]any{
 		"order_id":     evt.OrderID,
 		"reason":       evt.Reason,
 		"cancelled_at": time.Now(),

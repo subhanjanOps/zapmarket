@@ -128,13 +128,13 @@ func main() {
 	m := pkgmetrics.New("order")
 
 	// ── Kafka producers ───────────────────────────────────────────────────────
-	checkoutProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicCheckoutRequested)
+	// checkout.requested is now written to the outbox table by the service and
+	// published by the outbox relay — no dedicated producer needed here.
 	confirmedProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicOrderConfirmed)
 	cancelledProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicOrderCancelled)
 	multiPub := publisher.NewMulti(map[string]*pkgkafka.Producer{
-		pkgkafka.TopicCheckoutRequested: checkoutProducer,
-		pkgkafka.TopicOrderConfirmed:    confirmedProducer,
-		pkgkafka.TopicOrderCancelled:    cancelledProducer,
+		pkgkafka.TopicOrderConfirmed: confirmedProducer,
+		pkgkafka.TopicOrderCancelled: cancelledProducer,
 	})
 
 	// ── Repository / Service / Handler ───────────────────────────────────────
@@ -145,7 +145,7 @@ func main() {
 	} else {
 		orderCache = cache.NewNoopCache()
 	}
-	svc := service.NewOrderService(repo, inventoryClient, paymentClient, catalogClient, orderCache, multiPub, log)
+	svc := service.NewOrderService(repo, inventoryClient, paymentClient, catalogClient, orderCache, log)
 	handler := httphandler.NewOrderHandler(svc)
 	adminHandler := httphandler.NewAdminOrderHandler(svc)
 
@@ -262,7 +262,6 @@ func main() {
 		log.Error("HTTP server shutdown error", "error", err)
 	}
 	_ = orderProducer.Close()
-	_ = checkoutProducer.Close()
 	_ = confirmedProducer.Close()
 	_ = cancelledProducer.Close()
 	_ = paymentCapturedConsumer.Close()
