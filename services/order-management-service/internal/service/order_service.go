@@ -27,11 +27,6 @@ type inventoryGateway interface {
 	DeductStock(ctx context.Context, reservationID uuid.UUID) error
 }
 
-// paymentGateway is the subset of clients.PaymentClient the saga needs.
-type paymentGateway interface {
-	ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, string, error)
-}
-
 // catalogGateway fetches authoritative SKU prices to prevent client-supplied price injection.
 type catalogGateway interface {
 	GetSKUPrice(ctx context.Context, skuID uuid.UUID) (int64, error)
@@ -68,7 +63,6 @@ const idempotencyTTL = 24 * time.Hour
 type orderService struct {
 	repo      contracts.OrderRepository
 	inventory inventoryGateway
-	payment   paymentGateway
 	catalog   catalogGateway
 	cache     contracts.OrderCache
 	logger    *slog.Logger
@@ -77,12 +71,11 @@ type orderService struct {
 func NewOrderService(
 	repo contracts.OrderRepository,
 	inventory inventoryGateway,
-	payment paymentGateway,
 	catalog catalogGateway,
 	cache contracts.OrderCache,
 	logger *slog.Logger,
 ) OrderService {
-	return &orderService{repo: repo, inventory: inventory, payment: payment, catalog: catalog, cache: cache, logger: logger}
+	return &orderService{repo: repo, inventory: inventory, catalog: catalog, cache: cache, logger: logger}
 }
 
 func idempCacheKey(key uuid.UUID) string {
@@ -211,18 +204,6 @@ func (s *orderService) checkIdempotency(ctx context.Context, idempotencyKey uuid
 		return nil, err
 	}
 	return nil, nil
-}
-
-// cancelWithPayload marshals the payload and marks the order cancelled, logging any error.
-func (s *orderService) cancelWithPayload(ctx context.Context, orderID uuid.UUID, payload map[string]string) {
-	b, marshalErr := json.Marshal(payload)
-	if marshalErr != nil {
-		s.logger.Error("failed to marshal cancel payload", "order_id", orderID, "error", marshalErr)
-		return
-	}
-	if err := s.repo.MarkCancelled(ctx, orderID, b); err != nil {
-		s.logger.Error("failed to mark order cancelled", "order_id", orderID, "error", err)
-	}
 }
 
 func (s *orderService) GetOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, []*domain.OrderItem, error) {

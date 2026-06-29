@@ -123,17 +123,6 @@ func (m *mockInventory) DeductStock(ctx context.Context, reservationID uuid.UUID
 	return nil
 }
 
-type mockPayment struct {
-	chargeFn func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, string, error)
-}
-
-func (m *mockPayment) ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (uuid.UUID, string, error) {
-	if m.chargeFn != nil {
-		return m.chargeFn(ctx, orderID, userID, amount, currency, idempotencyKey, paymentMethodID)
-	}
-	return uuid.New(), "CAPTURED", nil
-}
-
 type mockCatalog struct {
 	getPriceFn func(ctx context.Context, skuID uuid.UUID) (int64, error)
 }
@@ -153,9 +142,9 @@ func newTestRedis(t *testing.T) *redis.Client {
 	return redis.NewClient(&redis.Options{Addr: mr.Addr()})
 }
 
-func newTestService(t *testing.T, repo contracts.OrderRepository, inv inventoryGateway, pay paymentGateway, rdb *redis.Client) OrderService {
+func newTestService(t *testing.T, repo contracts.OrderRepository, inv inventoryGateway, rdb *redis.Client) OrderService {
 	t.Helper()
-	return NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
+	return NewOrderService(repo, inv, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
 }
 
 func defaultItems() []CheckoutItem {
@@ -171,9 +160,8 @@ func TestCheckout_HappyPath(t *testing.T) {
 	rdb := newTestRedis(t)
 	repo := &mockOrderRepo{}
 	inv := &mockInventory{}
-	pay := &mockPayment{}
 
-	svc := NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
+	svc := NewOrderService(repo, inv, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
 
 	userID := uuid.New()
 	idemKey := uuid.New()
@@ -198,8 +186,7 @@ func TestCheckout_ValidationErrors(t *testing.T) {
 	rdb := newTestRedis(t)
 	repo := &mockOrderRepo{}
 	inv := &mockInventory{}
-	pay := &mockPayment{}
-	svc := newTestService(t, repo, inv, pay, rdb)
+	svc := newTestService(t, repo, inv, rdb)
 	ctx := context.Background()
 
 	t.Run("nil user ID", func(t *testing.T) {
@@ -249,8 +236,7 @@ func TestCheckout_IdempotencyReplay(t *testing.T) {
 		},
 	}
 	inv := &mockInventory{}
-	pay := &mockPayment{}
-	svc := newTestService(t, repo, inv, pay, rdb)
+	svc := newTestService(t, repo, inv, rdb)
 
 	order, err := svc.Checkout(context.Background(), existing.UserID, idemKey, defaultItems(), "INR", "")
 	if err != nil {
@@ -289,8 +275,7 @@ func TestCheckout_IdempotencyReplay_DBFallback(t *testing.T) {
 		},
 	}
 	inv := &mockInventory{}
-	pay := &mockPayment{}
-	svc := newTestService(t, repo, inv, pay, rdb)
+	svc := newTestService(t, repo, inv, rdb)
 
 	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR", "")
 	if err != nil {
@@ -308,7 +293,7 @@ func TestCheckout_SetsIdempotencyCacheAfterCreate(t *testing.T) {
 	rdb := newTestRedis(t)
 	idemKey := uuid.New()
 	repo := &mockOrderRepo{}
-	svc := newTestService(t, repo, &mockInventory{}, &mockPayment{}, rdb)
+	svc := newTestService(t, repo, &mockInventory{}, rdb)
 
 	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR", "")
 	if err != nil {

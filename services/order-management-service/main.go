@@ -100,14 +100,6 @@ func main() {
 	defer inventoryClient.Close()
 	log.Info("connected to inventory-service", "addr", cfg.InventoryServiceAddr)
 
-	paymentClient, err := clients.NewPaymentClient(cfg.PaymentServiceAddr)
-	if err != nil {
-		log.Error("failed to connect to payment-service", "addr", cfg.PaymentServiceAddr, "error", err)
-		os.Exit(1)
-	}
-	defer paymentClient.Close()
-	log.Info("connected to payment-service", "addr", cfg.PaymentServiceAddr)
-
 	catalogClient, err := clients.NewCatalogClient(cfg.CatalogServiceAddr)
 	if err != nil {
 		log.Error("failed to connect to catalog-service", "addr", cfg.CatalogServiceAddr, "error", err)
@@ -145,7 +137,7 @@ func main() {
 	} else {
 		orderCache = cache.NewNoopCache()
 	}
-	svc := service.NewOrderService(repo, inventoryClient, paymentClient, catalogClient, orderCache, log)
+	svc := service.NewOrderService(repo, inventoryClient, catalogClient, orderCache, log)
 	handler := httphandler.NewOrderHandler(svc)
 	adminHandler := httphandler.NewAdminOrderHandler(svc)
 
@@ -197,8 +189,8 @@ func main() {
 	}
 
 	// ── Outbox relay ─────────────────────────────────────────────────────────
-	orderProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, "orders")
-	outboxRelay := relay.New(db, orderProducer, "orders", log)
+	checkoutRequestedProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicCheckoutRequested)
+	outboxRelay := relay.New(db, checkoutRequestedProducer, pkgkafka.TopicCheckoutRequested, log)
 
 	// ── Saga consumers ────────────────────────────────────────────────────────
 	sagaComp := clients.NewSagaCompensator(repo, inventoryClient, log)
@@ -261,7 +253,7 @@ func main() {
 	if err := httpServer.Shutdown(ctx); err != nil {
 		log.Error("HTTP server shutdown error", "error", err)
 	}
-	_ = orderProducer.Close()
+	_ = checkoutRequestedProducer.Close()
 	_ = confirmedProducer.Close()
 	_ = cancelledProducer.Close()
 	_ = paymentCapturedConsumer.Close()
