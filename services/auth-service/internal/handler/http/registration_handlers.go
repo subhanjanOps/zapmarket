@@ -101,8 +101,11 @@ func (h *Handler) UpdateRegistrationProfile(w http.ResponseWriter, r *http.Reque
 		h.writeError(w, http.StatusBadRequest, "dob must be in YYYY-MM-DD format")
 		return
 	}
-	if req.AddressLine1 == "" || req.City == "" || req.State == "" || req.Country == "" || req.Pincode == "" {
-		h.writeError(w, http.StatusBadRequest, "address_line1, city, state, country, and pincode are required")
+	if req.Country == "" {
+		req.Country = "IN"
+	}
+	if req.AddressLine1 == "" || req.City == "" || req.State == "" || req.Pincode == "" {
+		h.writeError(w, http.StatusBadRequest, "address_line1, city, state, and pincode are required")
 		return
 	}
 

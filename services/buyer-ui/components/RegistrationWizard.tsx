@@ -211,7 +211,7 @@ export default function RegistrationWizard({ role }: { role: Role }) {
         dob: s.dob || undefined,
         gender: s.gender || undefined,
         pfp_url: pfpUrl || undefined,
-        line1: s.line1 || undefined,
+        address_line1: s.line1 || undefined,
         city: s.city || undefined,
         state: s.state || undefined,
         pincode: s.pincode || undefined,
