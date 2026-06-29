@@ -14,3 +14,9 @@ type Notification struct {
 type Notifier interface {
 	Send(ctx context.Context, n Notification) error
 }
+
+// SMSNotifier sends an SMS to a phone number. Implementations are
+// fire-and-forget; callers log failures and do not retry synchronously.
+type SMSNotifier interface {
+	SendSMS(ctx context.Context, phone, message string) error
+}

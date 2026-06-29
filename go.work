@@ -53,3 +53,11 @@ use ./services/currency-service
 use ./services/cart-service
 
 use ./services/settlement-service
+
+use ./services/review-return-service
+
+use ./services/promotions-service
+
+use ./services/logistics-service
+
+use ./services/wishlist-service

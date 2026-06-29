@@ -468,6 +468,99 @@ services:
       - zapnet
     restart: unless-stopped
 
+  review-return-service:
+    build:
+      context: .
+      dockerfile: services/review-return-service/Dockerfile
+    container_name: zapmarket-review-return-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=reviews
+      - HTTP_PORT=8090
+      - MIGRATE_ON_BOOT=true
+    ports:
+      - "8090:8090"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  promotions-service:
+    build:
+      context: .
+      dockerfile: services/promotions-service/Dockerfile
+    container_name: zapmarket-promotions-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=promotions
+      - HTTP_PORT=8091
+      - MIGRATE_ON_BOOT=true
+    ports:
+      - "8091:8091"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  logistics-service:
+    build:
+      context: .
+      dockerfile: services/logistics-service/Dockerfile
+    container_name: zapmarket-logistics-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=logistics
+      - HTTP_PORT=8092
+      - KAFKA_BROKERS=kafka:9092
+      - SHIPROCKET_EMAIL=${SHIPROCKET_EMAIL:-noop}
+      - SHIPROCKET_PASSWORD=${SHIPROCKET_PASSWORD:-noop}
+      - MIGRATE_ON_BOOT=true
+    ports:
+      - "8092:8092"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
+  wishlist-service:
+    build:
+      context: .
+      dockerfile: services/wishlist-service/Dockerfile
+    container_name: zapmarket-wishlist-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=wishlist
+      - HTTP_PORT=8089
+      - MIGRATE_ON_BOOT=true
+    ports:
+      - "8089:8089"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   typesense:
     image: typesense/typesense:26.0
     container_name: zapmarket-typesense

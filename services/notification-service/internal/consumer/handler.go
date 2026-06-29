@@ -108,12 +108,17 @@ func formatWithCommasINR(n int64) string {
 // Handler processes order events from Kafka and dispatches notifications.
 type Handler struct {
 	notifier notifier.Notifier
+	sms      notifier.SMSNotifier
 	dedup    deduplicator
 	logger   *slog.Logger
 }
 
 func New(n notifier.Notifier, dedup deduplicator, logger *slog.Logger) *Handler {
 	return &Handler{notifier: n, dedup: dedup, logger: logger}
+}
+
+func NewWithSMS(n notifier.Notifier, sms notifier.SMSNotifier, dedup deduplicator, logger *slog.Logger) *Handler {
+	return &Handler{notifier: n, sms: sms, dedup: dedup, logger: logger}
 }
 
 // Handle is a kafka.HandlerFunc compatible method.
@@ -171,6 +176,17 @@ func (h *Handler) Handle(ctx context.Context, msg pkgkafka.Message) error {
 	if !ok {
 		h.logger.Info("no notification template for event", "event_type", eventType)
 		return nil
+	}
+
+	// Fire-and-forget SMS for order events when phone is in the payload.
+	if h.sms != nil && payload["phone"] != "" && (eventType == "order.confirmed" || eventType == "order.cancelled") {
+		phone := payload["phone"]
+		smsBody := notif.Body
+		go func() {
+			if err := h.sms.SendSMS(ctx, phone, smsBody); err != nil {
+				h.logger.Warn("SMS notification failed", "event_type", eventType, "error", err)
+			}
+		}()
 	}
 
 	if err := h.notifier.Send(ctx, notif); err != nil {
