@@ -438,6 +438,36 @@ services:
       - zapnet
     restart: unless-stopped
 
+  settlement-service:
+    build:
+      context: .
+      dockerfile: services/settlement-service/Dockerfile
+    container_name: zapmarket-settlement-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=settlement
+      - HTTP_PORT=8088
+      - APP_ENV=development
+      - KAFKA_BROKERS=kafka:9092
+      - PLATFORM_COMMISSION_BPS=200
+      - MIN_PAYOUT_PAISE=10000
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-noop}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-noop}
+      - MIGRATE_ON_BOOT=true
+    ports:
+      - "8088:8088"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   typesense:
     image: typesense/typesense:26.0
     container_name: zapmarket-typesense

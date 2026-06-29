@@ -51,3 +51,5 @@ use ./services/api-gateway
 use ./services/currency-service
 
 use ./services/cart-service
+
+use ./services/settlement-service
