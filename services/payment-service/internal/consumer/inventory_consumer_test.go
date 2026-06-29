@@ -18,12 +18,12 @@ import (
 
 // ── fakes ────────────────────────────────────────────────────────────────────
 
-type fakePaymentService struct {
-	payment  *domain.Payment
+type fakeCardCharger struct {
+	payment   *domain.Payment
 	chargeErr error
 }
 
-func (f *fakePaymentService) ChargeCard(
+func (f *fakeCardCharger) ChargeCard(
 	ctx context.Context,
 	orderID, userID uuid.UUID,
 	amount int64, currency string,
@@ -34,22 +34,6 @@ func (f *fakePaymentService) ChargeCard(
 		return nil, f.chargeErr
 	}
 	return f.payment, nil
-}
-
-func (f *fakePaymentService) RefundPayment(ctx context.Context, paymentID uuid.UUID, amount int64, reason string) (*domain.Refund, error) {
-	return nil, nil
-}
-
-func (f *fakePaymentService) GetTransaction(ctx context.Context, paymentID uuid.UUID) (*domain.Payment, error) {
-	return nil, nil
-}
-
-func (f *fakePaymentService) HandleCaptureWebhook(ctx context.Context, paymentID uuid.UUID, gatewayTxnID string) error {
-	return nil
-}
-
-func (f *fakePaymentService) HandleFailureWebhook(ctx context.Context, paymentID uuid.UUID, reason string) error {
-	return nil
 }
 
 type fakePublisher struct {
@@ -91,7 +75,7 @@ func TestInventoryConsumer_SuccessPublishesToCaptured(t *testing.T) {
 	userID := uuid.New().String()
 	paymentID := uuid.New()
 
-	svc := &fakePaymentService{
+	svc := &fakeCardCharger{
 		payment: &domain.Payment{
 			ID:     paymentID,
 			Status: domain.PaymentCaptured,
@@ -129,7 +113,7 @@ func TestInventoryConsumer_ChargeErrorPublishesToFailed(t *testing.T) {
 	orderID := uuid.New().String()
 	userID := uuid.New().String()
 
-	svc := &fakePaymentService{chargeErr: errors.New("card declined")}
+	svc := &fakeCardCharger{chargeErr: errors.New("card declined")}
 	capturedPub := &fakePublisher{}
 	failedPub := &fakePublisher{}
 
@@ -162,7 +146,7 @@ func TestInventoryConsumer_GatewayDeclinePublishesToFailed(t *testing.T) {
 	userID := uuid.New().String()
 	reason := "insufficient funds"
 
-	svc := &fakePaymentService{
+	svc := &fakeCardCharger{
 		payment: &domain.Payment{
 			ID:            uuid.New(),
 			Status:        domain.PaymentFailed,
@@ -183,7 +167,7 @@ func TestInventoryConsumer_GatewayDeclinePublishesToFailed(t *testing.T) {
 }
 
 func TestInventoryConsumer_MalformedMessageIsSkipped(t *testing.T) {
-	svc := &fakePaymentService{}
+	svc := &fakeCardCharger{}
 	capturedPub := &fakePublisher{}
 	failedPub := &fakePublisher{}
 

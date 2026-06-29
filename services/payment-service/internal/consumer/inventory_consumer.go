@@ -10,8 +10,12 @@ import (
 	"github.com/google/uuid"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain"
-	"github.com/zapmarket/zapmarket/services/payment-service/internal/service"
 )
+
+// cardCharger is a narrow interface for charging payment cards.
+type cardCharger interface {
+	ChargeCard(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, idempotencyKey uuid.UUID, paymentMethodID string) (*domain.Payment, error)
+}
 
 // publisher is satisfied by *pkgkafka.Producer and test fakes.
 type publisher interface {
@@ -19,20 +23,21 @@ type publisher interface {
 }
 
 // InventoryConsumer handles inventory.reserved Kafka messages, charges the
-// card via PaymentService.ChargeCard, and publishes payment.captured or
+// card via cardCharger.ChargeCard, and publishes payment.captured or
 // payment.failed.
 type InventoryConsumer struct {
-	svc            service.PaymentService
-	capturedPub    publisher
-	failedPub      publisher
-	log            *slog.Logger
+	svc         cardCharger
+	capturedPub publisher
+	failedPub   publisher
+	log         *slog.Logger
 }
 
 // NewInventoryConsumer creates an InventoryConsumer.
+//   - svc        must implement cardCharger (ChargeCard method)
 //   - capturedPub must publish to TopicPaymentCaptured
 //   - failedPub   must publish to TopicPaymentFailed
 func NewInventoryConsumer(
-	svc service.PaymentService,
+	svc cardCharger,
 	capturedPub publisher,
 	failedPub publisher,
 	log *slog.Logger,
