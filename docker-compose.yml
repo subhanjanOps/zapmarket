@@ -588,7 +588,7 @@ services:
     restart: unless-stopped
 
   pgbouncer:
-    image: edoburu/pgbouncer:1.22.0
+    image: pgbouncer/pgbouncer:1.23.1
     container_name: zapmarket-pgbouncer
     ports:
       - "5433:5432"
