@@ -6,6 +6,7 @@ package contracts
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain"
@@ -51,4 +52,9 @@ type InventoryRepository interface {
 	// GetReservationDetails returns the sku_id and qty for a reservation.
 	// Used by ReleaseStock to know how much to add back to the Redis counter.
 	GetReservationDetails(ctx context.Context, reservationID uuid.UUID) (skuID uuid.UUID, qty int, err error)
+
+	// FindExpiredReservations returns all reservations in RESERVED state whose
+	// expires_at is before the given time. Used by the expiry worker to
+	// release abandoned reservations and return stock to the available pool.
+	FindExpiredReservations(ctx context.Context, before time.Time) ([]*domain.Reservation, error)
 }

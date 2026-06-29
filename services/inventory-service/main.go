@@ -30,6 +30,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/relay"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/service"
+	"github.com/zapmarket/zapmarket/services/inventory-service/internal/worker"
 )
 
 func main() {
@@ -113,6 +114,11 @@ func main() {
 	go outboxRelay.Run(relayCtx)
 	log.Info("outbox relay started", "brokers", cfg.KafkaBrokers)
 
+	expiryWorker := worker.NewExpiryWorker(repo, 60*time.Second, log)
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	go expiryWorker.Start(workerCtx)
+	log.Info("reservation expiry worker started")
+
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -129,6 +135,7 @@ func main() {
 
 	<-quit
 	relayCancel()
+	workerCancel()
 	log.Info("shutting down servers")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

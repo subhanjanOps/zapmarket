@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
@@ -67,6 +68,10 @@ func (m *mockInventoryRepo) GetReservationDetails(ctx context.Context, reservati
 		return m.getReservationDetailsFn(ctx, reservationID)
 	}
 	return uuid.New(), 1, nil
+}
+
+func (m *mockInventoryRepo) FindExpiredReservations(_ context.Context, _ time.Time) ([]*domain.Reservation, error) {
+	return nil, nil
 }
 
 var _ contracts.InventoryRepository = (*mockInventoryRepo)(nil)

@@ -260,6 +260,28 @@ func (r *InventoryRepository) GetReservationDetails(ctx context.Context, reserva
 	return skuID, qty, nil
 }
 
+func (r *InventoryRepository) FindExpiredReservations(ctx context.Context, before time.Time) ([]*domain.Reservation, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, inventory_id, order_id, sku_id, qty, status, expires_at, created_at
+		FROM inventory_reservations
+		WHERE status = 'RESERVED' AND expires_at < $1 AND deleted_at IS NULL
+	`, before)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to find expired reservations", err)
+	}
+	defer rows.Close()
+
+	var out []*domain.Reservation
+	for rows.Next() {
+		var res domain.Reservation
+		if err := rows.Scan(&res.ID, &res.InventoryID, &res.OrderID, &res.SKUID, &res.Qty, &res.Status, &res.ExpiresAt, &res.CreatedAt); err != nil {
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan expired reservation", err)
+		}
+		out = append(out, &res)
+	}
+	return out, rows.Err()
+}
+
 // reservationNotFoundOrConflict distinguishes "this reservation id never
 // existed" from "it exists but isn't in `reserved` state anymore" so
 // callers attempting a double release/deduct get a meaningful error
