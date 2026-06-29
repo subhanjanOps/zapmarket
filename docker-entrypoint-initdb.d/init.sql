@@ -5,6 +5,7 @@ CREATE DATABASE reviews;
 CREATE DATABASE promotions;
 CREATE DATABASE logistics;
 CREATE DATABASE wishlist;
+CREATE DATABASE imports;
 CREATE DATABASE apigateway;
 CREATE DATABASE ordermgmt;
 CREATE DATABASE inventory;
@@ -68,4 +69,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 \connect wishlist
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+\connect imports
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

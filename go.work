@@ -63,3 +63,5 @@ use ./services/logistics-service
 use ./services/wishlist-service
 
 use ./tests/contract
+
+use ./services/import-service

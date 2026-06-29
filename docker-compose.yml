@@ -561,6 +561,32 @@ services:
       - zapnet
     restart: unless-stopped
 
+  import-service:
+    build:
+      context: .
+      dockerfile: services/import-service/Dockerfile
+    container_name: zapmarket-import-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB_HOST=zapmarket-postgres
+      - DB_PORT=5432
+      - DB_USER=zapuser
+      - DB_PASSWORD=zappass123
+      - DB_NAME=imports
+      - HTTP_PORT=8085
+      - CATALOG_HTTP_ADDR=http://zapmarket-product-catalog-service:8081
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MIGRATE_ON_BOOT=true
+    ports:
+      - "8085:8085"
+    networks:
+      - zapnet
+    restart: unless-stopped
+
   pgbouncer:
     image: edoburu/pgbouncer:1.22.0
     container_name: zapmarket-pgbouncer
