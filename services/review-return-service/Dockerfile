@@ -23,9 +23,9 @@ WORKDIR /app
 COPY --from=builder /app/review-return-service /app/review-return-service
 COPY services/review-return-service/migrations /app/migrations
 
-EXPOSE 8090
+EXPOSE 8093
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
-    CMD wget -qO- http://localhost:8090/health || exit 1
+    CMD wget -qO- http://localhost:8093/health || exit 1
 
 CMD ["/app/review-return-service"]

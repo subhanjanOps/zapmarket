@@ -482,10 +482,10 @@ services:
       - DB_USER=zapuser
       - DB_PASSWORD=zappass123
       - DB_NAME=reviews
-      - HTTP_PORT=8090
+      - HTTP_PORT=8093
       - MIGRATE_ON_BOOT=true
     ports:
-      - "8090:8090"
+      - "8093:8093"
     networks:
       - zapnet
     restart: unless-stopped
@@ -582,7 +582,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
       - MIGRATE_ON_BOOT=true
     ports:
-      - "8085:8085"
+      - "8094:8085"
     networks:
       - zapnet
     restart: unless-stopped

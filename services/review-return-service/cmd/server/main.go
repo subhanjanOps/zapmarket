@@ -10,7 +10,7 @@ import (
 func main() {
 	port := os.Getenv("HTTP_PORT")
 	if port == "" {
-		port = "8090"
+		port = "8093"
 	}
 
 	mux := http.NewServeMux()
