@@ -30,6 +30,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/relay"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/service"
+	"github.com/zapmarket/zapmarket/services/inventory-service/internal/consumer"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/worker"
 )
 
@@ -106,6 +107,12 @@ func main() {
 	inventoryProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicInventory)
 	outboxRelay := relay.New(db, inventoryProducer, pkgkafka.TopicInventory, log)
 
+	// ── Checkout saga consumer ────────────────────────────────────────────────
+	checkoutProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReserved)
+	failureProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReservationFailed)
+	checkoutConsumer := consumer.NewCheckoutConsumer(svc, checkoutProducer, failureProducer, log)
+	checkoutKafkaConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicCheckoutRequested, "inventory-saga")
+
 	// ── Start servers ────────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -113,6 +120,13 @@ func main() {
 	relayCtx, relayCancel := context.WithCancel(context.Background())
 	go outboxRelay.Run(relayCtx)
 	log.Info("outbox relay started", "brokers", cfg.KafkaBrokers)
+
+	go func() {
+		if err := checkoutKafkaConsumer.Run(relayCtx, checkoutConsumer.Handle); err != nil {
+			log.Error("checkout consumer exited", "error", err)
+		}
+	}()
+	log.Info("checkout saga consumer started")
 
 	expiryWorker := worker.NewExpiryWorker(repo, 60*time.Second, log)
 	workerCtx, workerCancel := context.WithCancel(context.Background())
@@ -146,6 +160,9 @@ func main() {
 	}
 	grpcServer.GracefulStop()
 	_ = inventoryProducer.Close()
+	_ = checkoutProducer.Close()
+	_ = failureProducer.Close()
+	_ = checkoutKafkaConsumer.Close()
 
 	log.Info("servers stopped")
 }
