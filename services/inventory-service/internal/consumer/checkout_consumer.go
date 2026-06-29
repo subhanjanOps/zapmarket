@@ -91,7 +91,7 @@ func (c *CheckoutConsumer) Handle(ctx context.Context, msg pkgkafka.Message) err
 		})
 	}
 
-	return c.publishReserved(ctx, evt.OrderID, reserved)
+	return c.publishReserved(ctx, evt, reserved)
 }
 
 // compensate releases all already-reserved items when a later item fails.
@@ -109,18 +109,22 @@ func (c *CheckoutConsumer) compensate(ctx context.Context, reserved []Reservatio
 	}
 }
 
-func (c *CheckoutConsumer) publishReserved(ctx context.Context, orderID string, refs []ReservationRef) error {
+func (c *CheckoutConsumer) publishReserved(ctx context.Context, evt CheckoutRequestedEvent, refs []ReservationRef) error {
 	out := InventoryReservedEvent{
-		OrderID:      orderID,
-		Reservations: refs,
-		ReservedAt:   time.Now().UTC(),
+		OrderID:         evt.OrderID,
+		UserID:          evt.UserID,
+		Reservations:    refs,
+		ReservedAt:      time.Now().UTC(),
+		AmountCents:     evt.AmountCents,
+		Currency:        evt.Currency,
+		PaymentMethodID: evt.PaymentMethodID,
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
 		return fmt.Errorf("marshal event: %w", err)
 	}
 	return c.reservedPub.Publish(ctx, pkgkafka.Message{
-		Key:   []byte(orderID),
+		Key:   []byte(evt.OrderID),
 		Value: b,
 	})
 }

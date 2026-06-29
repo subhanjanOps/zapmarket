@@ -20,6 +20,7 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/grpcx"
 	"github.com/zapmarket/zapmarket/pkg/httpx"
+	"github.com/zapmarket/zapmarket/services/payment-service/internal/consumer"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/domain/contracts"
 	paymentcache "github.com/zapmarket/zapmarket/services/payment-service/internal/infrastructure/cache"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
@@ -123,6 +124,12 @@ func main() {
 	paymentProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicPayments)
 	outboxRelay := relay.New(db, paymentProducer, pkgkafka.TopicPayments, log)
 
+	// ── Checkout saga consumer (inventory.reserved → payment.captured/failed) ─
+	capturedProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicPaymentCaptured)
+	failedProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicPaymentFailed)
+	sagaConsumer := consumer.NewInventoryConsumer(svc, capturedProducer, failedProducer, log)
+	invKafkaConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReserved, "payment-saga")
+
 	// ── Start servers ────────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -130,6 +137,13 @@ func main() {
 	relayCtx, relayCancel := context.WithCancel(context.Background())
 	go outboxRelay.Run(relayCtx)
 	log.Info("outbox relay started", "brokers", cfg.KafkaBrokers)
+
+	go func() {
+		if err := invKafkaConsumer.Run(relayCtx, sagaConsumer.Handle); err != nil {
+			log.Error("inventory saga consumer exited", "error", err)
+		}
+	}()
+	log.Info("inventory saga consumer started")
 
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)
@@ -157,6 +171,9 @@ func main() {
 	}
 	grpcServer.GracefulStop()
 	_ = paymentProducer.Close()
+	_ = capturedProducer.Close()
+	_ = failedProducer.Close()
+	_ = invKafkaConsumer.Close()
 
 	log.Info("servers stopped")
 }

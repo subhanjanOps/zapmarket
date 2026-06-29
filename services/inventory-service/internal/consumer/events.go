@@ -6,10 +6,13 @@ import "time"
 // buyer initiates checkout. The inventory-service consumes this event and
 // attempts to reserve stock for every item.
 type CheckoutRequestedEvent struct {
-	OrderID     string         `json:"order_id"`
-	UserID      string         `json:"user_id"`
-	Items       []CheckoutItem `json:"items"`
-	RequestedAt time.Time      `json:"requested_at"`
+	OrderID         string         `json:"order_id"`
+	UserID          string         `json:"user_id"`
+	Items           []CheckoutItem `json:"items"`
+	RequestedAt     time.Time      `json:"requested_at"`
+	AmountCents     int64          `json:"amount_cents"`
+	Currency        string         `json:"currency"`
+	PaymentMethodID string         `json:"payment_method_id"`
 }
 
 // CheckoutItem is a single line item inside a CheckoutRequestedEvent.
@@ -21,9 +24,13 @@ type CheckoutItem struct {
 // InventoryReservedEvent is published when ALL items in an order have been
 // successfully reserved. The payment-service listens for this event.
 type InventoryReservedEvent struct {
-	OrderID      string           `json:"order_id"`
-	Reservations []ReservationRef `json:"reservations"`
-	ReservedAt   time.Time        `json:"reserved_at"`
+	OrderID         string           `json:"order_id"`
+	UserID          string           `json:"user_id"`
+	Reservations    []ReservationRef `json:"reservations"`
+	ReservedAt      time.Time        `json:"reserved_at"`
+	AmountCents     int64            `json:"amount_cents"`
+	Currency        string           `json:"currency"`
+	PaymentMethodID string           `json:"payment_method_id"`
 }
 
 // ReservationRef ties a SKU to the reservation that was created for it.
