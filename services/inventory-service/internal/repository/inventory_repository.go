@@ -123,7 +123,7 @@ func (r *InventoryRepository) ReserveStock(ctx context.Context, skuID, orderID u
 			ExpiresAt:   expiresAt,
 		}
 
-		payload, err := json.Marshal(map[string]interface{}{
+		payload, err := json.Marshal(map[string]any{
 			"reservation_id": id.String(), "sku_id": skuID.String(),
 			"order_id": orderID.String(), "qty": qty, "status": "RESERVED",
 		})
@@ -176,7 +176,7 @@ func (r *InventoryRepository) ReleaseStock(ctx context.Context, reservationID uu
 			return err
 		}
 
-		payload, err := json.Marshal(map[string]interface{}{
+		payload, err := json.Marshal(map[string]any{
 			"reservation_id": reservationID.String(), "qty": releaseQty, "status": "RELEASED",
 		})
 		if err != nil {
