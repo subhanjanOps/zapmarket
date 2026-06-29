@@ -29,8 +29,6 @@ type OrderPageParams struct {
 }
 
 // OrderRepository defines all persistence operations for the order saga.
-// All mutations that transition order status also write an outbox row in the
-// same DB transaction so no status change is observable without its event.
 type OrderRepository interface {
 	// GetByIdempotencyKey returns the existing order, or pkgerrors.NotFound.
 	GetByIdempotencyKey(ctx context.Context, key uuid.UUID) (*domain.Order, error)
@@ -57,13 +55,17 @@ type OrderRepository interface {
 	// on each item, all in one DB transaction.
 	MarkReserved(ctx context.Context, orderID uuid.UUID, items []*domain.OrderItem) error
 
-	// MarkConfirmed sets order status → CONFIRMED, records payment_id, and
-	// writes the outbox event — all in one DB transaction.
-	MarkConfirmed(ctx context.Context, orderID uuid.UUID, paymentID uuid.UUID, outboxPayload []byte) error
+	// MarkConfirmed sets order status → CONFIRMED and records payment_id.
+	// The saga consumer publishes order.confirmed directly to Kafka.
+	MarkConfirmed(ctx context.Context, orderID uuid.UUID, paymentID uuid.UUID) error
 
-	// MarkCancelled sets order status → CANCELLED and writes the outbox event
-	// in one DB transaction.
-	MarkCancelled(ctx context.Context, orderID uuid.UUID, outboxPayload []byte) error
+	// MarkCancelled sets order status → CANCELLED.
+	// The saga consumer publishes order.cancelled directly to Kafka.
+	MarkCancelled(ctx context.Context, orderID uuid.UUID) error
+
+	// SetItemReservationID persists the reservation_id for a single order item
+	// identified by (orderID, skuID). Called when inventory.reserved is consumed.
+	SetItemReservationID(ctx context.Context, orderID, skuID, reservationID uuid.UUID) error
 
 	// ListAll returns all orders with optional filters — admin use only.
 	ListAll(ctx context.Context, params OrderListParams) ([]*domain.Order, int64, error)
@@ -71,7 +73,6 @@ type OrderRepository interface {
 	// UpdateStatus sets the order status and saga_status columns directly.
 	// Used by the saga consumer to confirm or cancel an order based on
 	// downstream Kafka events (payment.captured / payment.failed / inventory.reservation_failed).
-	// Unlike MarkConfirmed/MarkCancelled it does not write an outbox row — the
-	// saga consumer publishes the resulting event directly to Kafka.
+	// The saga consumer publishes the resulting event directly to Kafka.
 	UpdateStatus(ctx context.Context, orderID uuid.UUID, status, sagaStatus string) error
 }

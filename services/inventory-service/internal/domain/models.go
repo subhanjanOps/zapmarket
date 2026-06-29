@@ -6,12 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// DefaultWarehouseID is the single warehouse every SKU's stock lives in for
-// this stage — see migrations/0001_init.up.sql. The schema supports
-// multiple warehouses; the gRPC surface just doesn't expose warehouse_id
-// yet (see pkg/proto/inventory/inventory.proto).
-var DefaultWarehouseID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
 type Warehouse struct {
 	ID        uuid.UUID
 	Name      string

@@ -26,8 +26,8 @@ type mockOrderRepo struct {
 	getByUserIDFn         func(ctx context.Context, userID uuid.UUID, p contracts.OrderPageParams) ([]*domain.Order, int64, error)
 	getBySellerIDFn       func(ctx context.Context, sellerID uuid.UUID, p contracts.OrderPageParams) ([]*domain.Order, int64, error)
 	markReservedFn        func(ctx context.Context, orderID uuid.UUID, items []*domain.OrderItem) error
-	markConfirmedFn       func(ctx context.Context, orderID uuid.UUID, paymentID uuid.UUID, payload []byte) error
-	markCancelledFn       func(ctx context.Context, orderID uuid.UUID, payload []byte) error
+	markConfirmedFn       func(ctx context.Context, orderID uuid.UUID, paymentID uuid.UUID) error
+	markCancelledFn       func(ctx context.Context, orderID uuid.UUID) error
 	listAllFn             func(ctx context.Context, params contracts.OrderListParams) ([]*domain.Order, int64, error)
 }
 
@@ -76,16 +76,19 @@ func (m *mockOrderRepo) MarkReserved(ctx context.Context, orderID uuid.UUID, ite
 	}
 	return nil
 }
-func (m *mockOrderRepo) MarkConfirmed(ctx context.Context, orderID uuid.UUID, paymentID uuid.UUID, payload []byte) error {
+func (m *mockOrderRepo) MarkConfirmed(ctx context.Context, orderID uuid.UUID, paymentID uuid.UUID) error {
 	if m.markConfirmedFn != nil {
-		return m.markConfirmedFn(ctx, orderID, paymentID, payload)
+		return m.markConfirmedFn(ctx, orderID, paymentID)
 	}
 	return nil
 }
-func (m *mockOrderRepo) MarkCancelled(ctx context.Context, orderID uuid.UUID, payload []byte) error {
+func (m *mockOrderRepo) MarkCancelled(ctx context.Context, orderID uuid.UUID) error {
 	if m.markCancelledFn != nil {
-		return m.markCancelledFn(ctx, orderID, payload)
+		return m.markCancelledFn(ctx, orderID)
 	}
+	return nil
+}
+func (m *mockOrderRepo) SetItemReservationID(_ context.Context, _, _, _ uuid.UUID) error {
 	return nil
 }
 func (m *mockOrderRepo) ListAll(ctx context.Context, params contracts.OrderListParams) ([]*domain.Order, int64, error) {

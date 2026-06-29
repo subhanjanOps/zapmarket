@@ -197,36 +197,41 @@ func (r *OrderRepository) MarkReserved(ctx context.Context, orderID uuid.UUID, i
 	})
 }
 
-func (r *OrderRepository) MarkConfirmed(ctx context.Context, orderID uuid.UUID, paymentID uuid.UUID, outboxPayload []byte) error {
-	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `
-			UPDATE orders SET status = 'CONFIRMED', payment_id = $2, updated_at = NOW()
-			WHERE id = $1 AND deleted_at IS NULL
-		`, orderID, paymentID)
-		if err != nil {
-			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to confirm order", err)
-		}
-		if n, _ := result.RowsAffected(); n == 0 {
-			return pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
-		}
-		return insertOutboxEvent(ctx, tx, orderID, "order", "order.confirmed", outboxPayload)
-	})
+func (r *OrderRepository) MarkConfirmed(ctx context.Context, orderID uuid.UUID, paymentID uuid.UUID) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE orders SET status = 'CONFIRMED', payment_id = $2, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`, orderID, paymentID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to confirm order", err)
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
+	}
+	return nil
 }
 
-func (r *OrderRepository) MarkCancelled(ctx context.Context, orderID uuid.UUID, outboxPayload []byte) error {
-	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `
-			UPDATE orders SET status = 'CANCELLED', updated_at = NOW()
-			WHERE id = $1 AND status IN ('PENDING', 'RESERVED') AND deleted_at IS NULL
-		`, orderID)
-		if err != nil {
-			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to cancel order", err)
-		}
-		if n, _ := result.RowsAffected(); n == 0 {
-			return pkgerrors.NewConflict("ORDER_STATUS_CONFLICT", "order not found or cannot be cancelled from its current status")
-		}
-		return insertOutboxEvent(ctx, tx, orderID, "order", "order.cancelled", outboxPayload)
-	})
+func (r *OrderRepository) MarkCancelled(ctx context.Context, orderID uuid.UUID) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE orders SET status = 'CANCELLED', updated_at = NOW()
+		WHERE id = $1 AND status IN ('PENDING', 'RESERVED') AND deleted_at IS NULL
+	`, orderID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to cancel order", err)
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return pkgerrors.NewConflict("ORDER_STATUS_CONFLICT", "order not found or cannot be cancelled from its current status")
+	}
+	return nil
+}
+
+func (r *OrderRepository) SetItemReservationID(ctx context.Context, orderID, skuID, reservationID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE order_items SET reservation_id = $1
+		 WHERE order_id = $2 AND sku_id = $3`,
+		reservationID, orderID, skuID,
+	)
+	return err
 }
 
 // UpdateStatus sets the order status and saga_status columns directly.

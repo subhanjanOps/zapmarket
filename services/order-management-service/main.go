@@ -199,6 +199,7 @@ func main() {
 	paymentCapturedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentCaptured, "order-saga")
 	paymentFailedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentFailed, "order-saga")
 	inventoryFailedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReservationFailed, "order-saga")
+	inventoryReservedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReserved, "order-saga")
 
 	// ── Start / shutdown ──────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
@@ -224,6 +225,12 @@ func main() {
 		log.Info("starting saga consumer", "topic", pkgkafka.TopicInventoryReservationFailed)
 		if err := inventoryFailedConsumer.Run(relayCtx, sagaCons.HandleInventoryFailed); err != nil {
 			log.Error("saga consumer exited", "topic", pkgkafka.TopicInventoryReservationFailed, "error", err)
+		}
+	}()
+	go func() {
+		log.Info("starting saga consumer", "topic", pkgkafka.TopicInventoryReserved)
+		if err := inventoryReservedConsumer.Run(relayCtx, sagaCons.HandleInventoryReserved); err != nil {
+			log.Error("saga consumer exited", "topic", pkgkafka.TopicInventoryReserved, "error", err)
 		}
 	}()
 
@@ -259,6 +266,7 @@ func main() {
 	_ = paymentCapturedConsumer.Close()
 	_ = paymentFailedConsumer.Close()
 	_ = inventoryFailedConsumer.Close()
+	_ = inventoryReservedConsumer.Close()
 
 	log.Info("server stopped")
 }

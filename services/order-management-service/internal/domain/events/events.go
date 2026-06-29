@@ -23,6 +23,20 @@ type CheckoutItem struct {
 	Quantity int    `json:"quantity"`
 }
 
+// InventoryReservedEvent is consumed from inventory.reserved.
+// It carries the reservation IDs for each SKU so the order service
+// can persist them on order_items for later compensation.
+type InventoryReservedEvent struct {
+	OrderID      string           `json:"order_id"`
+	Reservations []ReservationRef `json:"reservations"`
+}
+
+// ReservationRef ties a SKU to its reservation ID.
+type ReservationRef struct {
+	SKUID         string `json:"sku_id"`
+	ReservationID string `json:"reservation_id"`
+}
+
 // PaymentCapturedEvent is consumed from payment.captured.
 type PaymentCapturedEvent struct {
 	OrderID    string    `json:"order_id"`

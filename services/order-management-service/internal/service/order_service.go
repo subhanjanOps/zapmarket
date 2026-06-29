@@ -242,11 +242,7 @@ func (s *orderService) CancelOrder(ctx context.Context, orderID, userID uuid.UUI
 		return nil, err
 	}
 
-	cancelPayload, marshalErr := json.Marshal(map[string]string{"order_id": orderID.String(), "user_id": userID.String(), "reason": "user_requested"})
-	if marshalErr != nil {
-		return nil, pkgerrors.NewInternal("INTERNAL_ERROR", "internal serialization error", marshalErr)
-	}
-	if err := s.repo.MarkCancelled(ctx, orderID, cancelPayload); err != nil {
+	if err := s.repo.MarkCancelled(ctx, orderID); err != nil {
 		return nil, err
 	}
 
@@ -313,11 +309,7 @@ func (s *orderService) AdminCancelOrder(ctx context.Context, orderID uuid.UUID) 
 		return nil, err
 	}
 
-	cancelPayload, marshalErr := json.Marshal(map[string]string{"order_id": orderID.String(), "reason": "admin_cancelled"})
-	if marshalErr != nil {
-		return nil, pkgerrors.NewInternal("INTERNAL_ERROR", "internal serialization error", marshalErr)
-	}
-	if err := s.repo.MarkCancelled(ctx, orderID, cancelPayload); err != nil {
+	if err := s.repo.MarkCancelled(ctx, orderID); err != nil {
 		return nil, err
 	}
 

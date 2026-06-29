@@ -9,10 +9,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain"
 )
+
+// defaultWarehouseID is the seed warehouse from migrations/0001_init.up.sql.
+// Replace with a zone-lookup call once multi-warehouse routing is live.
+var defaultWarehouseID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
 type InventoryRepository struct {
 	db *sql.DB
@@ -36,7 +41,7 @@ func (r *InventoryRepository) AddStock(ctx context.Context, skuID uuid.UUID, qty
 				SET qty_on_hand = inventory.qty_on_hand + EXCLUDED.qty_on_hand,
 					updated_at = NOW()
 			RETURNING id, qty_on_hand - $3
-		`, skuID, domain.DefaultWarehouseID, qty).Scan(&inventoryID, &before)
+		`, skuID, defaultWarehouseID, qty).Scan(&inventoryID, &before)
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to add stock", err)
 		}
@@ -66,7 +71,7 @@ func (r *InventoryRepository) ReserveStock(ctx context.Context, skuID, orderID u
 				AND deleted_at IS NULL
 				AND qty_on_hand - qty_reserved >= $2
 			RETURNING id, qty_reserved - $2, qty_reserved
-		`, skuID, qty, domain.DefaultWarehouseID).Scan(&inventoryID, &reservedBefore, &reservedAfter)
+		`, skuID, qty, defaultWarehouseID).Scan(&inventoryID, &reservedBefore, &reservedAfter)
 
 		if errors.Is(err, sql.ErrNoRows) {
 			// Either no inventory row exists for this SKU, or there isn't
@@ -87,6 +92,20 @@ func (r *InventoryRepository) ReserveStock(ctx context.Context, skuID, orderID u
 			VALUES ($1, $2, $3, $4, $5, 'RESERVED', $6)
 		`, id, inventoryID, orderID, skuID, qty, expiresAt)
 		if err != nil {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+				// Already reserved for this (order_id, sku_id) — return existing reservation idempotently.
+				var res domain.Reservation
+				err2 := tx.QueryRowContext(ctx, `
+					SELECT id, inventory_id, order_id, sku_id, qty, status, expires_at, created_at
+					FROM inventory_reservations
+					WHERE order_id = $1 AND sku_id = $2
+				`, orderID, skuID).Scan(&res.ID, &res.InventoryID, &res.OrderID, &res.SKUID, &res.Qty, &res.Status, &res.ExpiresAt, &res.CreatedAt)
+				if err2 != nil {
+					return pkgerrors.NewInternal("DATABASE_ERROR", "failed to fetch existing reservation", err2)
+				}
+				reservation = &res
+				return nil
+			}
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to create reservation", err)
 		}
 
@@ -219,7 +238,7 @@ func (r *InventoryRepository) GetStock(ctx context.Context, skuID uuid.UUID) (*d
 		WHERE sku_id = $1
 			AND warehouse_id = $2
 			AND deleted_at IS NULL
-	`, skuID, domain.DefaultWarehouseID).Scan(
+	`, skuID, defaultWarehouseID).Scan(
 		&inv.ID, &inv.SKUID, &inv.WarehouseID, &inv.QtyOnHand, &inv.QtyReserved, &inv.QtyAvailable, &inv.LowStockThreshold,
 		&inv.CreatedAt, &inv.UpdatedAt,
 	)

@@ -15,6 +15,7 @@ import (
 // orderStatusUpdater is the narrow repo interface the saga consumer needs.
 type orderStatusUpdater interface {
 	UpdateStatus(ctx context.Context, orderID uuid.UUID, status, sagaStatus string) error
+	SetItemReservationID(ctx context.Context, orderID, skuID, reservationID uuid.UUID) error
 }
 
 // compensator releases held resources when a saga step fails.
@@ -95,6 +96,38 @@ func (c *SagaConsumer) HandleInventoryFailed(ctx context.Context, msg kafka.Mess
 		return err
 	}
 	return c.pub.Publish(ctx, kafka.TopicOrderCancelled, evt.OrderID, b)
+}
+
+// HandleInventoryReserved persists reservation IDs on order items so that the
+// SagaCompensator can release them when payment fails.
+func (c *SagaConsumer) HandleInventoryReserved(ctx context.Context, msg kafka.Message) error {
+	var evt events.InventoryReservedEvent
+	if err := json.Unmarshal(msg.Value, &evt); err != nil {
+		c.logger.ErrorContext(ctx, "saga: unmarshal inventory.reserved", "error", err)
+		return nil
+	}
+	orderID, err := uuid.Parse(evt.OrderID)
+	if err != nil {
+		c.logger.ErrorContext(ctx, "saga: invalid order_id in inventory.reserved", "order_id", evt.OrderID)
+		return nil
+	}
+	for _, r := range evt.Reservations {
+		skuID, err := uuid.Parse(r.SKUID)
+		if err != nil {
+			c.logger.WarnContext(ctx, "saga: invalid sku_id in inventory.reserved, skipping", "sku_id", r.SKUID)
+			continue
+		}
+		reservationID, err := uuid.Parse(r.ReservationID)
+		if err != nil {
+			c.logger.WarnContext(ctx, "saga: invalid reservation_id in inventory.reserved, skipping", "reservation_id", r.ReservationID)
+			continue
+		}
+		if err := c.repo.SetItemReservationID(ctx, orderID, skuID, reservationID); err != nil {
+			c.logger.ErrorContext(ctx, "saga: SetItemReservationID failed", "order_id", orderID, "sku_id", skuID, "error", err)
+			// Non-fatal: expiry worker will eventually release; don't retry the whole message
+		}
+	}
+	return nil
 }
 
 // HandlePaymentFailed releases the inventory reservation, transitions the order

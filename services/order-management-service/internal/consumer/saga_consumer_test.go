@@ -25,6 +25,10 @@ func (f *fakeOrderRepo) UpdateStatus(_ context.Context, _ uuid.UUID, status, sag
 	return nil
 }
 
+func (f *fakeOrderRepo) SetItemReservationID(_ context.Context, _, _, _ uuid.UUID) error {
+	return nil
+}
+
 type fakeCompensator struct {
 	releasedOrderID string
 	refundedOrderID string
