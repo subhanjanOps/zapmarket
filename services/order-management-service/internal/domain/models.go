@@ -30,6 +30,7 @@ type Order struct {
 	UserID         uuid.UUID   `json:"user_id"`
 	IdempotencyKey uuid.UUID   `json:"idempotency_key"`
 	Status         OrderStatus `json:"status"`
+	SagaStatus     string      `json:"saga_status,omitempty"`
 	TotalAmount    int64       `json:"total_amount"`
 	Currency       string      `json:"currency"`
 	PaymentID      *uuid.UUID  `json:"payment_id,omitempty"`

@@ -10,8 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	pkgerrors "github.com/zapmarket/zapmarket/pkg/errors"
+	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/events"
 )
 
 // Per-call timeouts for downstream gRPC calls in the checkout saga.
@@ -38,6 +40,11 @@ type paymentGateway interface {
 // catalogGateway fetches authoritative SKU prices to prevent client-supplied price injection.
 type catalogGateway interface {
 	GetSKUPrice(ctx context.Context, skuID uuid.UUID) (int64, error)
+}
+
+// checkoutPublisher publishes the checkout.requested event to Kafka.
+type checkoutPublisher interface {
+	Publish(ctx context.Context, topic, key string, payload []byte) error
 }
 
 // OrderService defines the public interface for order operations.
@@ -74,6 +81,7 @@ type orderService struct {
 	payment   paymentGateway
 	catalog   catalogGateway
 	cache     contracts.OrderCache
+	publisher checkoutPublisher
 	logger    *slog.Logger
 }
 
@@ -83,9 +91,10 @@ func NewOrderService(
 	payment paymentGateway,
 	catalog catalogGateway,
 	cache contracts.OrderCache,
+	publisher checkoutPublisher,
 	logger *slog.Logger,
 ) OrderService {
-	return &orderService{repo: repo, inventory: inventory, payment: payment, catalog: catalog, cache: cache, logger: logger}
+	return &orderService{repo: repo, inventory: inventory, payment: payment, catalog: catalog, cache: cache, publisher: publisher, logger: logger}
 }
 
 func idempCacheKey(key uuid.UUID) string {
@@ -131,32 +140,44 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		domainItems[i] = &domain.OrderItem{SKUID: it.SKUID, SellerID: it.SellerID, Quantity: it.Quantity, UnitPrice: authPrice}
 	}
 
-	order := &domain.Order{UserID: userID, IdempotencyKey: idempotencyKey, Status: domain.OrderPending, TotalAmount: totalAmount, Currency: currency}
+	order := &domain.Order{
+		UserID:         userID,
+		IdempotencyKey: idempotencyKey,
+		Status:         domain.OrderPending,
+		SagaStatus:     "AWAITING_INVENTORY",
+		TotalAmount:    totalAmount,
+		Currency:       currency,
+	}
 	if err := s.repo.CreateOrder(ctx, order, domainItems); err != nil {
 		return nil, err
 	}
-	s.logger.Info("order created", "order_id", order.ID, "total", totalAmount)
+	s.logger.Info("order created — publishing checkout.requested", "order_id", order.ID, "total", totalAmount)
 
-	if err := s.reserveStockForOrder(ctx, order.ID, domainItems); err != nil {
-		return nil, err
+	// Build the saga event with all information downstream services need.
+	checkoutItems := make([]events.CheckoutItem, len(domainItems))
+	for i, it := range domainItems {
+		checkoutItems[i] = events.CheckoutItem{
+			SkuID:    it.SKUID.String(),
+			Quantity: it.Quantity,
+		}
 	}
-	order.Status = domain.OrderReserved
-	s.logger.Info("order reserved", "order_id", order.ID)
-
-	paymentCtx, paymentCancel := context.WithTimeout(ctx, paymentCallTimeout)
-	paymentID, err := s.finalisePayment(paymentCtx, order, domainItems, userID, currency, idempotencyKey, paymentMethodID)
-	paymentCancel()
+	evt := events.CheckoutRequestedEvent{
+		OrderID:         order.ID.String(),
+		UserID:          userID.String(),
+		Items:           checkoutItems,
+		RequestedAt:     time.Now(),
+		AmountCents:     totalAmount,
+		Currency:        currency,
+		PaymentMethodID: paymentMethodID,
+	}
+	b, err := json.Marshal(evt)
 	if err != nil {
-		return nil, err
+		return nil, pkgerrors.NewInternal("INTERNAL_ERROR", "failed to marshal checkout event", err)
+	}
+	if err := s.publisher.Publish(ctx, pkgkafka.TopicCheckoutRequested, order.ID.String(), b); err != nil {
+		return nil, pkgerrors.NewInternal("KAFKA_ERROR", "failed to publish checkout.requested", err)
 	}
 
-	order.Status = domain.OrderConfirmed
-	order.PaymentID = &paymentID
-	s.logger.Info("order confirmed", "order_id", order.ID, "payment_id", paymentID)
-
-	if b, marshalErr := json.Marshal(order); marshalErr == nil {
-		_ = s.cache.Set(ctx, idempCacheKey(idempotencyKey), b, idempotencyTTL)
-	}
 	return order, nil
 }
 

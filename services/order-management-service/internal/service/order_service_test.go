@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -92,6 +93,7 @@ func (m *mockOrderRepo) ListAll(ctx context.Context, params contracts.OrderListP
 	}
 	return nil, 0, nil
 }
+func (m *mockOrderRepo) UpdateStatus(_ context.Context, _, _, _ string) error { return nil }
 
 // ── mock clients ─────────────────────────────────────────────────────────────
 
@@ -142,6 +144,15 @@ func (m *mockCatalog) GetSKUPrice(ctx context.Context, skuID uuid.UUID) (int64, 
 	return 500, nil
 }
 
+// ── mock publisher ────────────────────────────────────────────────────────────
+
+type mockPublisher struct{ publishedTopic string }
+
+func (m *mockPublisher) Publish(_ context.Context, topic, _ string, _ []byte) error {
+	m.publishedTopic = topic
+	return nil
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func newTestRedis(t *testing.T) *redis.Client {
@@ -152,7 +163,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 
 func newTestService(t *testing.T, repo contracts.OrderRepository, inv inventoryGateway, pay paymentGateway, rdb *redis.Client) OrderService {
 	t.Helper()
-	return NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
+	return NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), &mockPublisher{}, slog.Default())
 }
 
 func defaultItems() []CheckoutItem {
@@ -169,21 +180,26 @@ func TestCheckout_HappyPath(t *testing.T) {
 	repo := &mockOrderRepo{}
 	inv := &mockInventory{}
 	pay := &mockPayment{}
+	pub := &mockPublisher{}
 
-	svc := newTestService(t, repo, inv, pay, rdb)
+	svc := NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), pub, slog.Default())
 
 	userID := uuid.New()
 	idemKey := uuid.New()
 
-	order, err := svc.Checkout(context.Background(), userID, idemKey, defaultItems(), "INR", "")
+	order, err := svc.Checkout(context.Background(), userID, idemKey, defaultItems(), "INR", "pm-123")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if order.Status != domain.OrderConfirmed {
-		t.Errorf("expected CONFIRMED, got %s", order.Status)
+	// Checkout now returns PENDING — the saga consumer confirms later.
+	if order.Status != domain.OrderPending {
+		t.Errorf("expected PENDING, got %s", order.Status)
 	}
-	if order.PaymentID == nil {
-		t.Error("expected PaymentID to be set")
+	if order.SagaStatus != "AWAITING_INVENTORY" {
+		t.Errorf("expected AWAITING_INVENTORY, got %s", order.SagaStatus)
+	}
+	if pub.publishedTopic != "checkout.requested" {
+		t.Errorf("expected checkout.requested published, got %q", pub.publishedTopic)
 	}
 }
 
@@ -215,100 +231,25 @@ func TestCheckout_ValidationErrors(t *testing.T) {
 	// unit_price is now fetched from catalog; client-supplied value is ignored
 }
 
-func TestCheckout_InventoryFailure(t *testing.T) {
+func TestCheckout_PublisherError_ReturnsError(t *testing.T) {
 	rdb := newTestRedis(t)
 	repo := &mockOrderRepo{}
-
-	releaseCalled := false
-	inv := &mockInventory{
-		reserveFn: func(ctx context.Context, skuID, orderID uuid.UUID, qty int) (uuid.UUID, bool, error) {
-			return uuid.Nil, false, nil // insufficient stock
-		},
-		releaseFn: func(ctx context.Context, reservationID uuid.UUID) error {
-			releaseCalled = true
-			return nil
-		},
-	}
+	inv := &mockInventory{}
 	pay := &mockPayment{}
-	svc := newTestService(t, repo, inv, pay, rdb)
+
+	failPub := &failingPublisher{}
+	svc := NewOrderService(repo, inv, pay, &mockCatalog{}, cache.NewRedisCache(rdb), failPub, slog.Default())
 
 	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR", "")
 	if err == nil {
-		t.Fatal("expected error from insufficient stock")
-	}
-	if !isConflictError(err, "INSUFFICIENT_STOCK") {
-		t.Errorf("expected INSUFFICIENT_STOCK conflict, got %v", err)
-	}
-	// No reservations were made, so release must not be called.
-	if releaseCalled {
-		t.Error("release should not be called when reserve returned false")
+		t.Fatal("expected error when publisher fails")
 	}
 }
 
-func TestCheckout_PaymentFailure_ReleasesReservations(t *testing.T) {
-	rdb := newTestRedis(t)
-	reservationID := uuid.New()
-	releaseCount := 0
+type failingPublisher struct{}
 
-	repo := &mockOrderRepo{}
-	inv := &mockInventory{
-		reserveFn: func(ctx context.Context, skuID, orderID uuid.UUID, qty int) (uuid.UUID, bool, error) {
-			return reservationID, true, nil
-		},
-		releaseFn: func(ctx context.Context, rid uuid.UUID) error {
-			if rid == reservationID {
-				releaseCount++
-			}
-			return nil
-		},
-	}
-	pay := &mockPayment{
-		chargeFn: func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, key uuid.UUID, pmID string) (uuid.UUID, string, error) {
-			return uuid.Nil, "", pkgerrors.NewInternal("PAYMENT_ERROR", "gateway timeout", nil)
-		},
-	}
-	svc := newTestService(t, repo, inv, pay, rdb)
-
-	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR", "")
-	if err == nil {
-		t.Fatal("expected payment error")
-	}
-	if releaseCount != 1 {
-		t.Errorf("expected 1 release call, got %d", releaseCount)
-	}
-}
-
-func TestCheckout_PaymentNotCaptured(t *testing.T) {
-	rdb := newTestRedis(t)
-	releaseCount := 0
-
-	repo := &mockOrderRepo{}
-	inv := &mockInventory{
-		reserveFn: func(ctx context.Context, skuID, orderID uuid.UUID, qty int) (uuid.UUID, bool, error) {
-			return uuid.New(), true, nil
-		},
-		releaseFn: func(ctx context.Context, rid uuid.UUID) error {
-			releaseCount++
-			return nil
-		},
-	}
-	pay := &mockPayment{
-		chargeFn: func(ctx context.Context, orderID, userID uuid.UUID, amount int64, currency string, key uuid.UUID, pmID string) (uuid.UUID, string, error) {
-			return uuid.New(), "FAILED", nil
-		},
-	}
-	svc := newTestService(t, repo, inv, pay, rdb)
-
-	_, err := svc.Checkout(context.Background(), uuid.New(), uuid.New(), defaultItems(), "INR", "")
-	if err == nil {
-		t.Fatal("expected payment-not-captured error")
-	}
-	if !isConflictError(err, "PAYMENT_FAILED") {
-		t.Errorf("expected PAYMENT_FAILED, got %v", err)
-	}
-	if releaseCount != 1 {
-		t.Errorf("expected reservation released, got %d release calls", releaseCount)
-	}
+func (f *failingPublisher) Publish(_ context.Context, _, _ string, _ []byte) error {
+	return fmt.Errorf("kafka unavailable")
 }
 
 func TestCheckout_IdempotencyReplay(t *testing.T) {

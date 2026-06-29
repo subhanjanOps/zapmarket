@@ -35,14 +35,16 @@ import (
 	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	"github.com/zapmarket/zapmarket/pkg/registry"
+	"github.com/zapmarket/zapmarket/pkg/relay"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
 	_ "github.com/zapmarket/zapmarket/services/order-management-service/docs"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/clients"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/consumer"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/domain/contracts"
 	httphandler "github.com/zapmarket/zapmarket/services/order-management-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/infrastructure/cache"
 	authmw "github.com/zapmarket/zapmarket/services/order-management-service/internal/middleware"
-	"github.com/zapmarket/zapmarket/pkg/relay"
+	"github.com/zapmarket/zapmarket/services/order-management-service/internal/publisher"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/repository"
 	"github.com/zapmarket/zapmarket/services/order-management-service/internal/service"
 )
@@ -125,6 +127,16 @@ func main() {
 	// ── Metrics ───────────────────────────────────────────────────────────────
 	m := pkgmetrics.New("order")
 
+	// ── Kafka producers ───────────────────────────────────────────────────────
+	checkoutProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicCheckoutRequested)
+	confirmedProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicOrderConfirmed)
+	cancelledProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, pkgkafka.TopicOrderCancelled)
+	multiPub := publisher.NewMulti(map[string]*pkgkafka.Producer{
+		pkgkafka.TopicCheckoutRequested: checkoutProducer,
+		pkgkafka.TopicOrderConfirmed:    confirmedProducer,
+		pkgkafka.TopicOrderCancelled:    cancelledProducer,
+	})
+
 	// ── Repository / Service / Handler ───────────────────────────────────────
 	repo := repository.NewOrderRepository(db)
 	var orderCache contracts.OrderCache
@@ -133,7 +145,7 @@ func main() {
 	} else {
 		orderCache = cache.NewNoopCache()
 	}
-	svc := service.NewOrderService(repo, inventoryClient, paymentClient, catalogClient, orderCache, log)
+	svc := service.NewOrderService(repo, inventoryClient, paymentClient, catalogClient, orderCache, multiPub, log)
 	handler := httphandler.NewOrderHandler(svc)
 	adminHandler := httphandler.NewAdminOrderHandler(svc)
 
@@ -188,6 +200,14 @@ func main() {
 	orderProducer := pkgkafka.NewProducer(cfg.KafkaBrokers, "orders")
 	outboxRelay := relay.New(db, orderProducer, "orders", log)
 
+	// ── Saga consumers ────────────────────────────────────────────────────────
+	sagaComp := clients.NewSagaCompensator(repo, inventoryClient, log)
+	sagaCons := consumer.NewSagaConsumer(repo, sagaComp, multiPub, log)
+
+	paymentCapturedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentCaptured, "order-saga")
+	paymentFailedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentFailed, "order-saga")
+	inventoryFailedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReservationFailed, "order-saga")
+
 	// ── Start / shutdown ──────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -195,6 +215,25 @@ func main() {
 	relayCtx, relayCancel := context.WithCancel(context.Background())
 	go outboxRelay.Run(relayCtx)
 	log.Info("outbox relay started", "brokers", cfg.KafkaBrokers)
+
+	go func() {
+		log.Info("starting saga consumer", "topic", pkgkafka.TopicPaymentCaptured)
+		if err := paymentCapturedConsumer.Run(relayCtx, sagaCons.HandlePaymentCaptured); err != nil {
+			log.Error("saga consumer exited", "topic", pkgkafka.TopicPaymentCaptured, "error", err)
+		}
+	}()
+	go func() {
+		log.Info("starting saga consumer", "topic", pkgkafka.TopicPaymentFailed)
+		if err := paymentFailedConsumer.Run(relayCtx, sagaCons.HandlePaymentFailed); err != nil {
+			log.Error("saga consumer exited", "topic", pkgkafka.TopicPaymentFailed, "error", err)
+		}
+	}()
+	go func() {
+		log.Info("starting saga consumer", "topic", pkgkafka.TopicInventoryReservationFailed)
+		if err := inventoryFailedConsumer.Run(relayCtx, sagaCons.HandleInventoryFailed); err != nil {
+			log.Error("saga consumer exited", "topic", pkgkafka.TopicInventoryReservationFailed, "error", err)
+		}
+	}()
 
 	instanceID := uuid.New().String()
 	addr := fmt.Sprintf("http://zapmarket-order-management-service:%d", cfg.HTTPPort)
@@ -223,6 +262,12 @@ func main() {
 		log.Error("HTTP server shutdown error", "error", err)
 	}
 	_ = orderProducer.Close()
+	_ = checkoutProducer.Close()
+	_ = confirmedProducer.Close()
+	_ = cancelledProducer.Close()
+	_ = paymentCapturedConsumer.Close()
+	_ = paymentFailedConsumer.Close()
+	_ = inventoryFailedConsumer.Close()
 
 	log.Info("server stopped")
 }

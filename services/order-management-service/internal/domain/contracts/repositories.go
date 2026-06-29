@@ -67,4 +67,11 @@ type OrderRepository interface {
 
 	// ListAll returns all orders with optional filters — admin use only.
 	ListAll(ctx context.Context, params OrderListParams) ([]*domain.Order, int64, error)
+
+	// UpdateStatus sets the order status and saga_status columns directly.
+	// Used by the saga consumer to confirm or cancel an order based on
+	// downstream Kafka events (payment.captured / payment.failed / inventory.reservation_failed).
+	// Unlike MarkConfirmed/MarkCancelled it does not write an outbox row — the
+	// saga consumer publishes the resulting event directly to Kafka.
+	UpdateStatus(ctx context.Context, orderID, status, sagaStatus string) error
 }

@@ -127,12 +127,17 @@ func pageArgs(p contracts.OrderPageParams) (limit, offset int) {
 func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order, items []*domain.OrderItem) error {
 	return database.WithTransaction(ctx, r.db, func(tx *sql.Tx) error {
 		id := uuid.New()
+		sagaStatus := order.SagaStatus
+		if sagaStatus == "" {
+			sagaStatus = "AWAITING_INVENTORY"
+		}
 		err := tx.QueryRowContext(ctx, `
-			INSERT INTO orders (id, user_id, idempotency_key, status, total_amount, currency)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO orders (id, user_id, idempotency_key, status, saga_status, total_amount, currency)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			RETURNING created_at, updated_at
-		`, id, order.UserID, order.IdempotencyKey, order.Status, order.TotalAmount, order.Currency).
+		`, id, order.UserID, order.IdempotencyKey, order.Status, sagaStatus, order.TotalAmount, order.Currency).
 			Scan(&order.CreatedAt, &order.UpdatedAt)
+		order.SagaStatus = sagaStatus
 		if err != nil {
 			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to create order", err)
 		}
@@ -220,6 +225,23 @@ func (r *OrderRepository) MarkCancelled(ctx context.Context, orderID uuid.UUID, 
 	})
 }
 
+// UpdateStatus sets the order status and saga_status columns directly.
+// Used by the saga consumer after receiving payment/inventory Kafka events.
+// No outbox row is written — the consumer publishes events to Kafka directly.
+func (r *OrderRepository) UpdateStatus(ctx context.Context, orderID, status, sagaStatus string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE orders SET status = $2, saga_status = $3, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`, orderID, status, sagaStatus)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to update order status", err)
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
+	}
+	return nil
+}
+
 func insertOutboxEvent(ctx context.Context, tx *sql.Tx, aggregateID uuid.UUID, aggregateType, eventType string, payload []byte) error {
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO outbox (aggregate_id, aggregate_type, event_type, payload)
@@ -232,14 +254,14 @@ func insertOutboxEvent(ctx context.Context, tx *sql.Tx, aggregateID uuid.UUID, a
 }
 
 const orderSelectQuery = `
-	SELECT id, user_id, idempotency_key, status, total_amount, currency, payment_id, created_at, updated_at
+	SELECT id, user_id, idempotency_key, status, saga_status, total_amount, currency, payment_id, created_at, updated_at
 	FROM orders
 `
 
 func scanOrder(row *sql.Row) (*domain.Order, error) {
 	o := &domain.Order{}
 	err := row.Scan(
-		&o.ID, &o.UserID, &o.IdempotencyKey, &o.Status,
+		&o.ID, &o.UserID, &o.IdempotencyKey, &o.Status, &o.SagaStatus,
 		&o.TotalAmount, &o.Currency, &o.PaymentID,
 		&o.CreatedAt, &o.UpdatedAt,
 	)
@@ -292,7 +314,7 @@ func (r *OrderRepository) ListAll(ctx context.Context, params contracts.OrderLis
 	}
 	args = append(args, limit, params.Offset)
 	query := fmt.Sprintf(
-		"SELECT id, user_id, idempotency_key, status, total_amount, currency, payment_id, created_at, updated_at FROM orders %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d",
+		"SELECT id, user_id, idempotency_key, status, saga_status, total_amount, currency, payment_id, created_at, updated_at FROM orders %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d",
 		where, i, i+1,
 	)
 
@@ -316,7 +338,7 @@ func (r *OrderRepository) ListAll(ctx context.Context, params contracts.OrderLis
 func scanOrderRow(rows *sql.Rows) (*domain.Order, error) {
 	o := &domain.Order{}
 	err := rows.Scan(
-		&o.ID, &o.UserID, &o.IdempotencyKey, &o.Status,
+		&o.ID, &o.UserID, &o.IdempotencyKey, &o.Status, &o.SagaStatus,
 		&o.TotalAmount, &o.Currency, &o.PaymentID,
 		&o.CreatedAt, &o.UpdatedAt,
 	)
