@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -114,7 +115,10 @@ func (c *CheckoutConsumer) publishReserved(ctx context.Context, orderID string, 
 		Reservations: refs,
 		ReservedAt:   time.Now().UTC(),
 	}
-	b, _ := json.Marshal(out)
+	b, err := json.Marshal(out)
+	if err != nil {
+		return fmt.Errorf("marshal event: %w", err)
+	}
 	return c.reservedPub.Publish(ctx, pkgkafka.Message{
 		Key:   []byte(orderID),
 		Value: b,
@@ -127,7 +131,10 @@ func (c *CheckoutConsumer) publishFailure(ctx context.Context, orderID, reason s
 		Reason:   reason,
 		FailedAt: time.Now().UTC(),
 	}
-	b, _ := json.Marshal(out)
+	b, err := json.Marshal(out)
+	if err != nil {
+		return fmt.Errorf("marshal event: %w", err)
+	}
 	return c.reserveFailPub.Publish(ctx, pkgkafka.Message{
 		Key:   []byte(orderID),
 		Value: b,

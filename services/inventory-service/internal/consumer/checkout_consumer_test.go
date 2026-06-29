@@ -120,28 +120,12 @@ func TestCheckoutConsumer_ReserveFailure_PublishesFailedAndCompensates(t *testin
 	firstSKU := uuid.New()
 	secondSKU := uuid.New()
 
-	callCount := 0
-	svc := &fakeInventoryService{}
-	// Override via a custom struct that counts calls.
-	type countingSvc struct {
-		fakeInventoryService
-		firstRes *domain.Reservation
-	}
-
-	realSvc := &struct {
-		releasedIDs []uuid.UUID
-		firstRes    *domain.Reservation
-	}{}
-
 	svc2 := &fakeInventorySvcPartial{
 		firstSKU: firstSKU,
 		firstRes: &domain.Reservation{ID: uuid.New(), SKUID: firstSKU},
 		failOn:   secondSKU,
 		failErr:  errors.New("insufficient stock"),
 	}
-	_ = callCount
-	_ = svc
-	_ = realSvc
 
 	reservedPub := &fakePublisher{}
 	failPub := &fakePublisher{}
