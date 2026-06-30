@@ -16,6 +16,7 @@ require (
 	github.com/zapmarket/zapmarket/pkg/errors v0.0.0
 	github.com/zapmarket/zapmarket/pkg/grpcx v0.0.0
 	github.com/zapmarket/zapmarket/pkg/httpx v0.0.0
+	github.com/zapmarket/zapmarket/pkg/kafka v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
 	github.com/zapmarket/zapmarket/pkg/metrics v0.0.0-00010101000000-000000000000
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
@@ -60,11 +61,13 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oapi-codegen/runtime v1.1.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
+	github.com/segmentio/kafka-go v0.4.47 // indirect
 	github.com/sony/gobreaker v0.5.0 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
@@ -96,6 +99,7 @@ replace (
 	github.com/zapmarket/zapmarket/pkg/errors => ../../pkg/errors
 	github.com/zapmarket/zapmarket/pkg/grpcx => ../../pkg/grpcx
 	github.com/zapmarket/zapmarket/pkg/httpx => ../../pkg/httpx
+	github.com/zapmarket/zapmarket/pkg/kafka => ../../pkg/kafka
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
 	github.com/zapmarket/zapmarket/pkg/metrics => ../../pkg/metrics
 	github.com/zapmarket/zapmarket/pkg/migrate => ../../pkg/migrate
