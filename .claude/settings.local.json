@@ -213,7 +213,8 @@
       "Bash(py *)",
       "Bash(go test *)",
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\" -Force | Select-Object Name, LastWriteTime; Write-Host \"---\"; \\(Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\" -Recurse -Force | Measure-Object -Property Length -Sum\\).Sum / 1MB | ForEach-Object { \"$\\([math]::Round\\($_, 1\\)\\) MB total\" })",
-      "PowerShell(\\(Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\\\\cache\" -Recurse -Force | Measure-Object -Property Length -Sum\\).Sum / 1MB | ForEach-Object { \"$\\([math]::Round\\($_, 1\\)\\) MB\" }; Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\\\\cache\" -Force | Select-Object Name, LastWriteTime)"
+      "PowerShell(\\(Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\\\\cache\" -Recurse -Force | Measure-Object -Property Length -Sum\\).Sum / 1MB | ForEach-Object { \"$\\([math]::Round\\($_, 1\\)\\) MB\" }; Get-ChildItem \"C:\\\\Users\\\\subha\\\\.claude\\\\plugins\\\\cache\" -Force | Select-Object Name, LastWriteTime)",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; head -5 {}')"
     ]
   },
   "enableAllProjectMcpServers": true,
