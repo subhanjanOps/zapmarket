@@ -11,6 +11,7 @@ type PaymentStatus string
 
 const (
 	PaymentPending           PaymentStatus = "PENDING"
+	PaymentPendingCOD        PaymentStatus = "PENDING_COD"
 	PaymentAuthorised        PaymentStatus = "AUTHORISED"
 	PaymentCaptured          PaymentStatus = "CAPTURED"
 	PaymentFailed            PaymentStatus = "FAILED"

@@ -18,6 +18,8 @@ type Coupon struct {
 	MaxUsesTotal   int        // 0 = unlimited
 	MaxUsesPerUser int        // 0 = unlimited
 	ExpiresAt      *time.Time
+	StartsAt       *time.Time
+	EndsAt         *time.Time
 	IsActive       bool
 	CreatedAt      time.Time
 }

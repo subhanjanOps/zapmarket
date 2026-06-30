@@ -365,6 +365,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	// Login user
 	user, refreshToken, err := h.authSvc.LoginPassword(r.Context(), req.Email, req.Password)
 	if err != nil {
+		if mfaErr, ok := MFARequiredFromError(err); ok {
+			h.writeResponse(w, http.StatusOK, MFALoginResponse{
+				Status:          "MFA_REQUIRED",
+				MFASessionToken: mfaErr.MFASessionToken,
+			})
+			return
+		}
 		pkgerrors.HandleHTTP(w, err)
 		return
 	}

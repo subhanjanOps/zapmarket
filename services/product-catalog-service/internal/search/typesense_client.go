@@ -3,16 +3,18 @@ package search
 import "context"
 
 type SearchDoc struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	CategoryID   string `json:"category_id"`
-	CategoryName string `json:"category_name"`
-	Description  string `json:"description"`
-	PriceCents   int64  `json:"price_cents"`
-	Currency     string `json:"currency"`
-	SellerID     string `json:"seller_id"`
-	Status       string `json:"status"`
-	ImageURL     string `json:"image_url"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	CategoryID   string  `json:"category_id"`
+	CategoryName string  `json:"category_name"`
+	Description  string  `json:"description"`
+	PriceCents   int64   `json:"price_cents"`
+	Currency     string  `json:"currency"`
+	SellerID     string  `json:"seller_id"`
+	Status       string  `json:"status"`
+	ImageURL     string  `json:"image_url"`
+	SalesRank    int32   `json:"sales_rank"`
+	AvgRating    float64 `json:"avg_rating"`
 }
 
 type SearchQuery struct {

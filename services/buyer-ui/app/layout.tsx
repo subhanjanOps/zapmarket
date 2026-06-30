@@ -9,6 +9,7 @@ import VerificationBanner from "@/components/VerificationBanner";
 import { decodeJwtUser } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Toaster } from "sonner";
+import { Providers } from "./providers";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -32,12 +33,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={roboto.variable}>
       <body className="min-h-screen flex flex-col" style={{ fontFamily: "var(--font-roboto), system-ui, sans-serif" }}>
-        <AnnouncementBar />
-        {showVerificationBanner && <VerificationBanner email={raw!.email!} />}
-        <Navbar user={user} />
-        <main className="flex-1">{children}</main>
-        <Footer />
-        <Toaster position="bottom-right" richColors />
+        <Providers>
+          <AnnouncementBar />
+          {showVerificationBanner && <VerificationBanner email={raw!.email!} />}
+          <Navbar user={user} />
+          <main className="flex-1">{children}</main>
+          <Footer />
+          <Toaster position="bottom-right" richColors />
+        </Providers>
       </body>
     </html>
   );

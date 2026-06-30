@@ -222,6 +222,56 @@ func (h *AdminHandler) ListSellers(w http.ResponseWriter, r *http.Request) {
 	httpx.Paginated(w, http.StatusOK, resp, total, page, limit)
 }
 
+// ApproveSellerKYC handles PUT /v1/admin/sellers/{id}/approve
+func (h *AdminHandler) ApproveSellerKYC(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "INVALID_ID", "seller id must be a valid UUID")
+		return
+	}
+	adminUser, err := h.authSvc.ValidateAccessToken(r.Context(), extractBearer(r))
+	if err != nil || adminUser == nil {
+		httpx.Error(w, http.StatusUnauthorized, "INVALID_TOKEN", "unauthorized")
+		return
+	}
+	if err := h.adminSvc.ApproveSellerKYC(r.Context(), id, adminUser.ID); err != nil {
+		pkgerrors.HandleHTTP(w, err)
+		return
+	}
+	httpx.Success(w, http.StatusOK, map[string]string{"status": "APPROVED"})
+}
+
+// RejectSellerKYC handles PUT /v1/admin/sellers/{id}/reject
+func (h *AdminHandler) RejectSellerKYC(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "INVALID_ID", "seller id must be a valid UUID")
+		return
+	}
+	adminUser, err := h.authSvc.ValidateAccessToken(r.Context(), extractBearer(r))
+	if err != nil || adminUser == nil {
+		httpx.Error(w, http.StatusUnauthorized, "INVALID_TOKEN", "unauthorized")
+		return
+	}
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = adminDecodeJSON(r, &body)
+	if err := h.adminSvc.RejectSellerKYC(r.Context(), id, adminUser.ID, body.Reason); err != nil {
+		pkgerrors.HandleHTTP(w, err)
+		return
+	}
+	httpx.Success(w, http.StatusOK, map[string]string{"status": "REJECTED"})
+}
+
+func extractBearer(r *http.Request) string {
+	parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[1])
+	}
+	return ""
+}
+
 // UpdateSellerStatus handles PATCH /v1/admin/sellers/{id}/status
 func (h *AdminHandler) UpdateSellerStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
@@ -238,9 +288,9 @@ func (h *AdminHandler) UpdateSellerStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	allowed := map[string]struct{}{"PENDING": {}, "APPROVED": {}, "SUSPENDED": {}}
+	allowed := map[string]struct{}{"PENDING": {}, "APPROVED": {}, "REJECTED": {}, "SUSPENDED": {}}
 	if _, ok := allowed[body.Status]; !ok {
-		httpx.Error(w, http.StatusBadRequest, "INVALID_STATUS", "status must be PENDING, APPROVED, or SUSPENDED")
+		httpx.Error(w, http.StatusBadRequest, "INVALID_STATUS", "status must be PENDING, APPROVED, REJECTED, or SUSPENDED")
 		return
 	}
 

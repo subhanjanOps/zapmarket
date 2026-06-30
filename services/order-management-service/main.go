@@ -137,7 +137,14 @@ func main() {
 	} else {
 		orderCache = cache.NewNoopCache()
 	}
-	svc := service.NewOrderService(repo, inventoryClient, catalogClient, orderCache, log)
+	promotionsBaseURL := os.Getenv("PROMOTIONS_SERVICE_URL")
+	if promotionsBaseURL == "" {
+		promotionsBaseURL = "http://promotions-service:8091"
+	}
+	rawPromotionsClient := clients.NewPromotionsClient(promotionsBaseURL)
+	// Wrap the client in a thin adapter that maps to the service's interface types.
+	promotionsAdapter := &promotionsClientAdapter{raw: rawPromotionsClient}
+	svc := service.NewOrderService(repo, inventoryClient, catalogClient, promotionsAdapter, orderCache, log)
 	handler := httphandler.NewOrderHandler(svc)
 	adminHandler := httphandler.NewAdminOrderHandlerWithDB(svc, db)
 
@@ -202,11 +209,15 @@ func main() {
 	// ── Saga consumers ────────────────────────────────────────────────────────
 	sagaComp := clients.NewSagaCompensator(repo, inventoryClient, log)
 	sagaCons := consumer.NewSagaConsumer(repo, sagaComp, multiPub, log)
+	shipmentCons := consumer.NewShipmentConsumer(repo, log)
+	reservationCons := consumer.NewReservationConsumer(repo, log)
 
 	paymentCapturedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentCaptured, "order-saga")
 	paymentFailedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentFailed, "order-saga")
 	inventoryFailedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReservationFailed, "order-saga")
 	inventoryReservedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReserved, "order-saga")
+	shipmentUndeliveredConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicShipmentUndelivered, "order-logistics")
+	reservationExpiredConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicReservationExpired, "order-expiry")
 
 	// ── Start / shutdown ──────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
@@ -238,6 +249,18 @@ func main() {
 		log.Info("starting saga consumer", "topic", pkgkafka.TopicInventoryReserved)
 		if err := inventoryReservedConsumer.Run(relayCtx, sagaCons.HandleInventoryReserved); err != nil {
 			log.Error("saga consumer exited", "topic", pkgkafka.TopicInventoryReserved, "error", err)
+		}
+	}()
+	go func() {
+		log.Info("starting shipment consumer", "topic", pkgkafka.TopicShipmentUndelivered)
+		if err := shipmentUndeliveredConsumer.Run(relayCtx, shipmentCons.Handle); err != nil {
+			log.Error("shipment consumer exited", "topic", pkgkafka.TopicShipmentUndelivered, "error", err)
+		}
+	}()
+	go func() {
+		log.Info("starting reservation expiry consumer", "topic", pkgkafka.TopicReservationExpired)
+		if err := reservationExpiredConsumer.Run(relayCtx, reservationCons.Handle); err != nil {
+			log.Error("reservation expiry consumer exited", "topic", pkgkafka.TopicReservationExpired, "error", err)
 		}
 	}()
 
@@ -274,6 +297,27 @@ func main() {
 	_ = paymentFailedConsumer.Close()
 	_ = inventoryFailedConsumer.Close()
 	_ = inventoryReservedConsumer.Close()
+	_ = shipmentUndeliveredConsumer.Close()
+	_ = reservationExpiredConsumer.Close()
 
 	log.Info("server stopped")
+}
+
+// promotionsClientAdapter adapts clients.PromotionsClient to service.promotionsGateway.
+type promotionsClientAdapter struct{ raw *clients.PromotionsClient }
+
+func (a *promotionsClientAdapter) ValidateCoupon(ctx context.Context, req service.ValidateCouponRequest) (*service.ValidateCouponResult, error) {
+	r, err := a.raw.ValidateCoupon(ctx, clients.ValidateCouponRequest{
+		Code:           req.Code,
+		UserID:         req.UserID,
+		CartTotalPaise: req.CartTotalPaise,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &service.ValidateCouponResult{CouponID: r.CouponID, DiscountPaise: r.DiscountPaise, FinalPaise: r.FinalPaise}, nil
+}
+
+func (a *promotionsClientAdapter) RedeemCoupon(ctx context.Context, couponID, userID, orderID string) error {
+	return a.raw.RedeemCoupon(ctx, couponID, userID, orderID)
 }

@@ -14,6 +14,10 @@ func (f *fakeCarrierClient) CreateShipment(_ context.Context, _ usecases.Shipmen
 	return "AWB123", "Delhivery", "https://track.example.com/AWB123", nil
 }
 
+func (f *fakeCarrierClient) CreateReversePickup(_ context.Context, _, _ string) (awb, carrier, trackingURL string, err error) {
+	return "AWB123-R", "Delhivery", "https://track.example.com/AWB123-R", nil
+}
+
 type fakeShipmentRepo struct{ saved bool }
 
 func (f *fakeShipmentRepo) Save(_ context.Context, _ *domain.Shipment) error {

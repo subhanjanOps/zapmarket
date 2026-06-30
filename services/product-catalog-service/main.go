@@ -41,7 +41,9 @@ import (
 	"github.com/zapmarket/zapmarket/pkg/registry"
 	"github.com/zapmarket/zapmarket/pkg/storage"
 	"github.com/zapmarket/zapmarket/pkg/swaggerx"
+	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	_ "github.com/zapmarket/zapmarket/services/product-catalog-service/docs"
+	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/consumer"
 	grpchandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/grpc"
 	httpHandler "github.com/zapmarket/zapmarket/services/product-catalog-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/services/product-catalog-service/internal/middleware"
@@ -167,6 +169,9 @@ func main() {
 			r.Get("/products/search", searchH.Search)
 		}
 
+		r.Get("/products/trending", productH.GetTrending)
+		r.Get("/products/for-you", productH.GetForYou)
+		r.Get("/products/{id}/recommendations", productH.GetRecommendations)
 		r.With(authMW.AuthenticateOptional).Get("/products", productH.GetProductList)
 		r.Get("/products/slug/{slug}", productH.GetProductBySlug)
 		r.Get("/products/{id}", productH.GetProductByID)
@@ -236,12 +241,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Order confirmed consumer (updates sales_rank) ─────────────────────────
+	orderCons := consumer.NewOrderConsumer(productRepo, log)
+	orderConfirmedKafka := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicOrderConfirmed, "catalog-sales-rank")
+
 	// ── Start servers ──────────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	svcCtx, svcCancel := context.WithCancel(context.Background())
 	defer svcCancel()
+
+	go func() {
+		if err := orderConfirmedKafka.Run(svcCtx, orderCons.Handle); err != nil {
+			log.Error("order confirmed consumer exited", "error", err)
+		}
+	}()
+	log.Info("order confirmed consumer started")
 	if rdb != nil {
 		instanceID := uuid.New().String()
 		addr := fmt.Sprintf("http://zapmarket-product-catalog-service:%d", cfg.HTTPPort)
@@ -274,6 +290,7 @@ func main() {
 		log.Error("HTTP server shutdown error", "error", err)
 	}
 	grpcServer.GracefulStop()
+	_ = orderConfirmedKafka.Close()
 
 	log.Info("servers stopped")
 }

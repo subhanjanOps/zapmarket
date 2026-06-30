@@ -47,6 +47,7 @@ type checkoutRequest struct {
 	IdempotencyKey  string                 `json:"idempotency_key"`
 	Currency        string                 `json:"currency,omitempty"`
 	PaymentMethodID string                 `json:"payment_method_id,omitempty"`
+	CouponCode      string                 `json:"coupon_code,omitempty"`
 	ShippingAddress shippingAddressRequest `json:"shipping_address"`
 }
 
@@ -141,7 +142,19 @@ func (h *OrderHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		items[i] = item
 	}
 
-	order, err := h.svc.Checkout(r.Context(), userID, idempotencyKey, items, req.Currency, req.PaymentMethodID)
+	var deliveryAddr *service.DeliveryAddress
+	if req.ShippingAddress.FullName != "" || req.ShippingAddress.AddressLine1 != "" {
+		deliveryAddr = &service.DeliveryAddress{
+			FullName:     req.ShippingAddress.FullName,
+			Phone:        req.ShippingAddress.Phone,
+			AddressLine1: req.ShippingAddress.AddressLine1,
+			City:         req.ShippingAddress.City,
+			Pincode:      req.ShippingAddress.Pincode,
+			Country:      req.ShippingAddress.Country,
+		}
+	}
+	opts := service.CheckoutOptions{CouponCode: req.CouponCode, DeliveryAddress: deliveryAddr}
+	order, err := h.svc.Checkout(r.Context(), userID, idempotencyKey, items, req.Currency, req.PaymentMethodID, opts)
 	if err != nil {
 		HandleError(w, err)
 		return

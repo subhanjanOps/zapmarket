@@ -75,11 +75,15 @@ async function fetchProductsWithImages(query: string) {
 }
 
 export default async function HomePage() {
-  const [campaigns, categories, newArrivals, deals] = await Promise.all([
+  const [campaigns, categories, newArrivals, deals, trending] = await Promise.all([
     fetchCampaigns(),
     fetchCategories(),
     fetchProductsWithImages("limit=8&sort_by=created_at&sort_order=desc"),
     fetchProductsWithImages("limit=4&sort_by=base_price&sort_order=asc"),
+    fetch(`${GW}/v1/products/trending?limit=8`, { next: { revalidate: 900 } })
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((d) => (d.data ?? d ?? []) as Record<string, unknown>[])
+      .catch(() => [] as Record<string, unknown>[]),
   ]);
 
   const posts = getAllPosts().slice(0, 3);
@@ -112,6 +116,25 @@ export default async function HomePage() {
                   product={toProductCardProps(p)}
                   priority={i < 2}
                 />
+              </MotionChild>
+            ))}
+          </MotionWrapper>
+        </section>
+      )}
+
+      {/* Trending / For You */}
+      {trending.length > 0 && (
+        <section className="container-zap py-8 sm:py-10">
+          <SectionHeader
+            title="Trending Now"
+            subtitle="What everyone's buying this week"
+            href="/products"
+            className="mb-6 sm:mb-8"
+          />
+          <MotionWrapper stagger className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {trending.slice(0, 8).map((p) => (
+              <MotionChild key={p.id as string}>
+                <ProductCard product={toProductCardProps(p)} />
               </MotionChild>
             ))}
           </MotionWrapper>

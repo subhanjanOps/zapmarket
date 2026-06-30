@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -67,6 +68,10 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	user := authctx.UserFromContext(r.Context())
 	if user == nil {
 		ErrorResponse(w, http.StatusUnauthorized, "UNAUTHENTICATED", "authentication required")
+		return
+	}
+	if user.Role == "seller" && user.SellerStatus != "APPROVED" {
+		ErrorResponse(w, http.StatusForbidden, "SELLER_NOT_APPROVED", "seller account is not yet approved")
 		return
 	}
 	sellerID, err := uuid.Parse(user.Id)
@@ -392,4 +397,61 @@ func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SuccessResponse(w, http.StatusNoContent, nil)
+}
+
+// GetTrending returns up to limit=20 products by sales rank.
+func (h *ProductHandler) GetTrending(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	products, err := h.productService.GetTrending(r.Context(), limit)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+	SuccessResponse(w, http.StatusOK, products)
+}
+
+func (h *ProductHandler) GetRecommendations(w http.ResponseWriter, r *http.Request) {
+	productID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "INVALID_ID", "invalid product id")
+		return
+	}
+	limit := 8
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 20 {
+			limit = n
+		}
+	}
+	products, err := h.productService.GetRecommendations(r.Context(), productID, limit)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+	SuccessResponse(w, http.StatusOK, products)
+}
+
+func (h *ProductHandler) GetForYou(w http.ResponseWriter, r *http.Request) {
+	var categoryIDs []uuid.UUID
+	for _, raw := range r.URL.Query()["category_id"] {
+		if id, err := uuid.Parse(raw); err == nil {
+			categoryIDs = append(categoryIDs, id)
+		}
+	}
+	limit := 20
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 50 {
+			limit = n
+		}
+	}
+	products, err := h.productService.GetForYou(r.Context(), categoryIDs, limit)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+	SuccessResponse(w, http.StatusOK, products)
 }

@@ -29,6 +29,7 @@ type User struct {
 	IsVerified    bool                   `protobuf:"varint,6,opt,name=is_verified,json=isVerified,proto3" json:"is_verified,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     string                 `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	SellerStatus  string                 `protobuf:"bytes,9,opt,name=seller_status,json=sellerStatus,proto3" json:"seller_status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,6 +115,13 @@ func (x *User) GetCreatedAt() string {
 func (x *User) GetUpdatedAt() string {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *User) GetSellerStatus() string {
+	if x != nil {
+		return x.SellerStatus
 	}
 	return ""
 }

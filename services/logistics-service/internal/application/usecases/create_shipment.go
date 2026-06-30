@@ -17,6 +17,7 @@ type ShipmentRequest struct {
 
 type carrierClient interface {
 	CreateShipment(ctx context.Context, req ShipmentRequest) (awb, carrier, trackingURL string, err error)
+	CreateReversePickup(ctx context.Context, parentAWB, orderID string) (awb, carrier, trackingURL string, err error)
 }
 
 type shipmentSaver interface {

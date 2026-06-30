@@ -1,0 +1,120 @@
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+spec:
+  replicas: {{ $svc.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.global.image.registry }}/{{ $svc.image }}:{{ $svc.tag }}"
+          imagePullPolicy: {{ $.Values.global.image.pullPolicy }}
+          ports:
+            - containerPort: {{ $svc.httpPort }}
+              name: http
+            {{- if $svc.grpcPort }}
+            - containerPort: {{ $svc.grpcPort }}
+              name: grpc
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}-config
+            - secretRef:
+                name: {{ $name }}-secret
+                optional: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ $svc.httpPort }}
+      targetPort: http
+      name: http
+    {{- if $svc.grpcPort }}
+    - port: {{ $svc.grpcPort }}
+      targetPort: grpc
+      name: grpc
+    {{- end }}
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ $svc.hpa.minReplicas | default 2 }}
+  maxReplicas: {{ $svc.hpa.maxReplicas | default 10 }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $svc.hpa.cpuUtilization | default 70 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-config
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+data:
+  DB_HOST: {{ $.Values.global.env.DB_HOST | quote }}
+  DB_PORT: {{ $.Values.global.env.DB_PORT | quote }}
+  DB_USER: {{ $.Values.global.env.DB_USER | quote }}
+  {{- if $svc.dbName }}
+  DB_NAME: {{ $svc.dbName | quote }}
+  {{- end }}
+  KAFKA_BROKERS: {{ $.Values.global.env.KAFKA_BROKERS | quote }}
+  REDIS_URL: {{ $.Values.global.env.REDIS_URL | quote }}
+  HTTP_PORT: {{ $svc.httpPort | quote }}
+  {{- if $svc.grpcPort }}
+  GRPC_PORT: {{ $svc.grpcPort | quote }}
+  {{- end }}
+  MIGRATE_ON_BOOT: {{ $.Values.global.env.MIGRATE_ON_BOOT | quote }}
+  APP_ENV: {{ $.Values.global.env.APP_ENV | quote }}
+{{- end }}
+{{- end }}

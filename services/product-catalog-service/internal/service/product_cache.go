@@ -132,3 +132,30 @@ func (c *cachedProductService) DeleteProduct(ctx context.Context, id uuid.UUID) 
 	_ = c.rdb.Del(ctx, keys...).Err()
 	return nil
 }
+
+func (c *cachedProductService) GetTrending(ctx context.Context, limit int) ([]*domain.Product, error) {
+	const trendingCacheTTL = 15 * time.Minute
+	key := fmt.Sprintf("product:trending:%d", limit)
+	if b, err := c.rdb.Get(ctx, key).Bytes(); err == nil {
+		var products []*domain.Product
+		if json.Unmarshal(b, &products) == nil {
+			return products, nil
+		}
+	}
+	products, err := c.inner.GetTrending(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	if b, err := json.Marshal(products); err == nil {
+		_ = c.rdb.Set(ctx, key, b, trendingCacheTTL).Err()
+	}
+	return products, nil
+}
+
+func (c *cachedProductService) GetRecommendations(ctx context.Context, productID uuid.UUID, limit int) ([]*domain.Product, error) {
+	return c.inner.GetRecommendations(ctx, productID, limit)
+}
+
+func (c *cachedProductService) GetForYou(ctx context.Context, categoryIDs []uuid.UUID, limit int) ([]*domain.Product, error) {
+	return c.inner.GetForYou(ctx, categoryIDs, limit)
+}

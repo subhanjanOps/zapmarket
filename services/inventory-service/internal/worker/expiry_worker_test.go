@@ -31,6 +31,10 @@ func (f *fakeRepo) ReleaseStock(_ context.Context, id uuid.UUID) (uuid.UUID, int
 	return uuid.New(), 1, nil
 }
 
+func (f *fakeRepo) WriteReservationExpiredEvent(_ context.Context, _, _ uuid.UUID) error {
+	return nil
+}
+
 func (f *fakeRepo) getReleased() []uuid.UUID {
 	f.mu.Lock()
 	defer f.mu.Unlock()

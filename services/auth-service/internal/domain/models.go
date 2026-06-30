@@ -30,10 +30,15 @@ type User struct {
 	Gender           *string
 	PfpURL           *string
 	TermsAcceptedAt  *time.Time
-	RegistrationStep int // 0–4; login blocked until 4
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	DeletedAt        *time.Time
+	RegistrationStep      int // 0–4; login blocked until 4
+	FailedLoginAttempts   int
+	LockedUntil           *time.Time
+	TOTPSecret            *string
+	TOTPEnabled           bool
+	TOTPEnrolledAt        *time.Time
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	DeletedAt             *time.Time
 }
 
 // OAuthProvider represents OAuth provider types

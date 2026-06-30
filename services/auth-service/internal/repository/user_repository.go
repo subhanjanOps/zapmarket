@@ -223,7 +223,8 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userID uuid.UUID) error
 // ── Admin methods ─────────────────────────────────────────────────────────────
 
 const userSelectCols = `id, email, phone, password_hash, full_name, role, is_verified, seller_status,
-	phone_verified, registration_step, dob, gender, pfp_url, terms_accepted_at, created_at, updated_at, deleted_at`
+	phone_verified, registration_step, dob, gender, pfp_url, terms_accepted_at, created_at, updated_at, deleted_at,
+	failed_login_attempts, locked_until, totp_secret, totp_enabled, totp_enrolled_at`
 
 func scanUserRow(row interface {
 	Scan(...any) error
@@ -233,11 +234,32 @@ func scanUserRow(row interface {
 		&u.ID, &u.Email, &u.Phone, &u.PasswordHash, &u.FullName, &u.Role, &u.IsVerified, &u.SellerStatus,
 		&u.PhoneVerified, &u.RegistrationStep, &u.DOB, &u.Gender, &u.PfpURL, &u.TermsAcceptedAt,
 		&u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
+		&u.FailedLoginAttempts, &u.LockedUntil,
+		&u.TOTPSecret, &u.TOTPEnabled, &u.TOTPEnrolledAt,
 	)
 	if err != nil {
 		return nil, pkgerrors.NewInternal("DATABASE_ERROR", fmt.Sprintf("failed to scan user: %v", err), err)
 	}
 	return u, nil
+}
+
+// IncrFailedLogin increments failed_login_attempts and locks the account after 5 failures.
+func (r *UserRepository) IncrFailedLogin(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE users SET
+			failed_login_attempts = failed_login_attempts + 1,
+			locked_until = CASE WHEN failed_login_attempts + 1 >= 5 THEN NOW() + INTERVAL '30 minutes' ELSE locked_until END,
+			updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL`, userID)
+	return err
+}
+
+// ResetLoginAttempts clears failed_login_attempts and locked_until.
+func (r *UserRepository) ResetLoginAttempts(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE users SET failed_login_attempts = 0, locked_until = NULL, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL`, userID)
+	return err
 }
 
 // ListUsers returns a paginated list of users filtered by role and/or search term.
@@ -346,4 +368,62 @@ func (r *UserRepository) ListSellers(ctx context.Context, status string, limit, 
 		sellers = append(sellers, u)
 	}
 	return sellers, total, rows.Err()
+}
+
+func (r *UserRepository) SetTOTPSecret(ctx context.Context, userID uuid.UUID, secret string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE users SET totp_secret = $2, updated_at = NOW() WHERE id = $1`, userID, secret)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to set totp secret", err)
+	}
+	return nil
+}
+
+func (r *UserRepository) EnableTOTP(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE users SET totp_enabled = TRUE, totp_enrolled_at = NOW(), updated_at = NOW() WHERE id = $1`, userID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to enable totp", err)
+	}
+	return nil
+}
+
+func (r *UserRepository) DisableTOTP(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE users SET totp_enabled = FALSE, totp_secret = NULL, totp_enrolled_at = NULL, updated_at = NOW() WHERE id = $1`, userID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to disable totp", err)
+	}
+	return nil
+}
+
+func (r *UserRepository) SaveBackupCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM user_backup_codes WHERE user_id = $1`, userID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to clear backup codes", err)
+	}
+	for _, h := range codeHashes {
+		_, err := r.db.ExecContext(ctx, `INSERT INTO user_backup_codes (user_id, code_hash) VALUES ($1, $2)`, userID, h)
+		if err != nil {
+			return pkgerrors.NewInternal("DATABASE_ERROR", "failed to save backup code", err)
+		}
+	}
+	return nil
+}
+
+func (r *UserRepository) GetUnusedBackupCode(ctx context.Context, userID uuid.UUID, codeHash string) (bool, error) {
+	var id string
+	err := r.db.QueryRowContext(ctx, `SELECT id FROM user_backup_codes WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL LIMIT 1`, userID, codeHash).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, pkgerrors.NewInternal("DATABASE_ERROR", "failed to look up backup code", err)
+	}
+	return true, nil
+}
+
+func (r *UserRepository) MarkBackupCodeUsed(ctx context.Context, userID uuid.UUID, codeHash string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE user_backup_codes SET used_at = NOW() WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL`, userID, codeHash)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to mark backup code used", err)
+	}
+	return nil
 }

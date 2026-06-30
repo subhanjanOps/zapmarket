@@ -135,10 +135,14 @@ func (r *OrderRepository) CreateOrder(ctx context.Context, order *domain.Order, 
 			sagaStatus = "AWAITING_INVENTORY"
 		}
 		err := tx.QueryRowContext(ctx, `
-			INSERT INTO orders (id, user_id, idempotency_key, status, saga_status, total_amount, currency)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO orders (id, user_id, idempotency_key, status, saga_status, total_amount, discount_paise, currency,
+			                    coupon_code, delivery_full_name, delivery_phone, delivery_address_line1,
+			                    delivery_city, delivery_pincode, delivery_country)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			RETURNING created_at, updated_at
-		`, id, order.UserID, order.IdempotencyKey, order.Status, sagaStatus, order.TotalAmount, order.Currency).
+		`, id, order.UserID, order.IdempotencyKey, order.Status, sagaStatus, order.TotalAmount, order.DiscountPaise, order.Currency,
+			order.CouponCode, order.DeliveryFullName, order.DeliveryPhone, order.DeliveryAddressLine1,
+			order.DeliveryCity, order.DeliveryPincode, order.DeliveryCountry).
 			Scan(&order.CreatedAt, &order.UpdatedAt)
 		order.SagaStatus = sagaStatus
 		if err != nil {
@@ -250,6 +254,19 @@ func (r *OrderRepository) UpdateStatus(ctx context.Context, orderID uuid.UUID, s
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
 		return pkgerrors.NewNotFound("ORDER_NOT_FOUND", "order not found")
+	}
+	return nil
+}
+
+// CancelIfPending cancels the order only when its current status is PENDING.
+// It is idempotent: if the order has already moved past PENDING, it is a no-op.
+func (r *OrderRepository) CancelIfPending(ctx context.Context, orderID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE orders SET status = 'CANCELLED', saga_status = 'COMPENSATED', updated_at = NOW()
+		WHERE id = $1 AND status = 'PENDING' AND deleted_at IS NULL
+	`, orderID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to cancel pending order", err)
 	}
 	return nil
 }

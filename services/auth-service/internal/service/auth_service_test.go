@@ -87,6 +87,14 @@ func (r *fakeUserRepo) UpdateProfile(_ context.Context, _ uuid.UUID, _ *time.Tim
 	return nil
 }
 func (r *fakeUserRepo) CompleteRegistration(_ context.Context, _ uuid.UUID) error { return nil }
+func (r *fakeUserRepo) IncrFailedLogin(_ context.Context, _ uuid.UUID) error                        { return nil }
+func (r *fakeUserRepo) ResetLoginAttempts(_ context.Context, _ uuid.UUID) error                     { return nil }
+func (r *fakeUserRepo) SetTOTPSecret(_ context.Context, _ uuid.UUID, _ string) error                { return nil }
+func (r *fakeUserRepo) EnableTOTP(_ context.Context, _ uuid.UUID) error                             { return nil }
+func (r *fakeUserRepo) DisableTOTP(_ context.Context, _ uuid.UUID) error                            { return nil }
+func (r *fakeUserRepo) SaveBackupCodes(_ context.Context, _ uuid.UUID, _ []string) error            { return nil }
+func (r *fakeUserRepo) GetUnusedBackupCode(_ context.Context, _ uuid.UUID, _ string) (bool, error)  { return false, nil }
+func (r *fakeUserRepo) MarkBackupCodeUsed(_ context.Context, _ uuid.UUID, _ string) error           { return nil }
 
 type fakeOAuthRepo struct{}
 

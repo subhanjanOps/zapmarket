@@ -1,0 +1,3 @@
+ALTER TABLE products
+    ADD COLUMN IF NOT EXISTS sales_rank  INT,
+    ADD COLUMN IF NOT EXISTS avg_rating  NUMERIC(3,2);

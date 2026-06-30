@@ -8,6 +8,7 @@ import ProductCard from "@/components/ProductCard";
 import AnimateIn from "@/components/AnimateIn";
 import { publicImageUrl } from "@/lib/images";
 
+import TrackEvent from "@/components/TrackEvent";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -131,13 +132,20 @@ export default async function ProductDetailPage({
   const allImages = rawImages.map((img) => publicImageUrl(img.url));
   const firstImage = allImages[0] ?? "/placeholder-product.png";
 
-  const related = await fetchRelated(productRes.category_id, id);
+  const [related, recommendations] = await Promise.all([
+    fetchRelated(productRes.category_id, id),
+    fetch(`${GW}/v1/products/${id}/recommendations?limit=8`, { next: { revalidate: 600 } })
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((d) => d.data ?? d ?? [])
+      .catch(() => []),
+  ]);
 
   const basePrice: number | undefined =
     skus.length > 0 ? (skus[0] as Record<string, unknown>).price_amount as number : undefined;
 
   return (
     <div className="bg-background">
+      <TrackEvent eventType="view" productId={id} categoryId={productRes.category_id} />
       <div className="max-w-6xl mx-auto px-4 py-8">
 
         {/* ── Breadcrumb ── */}
@@ -353,6 +361,29 @@ export default async function ProductDetailPage({
                         images?: { url: string }[];
                       }
                     }
+                  />
+                </AnimateIn>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Customers also bought ── */}
+        {(recommendations as unknown[]).length > 0 && (
+          <section className="mt-14">
+            <AnimateIn animation="slide-left">
+              <h2
+                className="font-display font-bold text-xl text-[#0F0A04] mb-6"
+                style={{ fontFamily: "var(--font-syne)" }}
+              >
+                Customers also bought
+              </h2>
+            </AnimateIn>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {(recommendations as Record<string, unknown>[]).map((p, i) => (
+                <AnimateIn key={p.id as string} animation="scale-in" delay={i * 60}>
+                  <ProductCard
+                    product={p as { id: string; name: string; price_amount?: number; currency?: string; images?: { url: string }[] }}
                   />
                 </AnimateIn>
               ))}

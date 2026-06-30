@@ -28,19 +28,25 @@ func NewCreditSaleUseCase(ledger application.LedgerRepository, commissionBPS int
 
 func (uc *CreditSaleUseCase) Execute(ctx context.Context, in CreditSaleInput) error {
 	commission := (in.AmountPaise * uc.commissionBPS) / 10000
-	net := in.AmountPaise - commission
+	// TDS: 1% of gross sale amount (Section 194-O)
+	tds := in.AmountPaise / 100
+	// GST on platform commission: 18%
+	gstOnCommission := (commission * 18) / 100
+	net := in.AmountPaise - commission - tds - gstOnCommission
 
 	entry := domain.LedgerEntry{
-		ID:              uuid.NewString(),
-		SellerID:        in.SellerID,
-		OrderID:         in.OrderID,
-		PaymentID:       in.PaymentID,
-		EntryType:       domain.EntryTypeCredit,
-		AmountPaise:     in.AmountPaise,
-		CommissionPaise: commission,
-		NetPaise:        net,
-		Currency:        in.Currency,
-		CreatedAt:       time.Now(),
+		ID:                   uuid.NewString(),
+		SellerID:             in.SellerID,
+		OrderID:              in.OrderID,
+		PaymentID:            in.PaymentID,
+		EntryType:            domain.EntryTypeCredit,
+		AmountPaise:          in.AmountPaise,
+		CommissionPaise:      commission,
+		TDSPaise:             tds,
+		GSTOnCommissionPaise: gstOnCommission,
+		NetPaise:             net,
+		Currency:             in.Currency,
+		CreatedAt:            time.Now(),
 	}
 	if err := uc.ledger.InsertEntry(ctx, entry); err != nil {
 		return err

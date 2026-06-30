@@ -34,6 +34,8 @@ func (a *TypesenseAdapter) EnsureSchema(ctx context.Context) error {
 			{Name: "seller_id", Type: "string"},
 			{Name: "status", Type: "string", Facet: pointer.True()},
 			{Name: "image_url", Type: "string", Optional: pointer.True()},
+			{Name: "sales_rank", Type: "int32", Optional: pointer.True()},
+			{Name: "avg_rating", Type: "float", Optional: pointer.True()},
 		},
 		DefaultSortingField: pointer.String("price_cents"),
 	}
@@ -53,6 +55,8 @@ func (a *TypesenseAdapter) Upsert(ctx context.Context, doc SearchDoc) error {
 		"seller_id":     doc.SellerID,
 		"status":        doc.Status,
 		"image_url":     doc.ImageURL,
+		"sales_rank":    doc.SalesRank,
+		"avg_rating":    doc.AvgRating,
 	}
 	_, err := a.client.Collection("products").Documents().Upsert(ctx, m)
 	return err
@@ -88,6 +92,7 @@ func (a *TypesenseAdapter) Search(ctx context.Context, q SearchQuery) ([]SearchD
 		params.FilterBy = pointer.String(filter)
 	}
 
+	params.SortBy = pointer.String("_text_match:desc,avg_rating:desc,sales_rank:asc")
 	result, err := a.client.Collection("products").Documents().Search(ctx, params)
 	if err != nil {
 		return nil, err
@@ -123,6 +128,13 @@ func hitToDoc(m map[string]interface{}) SearchDoc {
 		}
 		return 0
 	}
+	f64 := func(key string) float64 {
+		switch v := m[key].(type) {
+		case float64:
+			return v
+		}
+		return 0
+	}
 	return SearchDoc{
 		ID:           str("id"),
 		Name:         str("name"),
@@ -134,5 +146,7 @@ func hitToDoc(m map[string]interface{}) SearchDoc {
 		SellerID:     str("seller_id"),
 		Status:       str("status"),
 		ImageURL:     str("image_url"),
+		SalesRank:    int32(i64("sales_rank")),
+		AvgRating:    f64("avg_rating"),
 	}
 }

@@ -375,3 +375,140 @@ func (pr *ProductRepository) DeleteProduct(ctx context.Context, id uuid.UUID) er
 
 	return nil
 }
+
+// IncrSalesRank decrements the sales_rank column (lower = more popular) by 1.
+// Initialises to 0 first if NULL, then decrements. Uses a large negative
+// number as a sentinel: each confirmed order pushes the product higher.
+func (pr *ProductRepository) IncrSalesRank(ctx context.Context, productID uuid.UUID) error {
+	_, err := pr.db.ExecContext(ctx, `
+		UPDATE products
+		SET sales_rank = COALESCE(sales_rank, 0) - 1,
+		    updated_at  = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`, productID)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to increment sales rank", err)
+	}
+	return nil
+}
+
+// GetTrending returns up to limit products ordered by sales_rank ascending
+// (more sales = lower/more-negative rank number).
+func (pr *ProductRepository) UpsertCooccurrence(ctx context.Context, productA, productB uuid.UUID) error {
+	// Always store pair in canonical order (smaller UUID first) to avoid duplicates.
+	a, b := productA, productB
+	if a.String() > b.String() {
+		a, b = b, a
+	}
+	_, err := pr.db.ExecContext(ctx, `
+		INSERT INTO product_cooccurrences (product_a, product_b, count, updated_at)
+		VALUES ($1, $2, 1, NOW())
+		ON CONFLICT (product_a, product_b) DO UPDATE
+		  SET count = product_cooccurrences.count + 1, updated_at = NOW()
+	`, a, b)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to upsert cooccurrence", err)
+	}
+	return nil
+}
+
+func (pr *ProductRepository) GetRecommendations(ctx context.Context, productID uuid.UUID, limit int) ([]*domain.Product, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 8
+	}
+	rows, err := pr.db.QueryContext(ctx, `
+		SELECT p.id, p.name, p.description, p.seller_id, p.category_id, p.status, p.created_at, p.updated_at
+		FROM product_cooccurrences c
+		JOIN products p ON (
+			CASE WHEN c.product_a = $1 THEN c.product_b ELSE c.product_a END = p.id
+		)
+		WHERE (c.product_a = $1 OR c.product_b = $1)
+		  AND p.deleted_at IS NULL AND p.status = 'ACTIVE'
+		ORDER BY c.count DESC
+		LIMIT $2
+	`, productID, limit)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to get recommendations", err)
+	}
+	defer rows.Close()
+	var out []*domain.Product
+	for rows.Next() {
+		p := &domain.Product{}
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.SellerID, &p.CategoryID, &p.Status, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan recommendation", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (pr *ProductRepository) GetForYou(ctx context.Context, categoryIDs []uuid.UUID, limit int) ([]*domain.Product, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	if len(categoryIDs) == 0 {
+		return pr.GetTrending(ctx, limit)
+	}
+	// Convert categoryIDs to a pq array.
+	ids := make([]string, len(categoryIDs))
+	for i, id := range categoryIDs {
+		ids[i] = id.String()
+	}
+	// Build a parameterized ANY query.
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids)+1)
+	args[0] = limit
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		args[i+1] = id
+	}
+	query := fmt.Sprintf(`
+		SELECT id, name, description, seller_id, category_id, status, created_at, updated_at
+		FROM products
+		WHERE category_id = ANY(ARRAY[%s]::uuid[])
+		  AND deleted_at IS NULL AND status = 'ACTIVE'
+		ORDER BY sales_rank ASC NULLS LAST, created_at DESC
+		LIMIT $1
+	`, strings.Join(placeholders, ","))
+	rows, err := pr.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to get for-you products", err)
+	}
+	defer rows.Close()
+	var out []*domain.Product
+	for rows.Next() {
+		p := &domain.Product{}
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.SellerID, &p.CategoryID, &p.Status, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan for-you product", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (pr *ProductRepository) GetTrending(ctx context.Context, limit int) ([]*domain.Product, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := pr.db.QueryContext(ctx, `
+		SELECT id, name, description, seller_id, category_id, status, created_at, updated_at
+		FROM products
+		WHERE sales_rank IS NOT NULL AND deleted_at IS NULL
+		ORDER BY sales_rank ASC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to get trending products", err)
+	}
+	defer rows.Close()
+
+	var out []*domain.Product
+	for rows.Next() {
+		p := &domain.Product{}
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.SellerID, &p.CategoryID, &p.Status, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, pkgerrors.NewInternal("DATABASE_ERROR", "failed to scan trending product", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}

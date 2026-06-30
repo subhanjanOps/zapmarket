@@ -36,6 +36,7 @@ type AuthServicer interface {
 	StoreOAuthState(ctx context.Context, state string) error
 	ValidateAndConsumeOAuthState(ctx context.Context, state string) (bool, error)
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
+	IssueRefreshTokenForUser(ctx context.Context, userID uuid.UUID) (*domain.RefreshToken, error)
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	RequestPasswordReset(ctx context.Context, userEmail string) error
 	ResetPassword(ctx context.Context, rawToken, newPassword string) error

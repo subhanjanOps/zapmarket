@@ -30,6 +30,9 @@ type ProductService interface {
 	GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, int64, error)
 	UpdateProduct(ctx context.Context, product *domain.Product) error
 	DeleteProduct(ctx context.Context, id uuid.UUID) error
+	GetTrending(ctx context.Context, limit int) ([]*domain.Product, error)
+	GetRecommendations(ctx context.Context, productID uuid.UUID, limit int) ([]*domain.Product, error)
+	GetForYou(ctx context.Context, categoryIDs []uuid.UUID, limit int) ([]*domain.Product, error)
 }
 
 type productService struct {
@@ -139,4 +142,16 @@ func (ps *productService) DeleteProduct(ctx context.Context, id uuid.UUID) error
 	ps.logger.Info("deleting product", "id", id)
 
 	return ps.productRepo.DeleteProduct(ctx, id)
+}
+
+func (ps *productService) GetTrending(ctx context.Context, limit int) ([]*domain.Product, error) {
+	return ps.productRepo.GetTrending(ctx, limit)
+}
+
+func (ps *productService) GetRecommendations(ctx context.Context, productID uuid.UUID, limit int) ([]*domain.Product, error) {
+	return ps.productRepo.GetRecommendations(ctx, productID, limit)
+}
+
+func (ps *productService) GetForYou(ctx context.Context, categoryIDs []uuid.UUID, limit int) ([]*domain.Product, error) {
+	return ps.productRepo.GetForYou(ctx, categoryIDs, limit)
 }

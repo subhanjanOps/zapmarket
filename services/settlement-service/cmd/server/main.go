@@ -20,6 +20,7 @@ import (
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
+	"github.com/zapmarket/zapmarket/services/settlement-service/internal/application"
 	"github.com/zapmarket/zapmarket/services/settlement-service/internal/application/usecases"
 	kafkaconsumer "github.com/zapmarket/zapmarket/services/settlement-service/internal/infrastructure/kafka"
 	"github.com/zapmarket/zapmarket/services/settlement-service/internal/infrastructure/postgres"
@@ -66,22 +67,33 @@ func main() {
 	}
 
 	ledgerRepo := postgres.NewLedgerRepo(db)
-	gateway := razorpay.NewNoopGateway(log)
+	bankAccountRepo := postgres.NewBankAccountRepo(db)
+
+	// Payout gateway: Razorpay if keys are configured, noop otherwise
+	var payoutGateway application.PayoutGateway
+	if keyID := os.Getenv("RAZORPAY_KEY_ID"); keyID != "" {
+		payoutGateway = razorpay.NewPayoutGateway(keyID, os.Getenv("RAZORPAY_KEY_SECRET"), os.Getenv("RAZORPAY_ACCOUNT_NUMBER"))
+		log.Info("payout gateway: Razorpay")
+	} else {
+		payoutGateway = razorpay.NewNoopGateway(log)
+		log.Info("payout gateway: noop (set RAZORPAY_KEY_ID to enable)")
+	}
 
 	creditUC := usecases.NewCreditSaleUseCase(ledgerRepo, commissionBPS)
 	debitUC := usecases.NewDebitRefundUseCase(ledgerRepo)
-	payoutUC := usecases.NewInitiatePayoutUseCase(ledgerRepo, gateway, minPayoutPaise)
-	_ = payoutUC // wired to weekly scheduler in production
+	payoutUC := usecases.NewInitiatePayoutUseCase(ledgerRepo, payoutGateway, minPayoutPaise)
 
 	consumer := kafkaconsumer.NewPaymentConsumer(creditUC, debitUC, log)
-
 	capturedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentCaptured, "settlement-captured")
 
 	balanceH := settlementhttp.NewBalanceHandler(ledgerRepo)
+	bankH := settlementhttp.NewBankAccountHandler(bankAccountRepo)
 
 	r := chi.NewRouter()
-	r.Get("/v1/sellers/{id}/balance", balanceH.GetBalance)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	r.Get("/v1/sellers/{id}/balance", balanceH.GetBalance)
+	r.Post("/v1/sellers/{id}/bank-accounts", bankH.Create)
+	r.Get("/v1/sellers/{id}/bank-accounts", bankH.List)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
@@ -94,12 +106,16 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
 		if err := capturedConsumer.Run(ctx, consumer.HandleCaptured); err != nil {
 			log.Error("payment captured consumer exited", "error", err)
 		}
 	}()
 	log.Info("settlement consumers started")
+
+	// Weekly payout scheduler: every Monday 10am
+	go runWeeklyPayoutScheduler(ctx, ledgerRepo, payoutUC, log)
 
 	go func() {
 		log.Info("settlement-service started", "port", cfg.HTTPPort)
@@ -117,4 +133,37 @@ func main() {
 	}
 	_ = capturedConsumer.Close()
 	log.Info("settlement-service stopped")
+}
+
+// runWeeklyPayoutScheduler fires InitiatePayoutUseCase for all pending sellers every Monday at 10am IST.
+func runWeeklyPayoutScheduler(ctx context.Context, ledger application.LedgerRepository, payoutUC *usecases.InitiatePayoutUseCase, log *slog.Logger) {
+	for {
+		now := time.Now().UTC()
+		daysUntilMonday := (int(time.Monday) - int(now.Weekday()) + 7) % 7
+		if daysUntilMonday == 0 && now.Hour() >= 4 {
+			daysUntilMonday = 7
+		}
+		next := time.Date(now.Year(), now.Month(), now.Day()+daysUntilMonday, 4, 30, 0, 0, time.UTC)
+		delay := next.Sub(now)
+		log.Info("payout scheduler: next run", "at", next.Format(time.RFC3339), "in", delay.Round(time.Minute))
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+
+		log.Info("payout scheduler: initiating weekly payouts")
+		sellers, err := ledger.GetPendingSellers(ctx, 10000)
+		if err != nil {
+			log.Error("payout scheduler: failed to get pending sellers", "error", err)
+			continue
+		}
+		for _, sellerID := range sellers {
+			if err := payoutUC.Execute(ctx, sellerID); err != nil {
+				log.Error("payout scheduler: payout failed", "seller_id", sellerID, "error", err)
+			}
+		}
+		log.Info("payout scheduler: completed", "sellers_processed", len(sellers))
+	}
 }

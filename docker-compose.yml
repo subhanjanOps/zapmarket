@@ -188,6 +188,7 @@ services:
       - REDIS_URL=zapmarket-redis:6379
       - HTTP_PORT=8084
       - APP_ENV=development
+      - PROMOTIONS_SERVICE_URL=http://zapmarket-promotions-service:8091
     ports:
       - "8084:8084"
     networks:

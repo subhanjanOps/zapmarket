@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/zapmarket/zapmarket/services/inventory-service/internal/domain"
 )
 
@@ -15,7 +17,13 @@ import (
 type reservationReleaser interface {
 	FindExpiredReservations(ctx context.Context, before time.Time) ([]*domain.Reservation, error)
 	ReleaseStock(ctx context.Context, reservationID uuid.UUID) (skuID uuid.UUID, qty int64, err error)
+	WriteReservationExpiredEvent(ctx context.Context, reservationID, orderID uuid.UUID) error
 }
+
+var releasedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "reservation_sweeper_released_total",
+	Help: "Total number of expired reservations released by the sweeper.",
+})
 
 // ExpiryWorker polls for expired reservations and releases them, returning
 // the stock to the available pool. It runs until its context is cancelled.
@@ -26,7 +34,7 @@ type ExpiryWorker struct {
 }
 
 // NewExpiryWorker creates an ExpiryWorker. interval is how often to poll;
-// use 60*time.Second in production. log may be nil (a no-op logger is used).
+// use 300*time.Second in production. log may be nil (a no-op logger is used).
 func NewExpiryWorker(repo reservationReleaser, interval time.Duration, log *slog.Logger) *ExpiryWorker {
 	if log == nil {
 		log = slog.Default()
@@ -69,6 +77,14 @@ func (w *ExpiryWorker) runOnce(ctx context.Context, now time.Time) {
 			)
 			continue
 		}
+		if err := w.repo.WriteReservationExpiredEvent(ctx, res.ID, res.OrderID); err != nil {
+			w.log.Error("expiry worker: write reservation.expired outbox failed",
+				"reservation_id", res.ID,
+				"order_id", res.OrderID,
+				"error", err,
+			)
+		}
+		releasedTotal.Inc()
 		w.log.Info("expiry worker: released expired reservation",
 			"reservation_id", res.ID,
 			"order_id", res.OrderID,

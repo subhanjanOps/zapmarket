@@ -29,6 +29,7 @@ import (
 	pb "github.com/zapmarket/zapmarket/pkg/proto/payment"
 	pkgmetrics "github.com/zapmarket/zapmarket/pkg/metrics"
 	"github.com/zapmarket/zapmarket/services/payment-service/internal/gateway"
+	"github.com/zapmarket/zapmarket/services/payment-service/internal/gateway/razorpay"
 	grpchandler "github.com/zapmarket/zapmarket/services/payment-service/internal/handler/grpc"
 	httphandler "github.com/zapmarket/zapmarket/services/payment-service/internal/handler/http"
 	"github.com/zapmarket/zapmarket/pkg/relay"
@@ -83,12 +84,27 @@ func main() {
 	// ── Repository / Gateway / Service / gRPC handler ───────────────────────────
 	repo := repository.NewPaymentRepository(db)
 	var paymentGateway contracts.PaymentGateway
-	if cfg.StripeSecretKey != "" {
+	var razorpayGateway *razorpay.Gateway
+	switch os.Getenv("PAYMENT_GATEWAY") {
+	case "razorpay":
+		razorpayGateway = razorpay.New(
+			os.Getenv("RAZORPAY_KEY_ID"),
+			os.Getenv("RAZORPAY_KEY_SECRET"),
+			os.Getenv("RAZORPAY_WEBHOOK_SECRET"),
+		)
+		paymentGateway = razorpayGateway
+		log.Info("using Razorpay payment gateway")
+	case "stripe":
 		paymentGateway = gateway.NewStripePaymentGateway(cfg.StripeSecretKey)
 		log.Info("using Stripe payment gateway")
-	} else {
-		paymentGateway = gateway.NewFakePaymentGateway()
-		log.Info("using fake payment gateway (set STRIPE_SECRET_KEY to enable Stripe)")
+	default:
+		if cfg.StripeSecretKey != "" {
+			paymentGateway = gateway.NewStripePaymentGateway(cfg.StripeSecretKey)
+			log.Info("using Stripe payment gateway (via STRIPE_SECRET_KEY)")
+		} else {
+			paymentGateway = gateway.NewFakePaymentGateway()
+			log.Info("using fake payment gateway (set PAYMENT_GATEWAY=stripe|razorpay to enable)")
+		}
 	}
 	svc := service.NewPaymentService(repo, paymentGateway, idemCache, log)
 	grpcHandler := grpchandler.NewPaymentGRPCHandler(svc)
@@ -99,6 +115,9 @@ func main() {
 	mux.HandleFunc("/health", webhookHandler.Health)
 	mux.HandleFunc("/webhooks/payment", webhookHandler.HandlePaymentWebhook)
 	mux.HandleFunc("/webhooks/stripe", webhookHandler.HandleStripeWebhook)
+	if razorpayGateway != nil {
+		mux.HandleFunc("/webhooks/razorpay", httphandler.NewRazorpayWebhookHandler(svc, razorpayGateway, log).Handle)
+	}
 	mux.Handle("/metrics", m.Handler())
 
 	httpServer := &http.Server{
@@ -130,6 +149,10 @@ func main() {
 	sagaConsumer := consumer.NewInventoryConsumer(svc, capturedProducer, failedProducer, log)
 	invKafkaConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicInventoryReserved, "payment-saga")
 
+	// COD: capture payment when shipment is delivered
+	shipmentConsumer := consumer.NewShipmentConsumer(repo, svc, capturedProducer, log)
+	shipmentKafkaConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicShipmentDelivered, "payment-cod")
+
 	// ── Start servers ────────────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -144,6 +167,13 @@ func main() {
 		}
 	}()
 	log.Info("inventory saga consumer started")
+
+	go func() {
+		if err := shipmentKafkaConsumer.Run(relayCtx, shipmentConsumer.Handle); err != nil {
+			log.Error("shipment consumer exited", "error", err)
+		}
+	}()
+	log.Info("shipment delivered consumer started")
 
 	go func() {
 		log.Info("starting HTTP server", "port", cfg.HTTPPort)
@@ -174,6 +204,7 @@ func main() {
 	_ = capturedProducer.Close()
 	_ = failedProducer.Close()
 	_ = invKafkaConsumer.Close()
+	_ = shipmentKafkaConsumer.Close()
 
 	log.Info("servers stopped")
 }

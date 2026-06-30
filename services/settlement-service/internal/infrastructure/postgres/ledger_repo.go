@@ -15,10 +15,10 @@ func NewLedgerRepo(db *sql.DB) *LedgerRepo { return &LedgerRepo{db: db} }
 
 func (r *LedgerRepo) InsertEntry(ctx context.Context, e domain.LedgerEntry) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO seller_ledger (id, seller_id, order_id, payment_id, entry_type, amount_paise, commission_paise, net_paise, currency, note, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		INSERT INTO seller_ledger (id, seller_id, order_id, payment_id, entry_type, amount_paise, commission_paise, tds_paise, gst_on_commission_paise, net_paise, currency, note, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
 		e.ID, e.SellerID, nullableStr(e.OrderID), nullableStr(e.PaymentID),
-		string(e.EntryType), e.AmountPaise, e.CommissionPaise, e.NetPaise,
+		string(e.EntryType), e.AmountPaise, e.CommissionPaise, e.TDSPaise, e.GSTOnCommissionPaise, e.NetPaise,
 		e.Currency, e.Note, e.CreatedAt)
 	return err
 }

@@ -14,4 +14,7 @@ const (
 	TopicPaymentFailed              = "payment.failed"
 	TopicOrderConfirmed             = "order.confirmed"
 	TopicOrderCancelled             = "order.cancelled"
+	TopicShipmentDelivered          = "shipment.delivered"
+	TopicShipmentUndelivered        = "shipment.undelivered"
+	TopicReservationExpired         = "reservation.expired"
 )

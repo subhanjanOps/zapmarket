@@ -27,6 +27,7 @@ type PaymentService interface {
 	// already-resolved payment is a no-op since gateways commonly retry.
 	HandleCaptureWebhook(ctx context.Context, paymentID uuid.UUID, gatewayTxnID string) error
 	HandleFailureWebhook(ctx context.Context, paymentID uuid.UUID, reason string) error
+	GetByGatewayTxnID(ctx context.Context, txnID string) (*domain.Payment, error)
 }
 
 type paymentService struct {
@@ -102,6 +103,28 @@ func (s *paymentService) ChargeCard(ctx context.Context, orderID, userID uuid.UU
 	var appErr *pkgerrors.AppError
 	if !errors.As(err, &appErr) || appErr.Type != pkgerrors.NotFound {
 		return nil, err
+	}
+
+	// COD orders: create payment in PENDING_COD state and return immediately.
+	// Payment transitions to CAPTURED when shipment.delivered event arrives.
+	if paymentMethodID == "cod" {
+		payment := &domain.Payment{
+			OrderID:        orderID,
+			UserID:         userID,
+			IdempotencyKey: idempotencyKey,
+			Status:         domain.PaymentPendingCOD,
+			Amount:         amount,
+			Currency:       currency,
+			Gateway:        "cod",
+		}
+		if err := s.repo.CreatePayment(ctx, payment); err != nil {
+			return nil, err
+		}
+		s.logger.Info("COD order payment created", "payment_id", payment.ID, "order_id", orderID)
+		if b, err := json.Marshal(payment); err == nil {
+			_ = s.cache.Set(ctx, cacheKey, b, paymentIdempotencyTTL)
+		}
+		return payment, nil
 	}
 
 	payment := &domain.Payment{
@@ -230,12 +253,16 @@ func (s *paymentService) GetTransaction(ctx context.Context, paymentID uuid.UUID
 	return s.repo.GetByID(ctx, paymentID)
 }
 
+func (s *paymentService) GetByGatewayTxnID(ctx context.Context, txnID string) (*domain.Payment, error) {
+	return s.repo.GetByGatewayTxnID(ctx, txnID)
+}
+
 func (s *paymentService) HandleCaptureWebhook(ctx context.Context, paymentID uuid.UUID, gatewayTxnID string) error {
 	payment, err := s.repo.GetByID(ctx, paymentID)
 	if err != nil {
 		return err
 	}
-	if payment.Status != domain.PaymentPending && payment.Status != domain.PaymentAuthorised {
+	if payment.Status != domain.PaymentPending && payment.Status != domain.PaymentAuthorised && payment.Status != domain.PaymentPendingCOD {
 		s.logger.Info("ignoring capture webhook for already-resolved payment", "payment_id", paymentID, "status", payment.Status)
 		return nil
 	}

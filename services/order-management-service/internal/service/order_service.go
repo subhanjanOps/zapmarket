@@ -32,9 +32,44 @@ type catalogGateway interface {
 	GetSKUPrice(ctx context.Context, skuID uuid.UUID) (int64, error)
 }
 
+// CheckoutOptions carries optional checkout parameters.
+type CheckoutOptions struct {
+	CouponCode      string
+	DeliveryAddress *DeliveryAddress
+}
+
+// DeliveryAddress holds the shipping destination for an order.
+type DeliveryAddress struct {
+	FullName     string
+	Phone        string
+	AddressLine1 string
+	City         string
+	Pincode      string
+	Country      string
+}
+
+// promotionsGateway validates and redeems coupon codes.
+type promotionsGateway interface {
+	ValidateCoupon(ctx context.Context, req ValidateCouponRequest) (*ValidateCouponResult, error)
+	RedeemCoupon(ctx context.Context, couponID, userID, orderID string) error
+}
+
+// ValidateCouponRequest / Result mirror the promotions client types without creating an import cycle.
+type ValidateCouponRequest struct {
+	Code           string
+	UserID         string
+	CartTotalPaise int64
+}
+
+type ValidateCouponResult struct {
+	CouponID      string
+	DiscountPaise int64
+	FinalPaise    int64
+}
+
 // OrderService defines the public interface for order operations.
 type OrderService interface {
-	Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency, paymentMethodID string) (*domain.Order, error)
+	Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency, paymentMethodID string, opts CheckoutOptions) (*domain.Order, error)
 	GetOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, []*domain.OrderItem, error)
 	ListOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.Order, int64, error)
 	CancelOrder(ctx context.Context, orderID, userID uuid.UUID) (*domain.Order, error)
@@ -61,28 +96,30 @@ type CheckoutItem struct {
 const idempotencyTTL = 24 * time.Hour
 
 type orderService struct {
-	repo      contracts.OrderRepository
-	inventory inventoryGateway
-	catalog   catalogGateway
-	cache     contracts.OrderCache
-	logger    *slog.Logger
+	repo       contracts.OrderRepository
+	inventory  inventoryGateway
+	catalog    catalogGateway
+	promotions promotionsGateway
+	cache      contracts.OrderCache
+	logger     *slog.Logger
 }
 
 func NewOrderService(
 	repo contracts.OrderRepository,
 	inventory inventoryGateway,
 	catalog catalogGateway,
+	promotions promotionsGateway,
 	cache contracts.OrderCache,
 	logger *slog.Logger,
 ) OrderService {
-	return &orderService{repo: repo, inventory: inventory, catalog: catalog, cache: cache, logger: logger}
+	return &orderService{repo: repo, inventory: inventory, catalog: catalog, promotions: promotions, cache: cache, logger: logger}
 }
 
 func idempCacheKey(key uuid.UUID) string {
 	return fmt.Sprintf("idempotency:order:%s", key)
 }
 
-func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency, paymentMethodID string) (*domain.Order, error) {
+func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid.UUID, items []CheckoutItem, currency, paymentMethodID string, opts CheckoutOptions) (*domain.Order, error) {
 	if userID == uuid.Nil {
 		return nil, pkgerrors.NewValidation("INVALID_DATA", "user_id is required")
 	}
@@ -121,6 +158,26 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		domainItems[i] = &domain.OrderItem{SKUID: it.SKUID, SellerID: it.SellerID, Quantity: it.Quantity, UnitPrice: authPrice}
 	}
 
+	// Apply coupon discount if provided. Fail open: if promotions-service is
+	// unavailable the order proceeds without the discount.
+	var discountPaise int64
+	var couponID string
+	if opts.CouponCode != "" && s.promotions != nil {
+		promoCtx, promoCancel := context.WithTimeout(ctx, 3*time.Second)
+		result, err := s.promotions.ValidateCoupon(promoCtx, ValidateCouponRequest{
+			Code:           opts.CouponCode,
+			UserID:         userID.String(),
+			CartTotalPaise: totalAmount,
+		})
+		promoCancel()
+		if err != nil {
+			// Invalid coupon — return error to caller so buyer can see the message
+			return nil, pkgerrors.NewValidation("INVALID_COUPON", err.Error())
+		}
+		discountPaise = result.DiscountPaise
+		couponID = result.CouponID
+	}
+
 	order := &domain.Order{
 		ID:             uuid.New(), // pre-assign so the event payload carries the correct order_id
 		UserID:         userID,
@@ -128,7 +185,25 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		Status:         domain.OrderPending,
 		SagaStatus:     "AWAITING_INVENTORY",
 		TotalAmount:    totalAmount,
+		DiscountPaise:  discountPaise,
 		Currency:       currency,
+	}
+	if opts.CouponCode != "" {
+		code := opts.CouponCode
+		order.CouponCode = &code
+	}
+	if opts.DeliveryAddress != nil {
+		a := opts.DeliveryAddress
+		order.DeliveryFullName = &a.FullName
+		order.DeliveryPhone = &a.Phone
+		order.DeliveryAddressLine1 = &a.AddressLine1
+		order.DeliveryCity = &a.City
+		order.DeliveryPincode = &a.Pincode
+		country := a.Country
+		if country == "" {
+			country = "IN"
+		}
+		order.DeliveryCountry = country
 	}
 
 	// Build the checkout.requested event payload before the DB write so the
@@ -145,7 +220,7 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		UserID:          userID.String(),
 		Items:           checkoutItems,
 		RequestedAt:     time.Now(),
-		AmountCents:     totalAmount,
+		AmountCents:     totalAmount - discountPaise,
 		Currency:        currency,
 		PaymentMethodID: paymentMethodID,
 	}
@@ -158,6 +233,14 @@ func (s *orderService) Checkout(ctx context.Context, userID, idempotencyKey uuid
 		return nil, err
 	}
 	s.logger.Info("order created — checkout.requested written to outbox", "order_id", order.ID, "total", totalAmount)
+
+	// Record coupon usage after successful order creation. Best-effort: a failure
+	// here does not roll back the order (usage limits are enforced at validate time).
+	if couponID != "" && s.promotions != nil {
+		if redeemErr := s.promotions.RedeemCoupon(ctx, couponID, userID.String(), order.ID.String()); redeemErr != nil {
+			s.logger.Warn("coupon redeem failed (order already created)", "coupon_id", couponID, "order_id", order.ID, "error", redeemErr)
+		}
+	}
 
 	// Cache the PENDING order so duplicate requests with the same idempotency
 	// key get an immediate response without hitting the DB unique constraint.

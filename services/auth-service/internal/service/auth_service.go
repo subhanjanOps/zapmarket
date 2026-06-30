@@ -52,6 +52,7 @@ type AuthService struct {
 	cfg               *config.Config
 	blacklist         contracts.TokenBlacklist
 	oauthState        contracts.OAuthStateStore
+	mfaService        *MFAService
 }
 
 // NewAuthService creates a new auth service.
@@ -84,6 +85,9 @@ func NewAuthService(
 		oauthState:        oauthState,
 	}
 }
+
+// SetMFAService wires the MFA service after construction to avoid circular init.
+func (s *AuthService) SetMFAService(mfa *MFAService) { s.mfaService = mfa }
 
 // NewAuthServiceFromGroups is the preferred constructor for new call-sites.
 func NewAuthServiceFromGroups(repos AuthRepos, infra AuthInfra, cfg *config.Config) *AuthService {
@@ -219,16 +223,34 @@ func (s *AuthService) LoginPassword(ctx context.Context, email, password string)
 		return nil, nil, pkgerrors.NewUnauthorized("INVALID_CREDENTIALS", "invalid email or password")
 	}
 
+	// Check account lockout before verifying password (avoids timing oracle)
+	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
+		remaining := time.Until(*user.LockedUntil).Round(time.Minute)
+		return nil, nil, pkgerrors.NewRateLimit("ACCOUNT_LOCKED", fmt.Sprintf("account locked, try again in %s", remaining))
+	}
+
 	if user.PasswordHash == nil {
 		return nil, nil, pkgerrors.NewUnauthorized("INVALID_CREDENTIALS", "this account uses OAuth login")
 	}
 
 	if !crypto.VerifyPassword(*user.PasswordHash, password) {
+		_ = s.userRepo.IncrFailedLogin(ctx, user.ID)
 		return nil, nil, pkgerrors.NewUnauthorized("INVALID_CREDENTIALS", "invalid email or password")
 	}
 
 	if user.RegistrationStep > 0 && user.RegistrationStep < 4 {
 		return nil, nil, pkgerrors.NewValidation("REGISTRATION_INCOMPLETE", fmt.Sprintf("registration not complete (step %d/4)", user.RegistrationStep))
+	}
+
+	_ = s.userRepo.ResetLoginAttempts(ctx, user.ID)
+
+	// If the user is a seller or admin and has TOTP enabled, issue MFA challenge.
+	if user.TOTPEnabled && s.mfaService != nil {
+		tok, err := s.mfaService.MFASessionToken(ctx, user.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, &domain.MFARequiredError{MFASessionToken: tok}
 	}
 
 	refreshToken, err := s.generateRefreshToken(ctx, user.ID)
@@ -340,6 +362,12 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, userID uuid.UUID
 	return refreshToken, nil
 }
 
+// IssueRefreshTokenForUser creates and stores a new refresh token for the given user.
+// Used by the MFA challenge handler after a successful TOTP verification.
+func (s *AuthService) IssueRefreshTokenForUser(ctx context.Context, userID uuid.UUID) (*domain.RefreshToken, error) {
+	return s.generateRefreshToken(ctx, userID)
+}
+
 // GetUserByID retrieves a user by ID
 func (s *AuthService) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	return s.userRepo.GetUserByID(ctx, userID)
@@ -423,6 +451,8 @@ func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword s
 	if err := s.tokenRepo.InvalidateUserTokens(ctx, user.ID); err != nil {
 		return fmt.Errorf("reset password: invalidate sessions: %w", err)
 	}
+
+	_ = s.userRepo.ResetLoginAttempts(ctx, user.ID)
 
 	return nil
 }
@@ -520,6 +550,7 @@ func (s *AuthService) ResetPasswordWithOTP(ctx context.Context, phone, code, new
 		return err
 	}
 	_ = s.tokenRepo.InvalidateUserTokens(ctx, user.ID)
+	_ = s.userRepo.ResetLoginAttempts(ctx, user.ID)
 	return nil
 }
 

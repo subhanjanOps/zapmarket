@@ -1,0 +1,32 @@
+global:
+  image:
+    registry: ghcr.io/zapmarket
+    pullPolicy: Always
+  env:
+    APP_ENV: production
+    MIGRATE_ON_BOOT: "true"
+
+# Override replica counts and resource limits for production.
+# DB passwords and API keys are injected from CI Secrets — not committed here.
+services:
+  auth-service:
+    replicas: 3
+    hpa:
+      minReplicas: 3
+      maxReplicas: 20
+
+  product-catalog-service:
+    replicas: 3
+    hpa:
+      minReplicas: 3
+      maxReplicas: 20
+
+  api-gateway:
+    replicas: 5
+    hpa:
+      minReplicas: 5
+      maxReplicas: 50
+
+postgres:
+  external: true
+  host: "" # Set to RDS endpoint in CI/CD secret

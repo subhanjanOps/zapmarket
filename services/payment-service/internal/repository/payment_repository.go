@@ -56,6 +56,14 @@ func (r *PaymentRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.
 	return scanPayment(r.db.QueryRowContext(ctx, paymentSelectQuery+" WHERE id = $1 AND deleted_at IS NULL", id))
 }
 
+func (r *PaymentRepository) GetByOrderID(ctx context.Context, orderID uuid.UUID) (*domain.Payment, error) {
+	return scanPayment(r.db.QueryRowContext(ctx, paymentSelectQuery+" WHERE order_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1", orderID))
+}
+
+func (r *PaymentRepository) GetByGatewayTxnID(ctx context.Context, txnID string) (*domain.Payment, error) {
+	return scanPayment(r.db.QueryRowContext(ctx, paymentSelectQuery+" WHERE gateway_txn_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1", txnID))
+}
+
 func (r *PaymentRepository) CreatePayment(ctx context.Context, p *domain.Payment) error {
 	id := uuid.New()
 

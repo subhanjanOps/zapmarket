@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -128,7 +129,13 @@ func main() {
 	}()
 	log.Info("checkout saga consumer started")
 
-	expiryWorker := worker.NewExpiryWorker(repo, 60*time.Second, log)
+	sweepInterval := 300 * time.Second
+	if v := os.Getenv("RESERVATION_SWEEP_INTERVAL_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			sweepInterval = time.Duration(n) * time.Second
+		}
+	}
+	expiryWorker := worker.NewExpiryWorker(repo, sweepInterval, log)
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	go expiryWorker.Start(workerCtx)
 	log.Info("reservation expiry worker started")

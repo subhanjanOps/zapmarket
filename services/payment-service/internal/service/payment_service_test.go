@@ -61,6 +61,13 @@ func (m *mockRepo) CreateRefund(ctx context.Context, r *domain.Refund, userID uu
 	r.ID = uuid.New()
 	return nil
 }
+func (m *mockRepo) GetByOrderID(ctx context.Context, orderID uuid.UUID) (*domain.Payment, error) {
+	return nil, pkgerrors.NewNotFound("NOT_FOUND", "not found")
+}
+
+func (m *mockRepo) GetByGatewayTxnID(ctx context.Context, txnID string) (*domain.Payment, error) {
+	return nil, pkgerrors.NewNotFound("NOT_FOUND", "not found")
+}
 
 type mockGateway struct {
 	chargeFn func(ctx context.Context, amount int64, currency string, key uuid.UUID, pmID string) (*contracts.ChargeResult, error)

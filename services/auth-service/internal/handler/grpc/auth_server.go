@@ -236,15 +236,20 @@ func (s *AuthServer) domainUserToProto(u *domain.User) *authpb.User {
 	if u.Phone != nil {
 		phone = *u.Phone
 	}
+	sellerStatus := ""
+	if u.SellerStatus != nil {
+		sellerStatus = *u.SellerStatus
+	}
 	return &authpb.User{
-		Id:         u.ID.String(),
-		Email:      u.Email,
-		Phone:      phone,
-		FullName:   u.FullName,
-		Role:       u.Role,
-		IsVerified: u.IsVerified,
-		CreatedAt:  u.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:  u.UpdatedAt.Format(time.RFC3339),
+		Id:           u.ID.String(),
+		Email:        u.Email,
+		Phone:        phone,
+		FullName:     u.FullName,
+		Role:         u.Role,
+		IsVerified:   u.IsVerified,
+		CreatedAt:    u.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    u.UpdatedAt.Format(time.RFC3339),
+		SellerStatus: sellerStatus,
 	}
 }
 

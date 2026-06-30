@@ -49,3 +49,11 @@ func (s *adminService) ListSellers(ctx context.Context, status string, limit, of
 func (s *adminService) UpdateSellerStatus(ctx context.Context, id uuid.UUID, status string) error {
 	return s.userRepo.UpdateSellerStatus(ctx, id, status)
 }
+
+func (s *adminService) ApproveSellerKYC(ctx context.Context, sellerID, adminID uuid.UUID) error {
+	return s.userRepo.UpdateSellerStatus(ctx, sellerID, "APPROVED")
+}
+
+func (s *adminService) RejectSellerKYC(ctx context.Context, sellerID, adminID uuid.UUID, reason string) error {
+	return s.userRepo.UpdateSellerStatus(ctx, sellerID, "REJECTED")
+}

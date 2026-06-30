@@ -35,6 +35,18 @@ type UserRepository interface {
 	ListUsers(ctx context.Context, params UserListParams) ([]*domain.User, int64, error)
 	UpdateSellerStatus(ctx context.Context, userID uuid.UUID, status string) error
 	ListSellers(ctx context.Context, status string, limit, offset int) ([]*domain.User, int64, error)
+
+	// Lockout
+	IncrFailedLogin(ctx context.Context, userID uuid.UUID) error
+	ResetLoginAttempts(ctx context.Context, userID uuid.UUID) error
+
+	// MFA / TOTP
+	SetTOTPSecret(ctx context.Context, userID uuid.UUID, secret string) error
+	EnableTOTP(ctx context.Context, userID uuid.UUID) error
+	DisableTOTP(ctx context.Context, userID uuid.UUID) error
+	SaveBackupCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error
+	GetUnusedBackupCode(ctx context.Context, userID uuid.UUID, codeHash string) (bool, error)
+	MarkBackupCodeUsed(ctx context.Context, userID uuid.UUID, codeHash string) error
 }
 
 // OAuthRepository defines the interface for OAuth account persistence.

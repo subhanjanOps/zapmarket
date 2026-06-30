@@ -18,6 +18,7 @@ const (
 	Validation   ErrorType = "validation"
 	Unauthorized ErrorType = "unauthorized"
 	Forbidden    ErrorType = "forbidden"
+	RateLimit    ErrorType = "rate_limit"
 )
 
 // AppError is the standard application error shared across all services.
@@ -57,6 +58,10 @@ func NewInternal(code, message string, err error) *AppError {
 	return &AppError{Type: Internal, Code: code, Message: message, Err: err}
 }
 
+func NewRateLimit(code, message string) *AppError {
+	return &AppError{Type: RateLimit, Code: code, Message: message}
+}
+
 // --- HTTP mapping ---
 
 // HTTPStatus returns the HTTP status code for an AppError type.
@@ -72,6 +77,8 @@ func (e *AppError) HTTPStatus() int {
 		return http.StatusUnauthorized
 	case Forbidden:
 		return http.StatusForbidden
+	case RateLimit:
+		return http.StatusTooManyRequests
 	default:
 		return http.StatusInternalServerError
 	}

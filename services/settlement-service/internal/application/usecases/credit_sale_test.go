@@ -49,7 +49,14 @@ func TestCreditSale_DeductsCommissionAndCreditsNet(t *testing.T) {
 	if ledger.entries[0].CommissionPaise != 200 {
 		t.Fatalf("expected commission 200, got %d", ledger.entries[0].CommissionPaise)
 	}
-	if ledger.credited != 9800 {
-		t.Fatalf("expected net credited 9800, got %d", ledger.credited)
+	// net = 10000 - commission(200) - tds(100) - gst_on_commission(36) = 9664
+	if ledger.credited != 9664 {
+		t.Fatalf("expected net credited 9664, got %d", ledger.credited)
+	}
+	if ledger.entries[0].TDSPaise != 100 {
+		t.Fatalf("expected TDS 100, got %d", ledger.entries[0].TDSPaise)
+	}
+	if ledger.entries[0].GSTOnCommissionPaise != 36 {
+		t.Fatalf("expected GST on commission 36, got %d", ledger.entries[0].GSTOnCommissionPaise)
 	}
 }

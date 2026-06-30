@@ -147,7 +147,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 
 func newTestService(t *testing.T, repo contracts.OrderRepository, inv inventoryGateway, rdb *redis.Client) OrderService {
 	t.Helper()
-	return NewOrderService(repo, inv, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
+	return NewOrderService(repo, inv, &mockCatalog{}, nil, cache.NewRedisCache(rdb), slog.Default())
 }
 
 func defaultItems() []CheckoutItem {
@@ -164,12 +164,12 @@ func TestCheckout_HappyPath(t *testing.T) {
 	repo := &mockOrderRepo{}
 	inv := &mockInventory{}
 
-	svc := NewOrderService(repo, inv, &mockCatalog{}, cache.NewRedisCache(rdb), slog.Default())
+	svc := NewOrderService(repo, inv, &mockCatalog{}, nil, cache.NewRedisCache(rdb), slog.Default())
 
 	userID := uuid.New()
 	idemKey := uuid.New()
 
-	order, err := svc.Checkout(context.Background(), userID, idemKey, defaultItems(), "INR", "pm-123")
+	order, err := svc.Checkout(context.Background(), userID, idemKey, defaultItems(), "INR", "pm-123", CheckoutOptions{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -193,20 +193,20 @@ func TestCheckout_ValidationErrors(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("nil user ID", func(t *testing.T) {
-		_, err := svc.Checkout(ctx, uuid.Nil, uuid.New(), defaultItems(), "INR", "")
+		_, err := svc.Checkout(ctx, uuid.Nil, uuid.New(), defaultItems(), "INR", "", CheckoutOptions{})
 		assertValidationError(t, err)
 	})
 	t.Run("nil idempotency key", func(t *testing.T) {
-		_, err := svc.Checkout(ctx, uuid.New(), uuid.Nil, defaultItems(), "INR", "")
+		_, err := svc.Checkout(ctx, uuid.New(), uuid.Nil, defaultItems(), "INR", "", CheckoutOptions{})
 		assertValidationError(t, err)
 	})
 	t.Run("empty items", func(t *testing.T) {
-		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), nil, "INR", "")
+		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), nil, "INR", "", CheckoutOptions{})
 		assertValidationError(t, err)
 	})
 	t.Run("zero quantity", func(t *testing.T) {
 		items := []CheckoutItem{{SKUID: uuid.New(), Quantity: 0}}
-		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), items, "INR", "")
+		_, err := svc.Checkout(ctx, uuid.New(), uuid.New(), items, "INR", "", CheckoutOptions{})
 		assertValidationError(t, err)
 	})
 	// unit_price is now fetched from catalog; client-supplied value is ignored
@@ -241,7 +241,7 @@ func TestCheckout_IdempotencyReplay(t *testing.T) {
 	inv := &mockInventory{}
 	svc := newTestService(t, repo, inv, rdb)
 
-	order, err := svc.Checkout(context.Background(), existing.UserID, idemKey, defaultItems(), "INR", "")
+	order, err := svc.Checkout(context.Background(), existing.UserID, idemKey, defaultItems(), "INR", "", CheckoutOptions{})
 	if err != nil {
 		t.Fatalf("idempotent replay returned error: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestCheckout_IdempotencyReplay_DBFallback(t *testing.T) {
 	inv := &mockInventory{}
 	svc := newTestService(t, repo, inv, rdb)
 
-	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR", "")
+	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR", "", CheckoutOptions{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -298,7 +298,7 @@ func TestCheckout_SetsIdempotencyCacheAfterCreate(t *testing.T) {
 	repo := &mockOrderRepo{}
 	svc := newTestService(t, repo, &mockInventory{}, rdb)
 
-	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR", "")
+	order, err := svc.Checkout(context.Background(), uuid.New(), idemKey, defaultItems(), "INR", "", CheckoutOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

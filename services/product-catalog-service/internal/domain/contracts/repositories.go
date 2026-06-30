@@ -44,6 +44,11 @@ type ProductRepository interface {
 	GetProductList(ctx context.Context, filters *domain.ProductFilters) ([]*domain.Product, int64, error)
 	UpdateProduct(ctx context.Context, product *domain.Product) error
 	DeleteProduct(ctx context.Context, id uuid.UUID) error
+	IncrSalesRank(ctx context.Context, productID uuid.UUID) error
+	GetTrending(ctx context.Context, limit int) ([]*domain.Product, error)
+	GetRecommendations(ctx context.Context, productID uuid.UUID, limit int) ([]*domain.Product, error)
+	UpsertCooccurrence(ctx context.Context, productA, productB uuid.UUID) error
+	GetForYou(ctx context.Context, categoryIDs []uuid.UUID, limit int) ([]*domain.Product, error)
 }
 
 // SKURepository defines the interface for SKU repository

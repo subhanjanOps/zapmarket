@@ -77,6 +77,18 @@ func (r *fakeProductRepo) DeleteProduct(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (r *fakeProductRepo) IncrSalesRank(_ context.Context, _ uuid.UUID) error { return nil }
+func (r *fakeProductRepo) GetTrending(_ context.Context, _ int) ([]*domain.Product, error) {
+	return nil, nil
+}
+func (r *fakeProductRepo) GetRecommendations(_ context.Context, _ uuid.UUID, _ int) ([]*domain.Product, error) {
+	return nil, nil
+}
+func (r *fakeProductRepo) UpsertCooccurrence(_ context.Context, _, _ uuid.UUID) error { return nil }
+func (r *fakeProductRepo) GetForYou(_ context.Context, _ []uuid.UUID, _ int) ([]*domain.Product, error) {
+	return nil, nil
+}
+
 func newProductSvc(repo *fakeProductRepo) service.ProductService {
 	return service.NewProductService(repo, slog.Default())
 }

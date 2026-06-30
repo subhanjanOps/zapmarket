@@ -20,13 +20,33 @@ type Review struct {
 }
 
 type ReturnRequest struct {
-	ID          string
-	OrderID     string
-	OrderItemID string
-	UserID      string
-	Reason      string // DAMAGED, WRONG_ITEM, NOT_AS_DESCRIBED, CHANGED_MIND
-	Description string
-	Status      string // REQUESTED, APPROVED, REJECTED, REFUNDED
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                string
+	OrderID           string
+	OrderItemID       string
+	UserID            string
+	Reason            string   // DAMAGED, WRONG_ITEM, NOT_AS_DESCRIBED, CHANGED_MIND
+	Description       string
+	Status            string   // REQUESTED, APPROVED, REJECTED, PICKUP_SCHEDULED, COMPLETED, REFUNDED
+	ImageURLs         []string
+	ApprovedAt        *time.Time
+	RejectedAt        *time.Time
+	RejectionReason   *string
+	ReverseShipmentID *string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+type ReturnItem struct {
+	ID              string
+	ReturnRequestID string
+	OrderItemID     string
+	Quantity        int
+	Reason          string
+	CreatedAt       time.Time
+}
+
+type ProductRating struct {
+	ProductID   string
+	AvgRating   float64
+	ReviewCount int
 }

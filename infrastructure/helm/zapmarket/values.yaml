@@ -1,0 +1,232 @@
+global:
+  image:
+    registry: ghcr.io/zapmarket
+    pullPolicy: IfNotPresent
+  env:
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_USER: zapuser
+    KAFKA_BROKERS: kafka:9092
+    REDIS_URL: redis:6379
+    MIGRATE_ON_BOOT: "true"
+    APP_ENV: production
+
+# Go backend services
+services:
+  auth-service:
+    enabled: true
+    image: auth-service
+    tag: latest
+    replicas: 2
+    httpPort: 8080
+    grpcPort: 50051
+    dbName: userauth
+    hpa:
+      minReplicas: 2
+      maxReplicas: 10
+      cpuUtilization: 70
+
+  product-catalog-service:
+    enabled: true
+    image: product-catalog-service
+    tag: latest
+    replicas: 2
+    httpPort: 8081
+    grpcPort: 50052
+    dbName: productcatalog
+    hpa:
+      minReplicas: 2
+      maxReplicas: 10
+      cpuUtilization: 70
+
+  order-management-service:
+    enabled: true
+    image: order-management-service
+    tag: latest
+    replicas: 2
+    httpPort: 8082
+    grpcPort: 50053
+    dbName: ordermgmt
+    hpa:
+      minReplicas: 2
+      maxReplicas: 10
+      cpuUtilization: 70
+
+  payment-service:
+    enabled: true
+    image: payment-service
+    tag: latest
+    replicas: 2
+    httpPort: 8083
+    grpcPort: 50054
+    dbName: payment
+    hpa:
+      minReplicas: 2
+      maxReplicas: 10
+      cpuUtilization: 70
+
+  inventory-service:
+    enabled: true
+    image: inventory-service
+    tag: latest
+    replicas: 2
+    httpPort: 8082
+    grpcPort: 50055
+    dbName: inventory
+    hpa:
+      minReplicas: 2
+      maxReplicas: 10
+      cpuUtilization: 70
+
+  currency-service:
+    enabled: true
+    image: currency-service
+    tag: latest
+    replicas: 2
+    httpPort: 8086
+    grpcPort: 50056
+    dbName: currency
+    hpa:
+      minReplicas: 2
+      maxReplicas: 5
+      cpuUtilization: 70
+
+  logistics-service:
+    enabled: true
+    image: logistics-service
+    tag: latest
+    replicas: 2
+    httpPort: 8088
+    grpcPort: 50058
+    dbName: logistics
+    hpa:
+      minReplicas: 2
+      maxReplicas: 8
+      cpuUtilization: 70
+
+  promotions-service:
+    enabled: true
+    image: promotions-service
+    tag: latest
+    replicas: 2
+    httpPort: 8091
+    grpcPort: 0
+    dbName: promotions
+    hpa:
+      minReplicas: 2
+      maxReplicas: 6
+      cpuUtilization: 70
+
+  review-return-service:
+    enabled: true
+    image: review-return-service
+    tag: latest
+    replicas: 2
+    httpPort: 8093
+    grpcPort: 0
+    dbName: reviewreturn
+    hpa:
+      minReplicas: 2
+      maxReplicas: 6
+      cpuUtilization: 70
+
+  notification-service:
+    enabled: true
+    image: notification-service
+    tag: latest
+    replicas: 2
+    httpPort: 8089
+    grpcPort: 0
+    dbName: notification
+    hpa:
+      minReplicas: 2
+      maxReplicas: 6
+      cpuUtilization: 70
+
+  settlement-service:
+    enabled: true
+    image: settlement-service
+    tag: latest
+    replicas: 2
+    httpPort: 8090
+    grpcPort: 0
+    dbName: settlement
+    hpa:
+      minReplicas: 2
+      maxReplicas: 4
+      cpuUtilization: 70
+
+  import-service:
+    enabled: true
+    image: import-service
+    tag: latest
+    replicas: 2
+    httpPort: 8085
+    grpcPort: 0
+    dbName: import
+    hpa:
+      minReplicas: 2
+      maxReplicas: 4
+      cpuUtilization: 70
+
+  api-gateway:
+    enabled: true
+    image: api-gateway
+    tag: latest
+    replicas: 3
+    httpPort: 8000
+    grpcPort: 0
+    dbName: ""
+    hpa:
+      minReplicas: 3
+      maxReplicas: 20
+      cpuUtilization: 70
+
+# Next.js UI apps
+uis:
+  buyer-ui:
+    enabled: true
+    image: buyer-ui
+    tag: latest
+    replicas: 2
+    port: 3000
+    host: zapmarket.in
+    path: /
+
+  seller-ui:
+    enabled: true
+    image: seller-ui
+    tag: latest
+    replicas: 2
+    port: 3002
+    host: seller.zapmarket.in
+    path: /
+
+  admin-ui:
+    enabled: true
+    image: admin-ui
+    tag: latest
+    replicas: 2
+    port: 3001
+    host: admin.zapmarket.in
+    path: /
+
+  backoffice-ui:
+    enabled: true
+    image: backoffice-ui
+    tag: latest
+    replicas: 2
+    port: 3003
+    host: backoffice.zapmarket.in
+    path: /
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+postgres:
+  external: false
+  host: postgres
+  storageSize: 20Gi

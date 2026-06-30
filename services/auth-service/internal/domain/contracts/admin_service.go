@@ -16,4 +16,6 @@ type AdminService interface {
 	DeactivateUser(ctx context.Context, id uuid.UUID) error
 	ListSellers(ctx context.Context, status string, limit, offset int) ([]*domain.User, int64, error)
 	UpdateSellerStatus(ctx context.Context, id uuid.UUID, status string) error
+	ApproveSellerKYC(ctx context.Context, sellerID, adminID uuid.UUID) error
+	RejectSellerKYC(ctx context.Context, sellerID, adminID uuid.UUID, reason string) error
 }

@@ -1,0 +1,58 @@
+groups:
+  - name: zapmarket.critical
+    rules:
+      # Any scrape target has been unreachable for more than 2 minutes.
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Scrape target {{ $labels.instance }} has been unreachable for more than 2 minutes."
+
+      # HTTP 5xx error rate exceeds 1% over a 5-minute window for any service.
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum by (job) (rate(http_requests_total[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.job }}"
+          description: "Service {{ $labels.job }} has a 5xx error rate above 1% over the past 5 minutes."
+
+      # Outbox table has more than 100 unpublished rows for more than 5 minutes,
+      # indicating the outbox relay is stuck or lagging.
+      - alert: OutboxLag
+        expr: outbox_unpublished_count > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox lag on {{ $labels.job }}"
+          description: "{{ $labels.job }} has {{ $value }} unpublished outbox rows — relay may be stuck."
+
+      # Inventory service Redis connectivity is degraded.
+      - alert: InventoryRedisDown
+        expr: inventory_redis_connected == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Inventory service Redis is down"
+          description: "inventory-service cannot reach Redis; atomic stock operations will fail."
+
+      # Kafka consumer group is lagging more than 1000 messages.
+      - alert: KafkaConsumerLag
+        expr: kafka_consumer_group_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag on {{ $labels.group }} / {{ $labels.topic }}"
+          description: "Consumer group {{ $labels.group }} is {{ $value }} messages behind on topic {{ $labels.topic }}."

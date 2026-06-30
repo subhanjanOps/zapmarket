@@ -140,12 +140,15 @@ func main() {
 	// Wire Redis-backed or no-op stores depending on Redis availability.
 	var blacklist contracts.TokenBlacklist
 	var oauthStateStore contracts.OAuthStateStore
+	var mfaSessionStore service.SessionCacher
 	if rdb != nil {
 		blacklist = redisstore.NewTokenBlacklist(rdb)
 		oauthStateStore = redisstore.NewOAuthStateStore(rdb)
+		mfaSessionStore = redisstore.NewMFASessionStore(rdb)
 	} else {
 		blacklist = &redisstore.NoopTokenBlacklist{}
 		oauthStateStore = &redisstore.NoopOAuthStateStore{}
+		mfaSessionStore = &redisstore.NoopMFASessionStore{}
 	}
 
 	// Wire SMS sender: Twilio if configured, else log-only.
@@ -160,6 +163,8 @@ func main() {
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, oauthRepo, tokenRepo, resetRepo, otpRepo, sellerProfileRepo, addressRepo, emailer, smser, cfg, blacklist, oauthStateStore)
+	mfaService := service.NewMFAService(userRepo, mfaSessionStore)
+	authService.SetMFAService(mfaService)
 	oauthService := service.NewOAuthService(userRepo, oauthRepo, tokenRepo, authService, cfg)
 
 	// Initialize HTTP handlers
@@ -169,6 +174,7 @@ func main() {
 	adminSvc := service.NewAdminService(userRepo)
 	adminHandler := httphandler.NewAdminHandler(adminSvc, authService, cfg)
 	prefsHandler := httphandler.NewPreferencesHandler(prefsRepo, authService)
+	mfaHandler := httphandler.NewMFAHandler(mfaService, authService, cfg)
 
 	// Setup HTTP server
 	mux := http.NewServeMux()
@@ -195,6 +201,10 @@ func main() {
 	mux.HandleFunc("/v1/auth/registration/profile", httpHandler.LoggingMiddleware(httpHandler.UpdateRegistrationProfile))
 	mux.HandleFunc("/v1/auth/registration/complete", httpHandler.LoggingMiddleware(httpHandler.CompleteRegistration))
 	mux.HandleFunc("/v1/auth/profile/picture", httpHandler.LoggingMiddleware(httpHandler.UploadProfilePicture))
+	mux.HandleFunc("POST /v1/auth/mfa/enroll", mfaHandler.EnrollMFA)
+	mux.HandleFunc("POST /v1/auth/mfa/verify-enrollment", mfaHandler.VerifyEnrollment)
+	mux.HandleFunc("POST /v1/auth/mfa/disable", mfaHandler.DisableMFA)
+	mux.HandleFunc("POST /v1/auth/mfa/challenge", mfaHandler.MFAChallenge)
 	// Serve PFP static files
 	mux.Handle("/v1/auth/pfp/", http.StripPrefix("/v1/auth/pfp/", http.FileServer(http.Dir(pfpDir))))
 
@@ -213,6 +223,8 @@ func main() {
 	adminMux.HandleFunc("DELETE /v1/admin/users/{id}", adminHandler.DeactivateUser)
 	adminMux.HandleFunc("GET /v1/admin/sellers", adminHandler.ListSellers)
 	adminMux.HandleFunc("PATCH /v1/admin/sellers/{id}/status", adminHandler.UpdateSellerStatus)
+	adminMux.HandleFunc("PUT /v1/admin/sellers/{id}/approve", adminHandler.ApproveSellerKYC)
+	adminMux.HandleFunc("PUT /v1/admin/sellers/{id}/reject", adminHandler.RejectSellerKYC)
 	mux.Handle("/v1/admin/", adminHandler.AdminAuthMiddleware(adminMux))
 
 	// User preferences routes — auth validated inline by the handler

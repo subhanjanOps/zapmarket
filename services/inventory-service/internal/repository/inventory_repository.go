@@ -301,6 +301,25 @@ func (r *InventoryRepository) FindExpiredReservations(ctx context.Context, befor
 	return out, rows.Err()
 }
 
+func (r *InventoryRepository) WriteReservationExpiredEvent(ctx context.Context, reservationID, orderID uuid.UUID) error {
+	payload, err := json.Marshal(map[string]string{
+		"reservation_id": reservationID.String(),
+		"order_id":       orderID.String(),
+		"status":         "EXPIRED",
+	})
+	if err != nil {
+		return fmt.Errorf("marshal reservation.expired payload: %w", err)
+	}
+	_, err = r.db.ExecContext(ctx, `
+		INSERT INTO outbox (aggregate_id, aggregate_type, event_type, payload)
+		VALUES ($1, 'inventory', 'reservation.expired', $2)
+	`, reservationID, payload)
+	if err != nil {
+		return pkgerrors.NewInternal("DATABASE_ERROR", "failed to write reservation.expired outbox row", err)
+	}
+	return nil
+}
+
 // reservationNotFoundOrConflict distinguishes "this reservation id never
 // existed" from "it exists but isn't in `reserved` state anymore" so
 // callers attempting a double release/deduct get a meaningful error
