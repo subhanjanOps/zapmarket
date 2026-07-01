@@ -2,7 +2,7 @@
 
 Fourteen services communicating via gRPC (sync) and Kafka (async), with Redis for caching, locking, and idempotency. Each service owns its own database — no cross-service joins.
 
-> **Note (2026-07-01):** `cart-service`, `wishlist-service`, `review-return-service`, `promotions-service`, `settlement-service`, `logistics-service`, `analytics-service`, and `import-service` were added after the original six-service design below. None of the six business-facing ones currently enforce authentication on mutation routes — see `reviews/2026-07-01-new-services-review.md` before routing them through `api-gateway` in production.
+> **Note (2026-07-01):** `cart-service`, `wishlist-service`, `review-return-service`, `promotions-service`, `settlement-service`, `logistics-service`, `analytics-service`, and `import-service` were added after the original six-service design below. All six business-facing ones now enforce JWT authentication (and role-based checks where relevant) on mutation routes — see `reviews/2026-07-01-new-services-review.md` for the original findings and the "Fixes Applied" addendum for what was fixed. Remaining gaps: no distributed tracing platform-wide, TLS not enforced by default on internal gRPC/Postgres/Kafka connections, and test coverage on these 8 services is still thin.
 
 ---
 
@@ -116,48 +116,48 @@ flowchart TD
 - Calls Product Catalog via gRPC to check price/stock freshness
 - **DB:** PostgreSQL (`cart_items`)
 - **Cache:** Redis — guest cart storage
-- **Status:** no auth middleware yet — trusts a client-supplied user header (see review)
+- **Status:** all mutation routes require a valid JWT (`pkg/crypto.RequireAuth`); user identity comes from the token, not a client header
 
 ### Wishlist
-- Lets buyers save products/SKUs for later
+- Lets buyers save products/SKUs for later, and list/remove/clear their saved items
 - **DB:** PostgreSQL (`wishlist_items`)
-- **Status:** minimal — only one use case exists, not yet wired to HTTP routes
+- **Status:** full CRUD wired behind auth; user identity comes from the token
 
 ### Review & Return
 - Post-purchase product reviews (with `verified_purchase` derived from order history) and return/refund requests
 - Approved returns call Logistics to create a reverse shipment
 - A materialized view (`product_ratings`) aggregates published reviews per product for Product Catalog to read
 - **DB:** PostgreSQL (`reviews`, `return_requests`, `return_items`, `product_ratings` matview)
-- **Status:** no auth/RBAC on create or approve/reject endpoints (see review)
+- **Status:** creating a return requires auth (user_id comes from the token); approving/rejecting requires `admin`/`seller` role; approve/reject is now a single atomic status-guarded UPDATE
 
 ### Promotions
 - Coupon codes and flash sales; validates and redeems coupons at checkout
 - **DB:** PostgreSQL (`coupons`, `coupon_usage`)
-- **Status:** redemption is not transactional — can be over-redeemed past `max_uses` under concurrency
+- **Status:** validate/redeem require auth; redemption runs inside a transaction that locks the coupon row and re-checks usage limits, preventing over-redemption under concurrency
 
 ### Settlement
 - Seller ledger, running balances, and payouts (via Razorpay payouts) net of commission/TDS/GST
 - Consumes `payment.processed` / `payment.refunded` to credit/debit the seller ledger
 - **DB:** PostgreSQL (`seller_ledger`, `seller_balances`, `seller_payouts`, `seller_bank_accounts`)
 - **Consumes:** `payment.processed`, `payment.refunded`
-- **Status:** ledger writes are not idempotent against Kafka redelivery; refund consumer exists but is never registered
+- **Status:** balance/bank-account endpoints require the caller to be the seller or an admin; ledger writes are idempotent against Kafka redelivery (unique index on `payment_id, entry_type`); payouts use a pending→complete/fail flow so a crash mid-payout can't silently double-pay; the refund consumer is registered. Still open: Razorpay `fund_account_id` linking is a placeholder.
 
 ### Logistics
 - Shipment assignment to delivery agents, tracking events, proof of delivery, COD reconciliation, and reverse (return) shipments
 - Integrates with an external carrier (Shiprocket) via webhook
 - **DB:** PostgreSQL (`shipments`, `tracking_events`, `delivery_agents`, `proof_of_delivery`, `cod_reconciliations`, `outbox`)
 - **Publishes:** `shipment.delivered` (via outbox relay)
-- **Status:** no auth on mutation routes; carrier webhook has no signature verification
+- **Status:** agent management requires `admin`; shipment assign/attempt/deliver require `admin`/`seller`; the Shiprocket webhook verifies an HMAC signature; the review-return-service→logistics-service reverse-shipment call is authenticated via a shared internal service token
 
 ### Analytics
 - Ingests buyer behavior events (`view`, `cart_add`, `purchase`, `search`) for downstream reporting
 - **DB:** PostgreSQL (`user_events`)
-- **Status:** skeleton service — single handler, writes via untracked goroutines, no auth
+- **Status:** accepts both anonymous and authenticated events (`OptionalAuth`); an authenticated caller's `user_id` always comes from their token, never the request body; writes go through a bounded worker pool that drains on shutdown instead of an untracked goroutine per request
 
 ### Import
 - Bulk product/category import for sellers: uploads a CSV to MinIO, a worker parses it and calls Product Catalog's `/categories/bulk` in batches of 100
 - **DB:** PostgreSQL (`import_jobs`)
-- **Status:** scaffold only — job endpoints and worker wiring described in the import plan are not yet built
+- **Status:** the batch-processing use case no longer discards `BulkCreateProducts`/`UpdateStatus` errors; the HTTP job-submission endpoints and MinIO wiring are still to be built
 
 ---
 

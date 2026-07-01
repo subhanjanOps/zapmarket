@@ -604,9 +604,10 @@ CREATE TABLE coupon_usage (
     user_id    UUID        NOT NULL,
     order_id   UUID        NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    -- NOTE: no UNIQUE(coupon_id, order_id) yet — see reviews/2026-07-01-new-services-review.md
 );
 ```
+
+There is still no DB-level `UNIQUE(coupon_id, order_id)` constraint; over-redemption is instead prevented at the application layer — `CouponRepository.RecordUsage` wraps the usage-limit check and the insert in one transaction that locks the coupon row (`SELECT ... FOR UPDATE`), so concurrent redemptions of the same coupon are serialized.
 
 Flash sales (`0002_flash_sales`) extend this with a `flash_sales` table scoping a coupon or a flat discount to a time window and a product/category set.
 
@@ -627,8 +628,13 @@ CREATE TABLE seller_ledger (
     currency         VARCHAR(3)  NOT NULL DEFAULT 'INR',
     note             TEXT,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    -- NOTE: no UNIQUE(payment_id, entry_type) yet — Kafka redelivery can double-post
 );
+
+-- Added in 0003_idempotency: prevents Kafka at-least-once redelivery from
+-- double-crediting/debiting the same payment event.
+CREATE UNIQUE INDEX idx_seller_ledger_payment_entry
+    ON seller_ledger (payment_id, entry_type)
+    WHERE payment_id IS NOT NULL;
 
 CREATE TABLE seller_balances (
     seller_id       UUID        PRIMARY KEY,
@@ -664,6 +670,12 @@ CREATE TABLE seller_bank_accounts (
 
 CREATE INDEX idx_seller_ledger_seller  ON seller_ledger (seller_id);
 CREATE INDEX idx_seller_payouts_seller ON seller_payouts (seller_id, status);
+
+-- Added in 0003_idempotency: at most one payout in flight per seller at a
+-- time, so concurrent scheduler replicas can't double-initiate a payout.
+CREATE UNIQUE INDEX idx_seller_payouts_seller_pending
+    ON seller_payouts (seller_id)
+    WHERE status = 'PENDING';
 ```
 
 ---
