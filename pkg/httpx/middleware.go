@@ -1,12 +1,21 @@
 package httpx
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type requestIDCtxKey struct{}
+
+// RequestIDFromContext returns the request ID stored by RequestID, if any.
+func RequestIDFromContext(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(requestIDCtxKey{}).(string)
+	return id, ok
+}
 
 // MaxBodyBytes is the default request body size limit (4 MiB).
 const MaxBodyBytes int64 = 4 << 20
@@ -33,22 +42,25 @@ func RequestID(next http.Handler) http.Handler {
 			id = uuid.NewString()
 		}
 		w.Header().Set(RequestIDHeader, id)
-		next.ServeHTTP(w, r.WithContext(r.Context()))
+		ctx := context.WithValue(r.Context(), requestIDCtxKey{}, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// Logger logs each request's method, path, status, and duration using slog.
+// Logger logs each request's method, path, status, duration, and request ID using slog.
 func Logger(l *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rw, r)
+			reqID, _ := RequestIDFromContext(r.Context())
 			l.Info("request",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", rw.status,
 				"duration_ms", time.Since(start).Milliseconds(),
+				"request_id", reqID,
 			)
 		})
 	}

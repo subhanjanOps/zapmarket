@@ -35,8 +35,5 @@ func (uc *DebitRefundUseCase) Execute(ctx context.Context, in DebitRefundInput) 
 		Currency:    in.Currency,
 		CreatedAt:   time.Now(),
 	}
-	if err := uc.ledger.InsertEntry(ctx, entry); err != nil {
-		return err
-	}
-	return uc.ledger.DebitBalance(ctx, in.SellerID, in.AmountPaise)
+	return uc.ledger.ApplyLedgerEntry(ctx, entry, -in.AmountPaise)
 }

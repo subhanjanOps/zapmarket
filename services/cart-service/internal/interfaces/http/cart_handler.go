@@ -5,9 +5,21 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 	"github.com/zapmarket/zapmarket/services/cart-service/internal/application/usecases"
 	"github.com/zapmarket/zapmarket/services/cart-service/internal/domain"
 )
+
+// authedUserID returns the authenticated user's ID from the request context,
+// populated by crypto.RequireAuth. Handlers must never trust client-supplied
+// user identity headers.
+func authedUserID(r *http.Request) (string, bool) {
+	claims, ok := crypto.ClaimsFromContext(r.Context())
+	if !ok {
+		return "", false
+	}
+	return claims.UserID.String(), true
+}
 
 type CartHandler struct {
 	addItem    *usecases.AddItemUseCase
@@ -25,8 +37,9 @@ func NewCartHandler(
 	return &CartHandler{addItem: add, removeItem: remove, getCart: get, mergeCart: merge}
 }
 
-func (h *CartHandler) Routes() http.Handler {
+func (h *CartHandler) Routes(jwtSecret string) http.Handler {
 	r := chi.NewRouter()
+	r.Use(crypto.RequireAuth(jwtSecret))
 	r.Get("/", h.getCartHandler)
 	r.Post("/items", h.addItemHandler)
 	r.Delete("/items/{skuID}", h.removeItemHandler)
@@ -35,7 +48,11 @@ func (h *CartHandler) Routes() http.Handler {
 }
 
 func (h *CartHandler) getCartHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := authedUserID(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	cart, err := h.getCart.Execute(r.Context(), userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -46,7 +63,11 @@ func (h *CartHandler) getCartHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) addItemHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := authedUserID(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	var item domain.CartItem
 	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
@@ -60,7 +81,11 @@ func (h *CartHandler) addItemHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) removeItemHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := authedUserID(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	skuID := chi.URLParam(r, "skuID")
 	if err := h.removeItem.Execute(r.Context(), userID, skuID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -70,7 +95,11 @@ func (h *CartHandler) removeItemHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *CartHandler) mergeHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("X-User-ID")
+	userID, ok := authedUserID(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	sessionID := r.Header.Get("X-Session-ID")
 	if err := h.mergeCart.Execute(r.Context(), sessionID, userID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

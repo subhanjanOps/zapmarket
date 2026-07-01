@@ -2,9 +2,14 @@ package http
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
 
 	"github.com/zapmarket/zapmarket/services/logistics-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/logistics-service/internal/infrastructure/repository"
@@ -192,15 +197,42 @@ func (h *Handler) Deliver(w http.ResponseWriter, r *http.Request) {
 	json200(w, map[string]any{"pod_id": pod.ID, "status": "DELIVERED"})
 }
 
+// verifyShiprocketSignature checks the X-Shiprocket-Signature header against
+// an HMAC-SHA256 of the raw request body, keyed by SHIPROCKET_WEBHOOK_SECRET.
+// If the secret is not configured (e.g. local dev), verification is skipped.
+func verifyShiprocketSignature(body []byte, signature string) bool {
+	secret := os.Getenv("SHIPROCKET_WEBHOOK_SECRET")
+	if secret == "" {
+		return true
+	}
+	if signature == "" {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(signature))
+}
+
 // POST /v1/webhooks/shiprocket — receives Shiprocket push tracking updates
 func (h *Handler) ShiprocketWebhook(w http.ResponseWriter, r *http.Request) {
-	var payload struct {
-		AWB         string `json:"awb"`
-		CurrentStatus string `json:"current_status"`
-		Location    string `json:"current_location"`
-		ShipmentID  string `json:"shipment_id"`
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid body")
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+	if !verifyShiprocketSignature(body, r.Header.Get("X-Shiprocket-Signature")) {
+		jsonErr(w, http.StatusUnauthorized, "invalid webhook signature")
+		return
+	}
+
+	var payload struct {
+		AWB           string `json:"awb"`
+		CurrentStatus string `json:"current_status"`
+		Location      string `json:"current_location"`
+		ShipmentID    string `json:"shipment_id"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
@@ -226,8 +258,26 @@ func (h *Handler) GetTracking(w http.ResponseWriter, r *http.Request) {
 	json200(w, events)
 }
 
-// POST /v1/return-shipments — creates a reverse pickup for a parent shipment
+// verifyInternalToken checks the X-Internal-Token header against
+// INTERNAL_SERVICE_TOKEN, used to authenticate server-to-server calls from
+// other ZapMarket services (e.g. review-return-service) that have no user
+// JWT to forward. If the token is not configured, verification is skipped.
+func verifyInternalToken(r *http.Request) bool {
+	expected := os.Getenv("INTERNAL_SERVICE_TOKEN")
+	if expected == "" {
+		return true
+	}
+	return hmac.Equal([]byte(r.Header.Get("X-Internal-Token")), []byte(expected))
+}
+
+// POST /v1/return-shipments — creates a reverse pickup for a parent shipment.
+// Called by review-return-service on the buyer's behalf; authenticated via a
+// shared internal service token rather than a user JWT.
 func (h *Handler) CreateReturnShipment(w http.ResponseWriter, r *http.Request) {
+	if !verifyInternalToken(r) {
+		jsonErr(w, http.StatusUnauthorized, "invalid internal service token")
+		return
+	}
 	var body struct {
 		ParentShipmentID string `json:"parent_shipment_id"`
 	}

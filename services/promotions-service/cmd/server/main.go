@@ -14,6 +14,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
@@ -56,8 +57,9 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
-	mux.HandleFunc("POST /v1/coupons/validate", handler.Validate)
-	mux.HandleFunc("POST /v1/coupons/{coupon_id}/redeem", handler.Redeem)
+	requireAuth := crypto.RequireAuth(cfg.JWTSecretKey)
+	mux.Handle("POST /v1/coupons/validate", requireAuth(http.HandlerFunc(handler.Validate)))
+	mux.Handle("POST /v1/coupons/{coupon_id}/redeem", requireAuth(http.HandlerFunc(handler.Redeem)))
 	mux.HandleFunc("GET /v1/promotions/active-sales", handler.GetActiveSales)
 
 	port := cfg.HTTPPort

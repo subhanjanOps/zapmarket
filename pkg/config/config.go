@@ -202,8 +202,22 @@ func Load() (*Config, error) {
 	if cfg.DBPassword == "" {
 		return nil, fmt.Errorf("DB_PASSWORD is required")
 	}
-	if cfg.JWTSecretKey == "your-secret-key-change-in-production" && cfg.AppEnv == "production" {
-		return nil, fmt.Errorf("JWT_SECRET_KEY must be changed in production")
+	if cfg.AppEnv == "production" {
+		if cfg.JWTSecretKey == "your-secret-key-change-in-production" {
+			return nil, fmt.Errorf("JWT_SECRET_KEY must be changed in production")
+		}
+		if cfg.JWTRefreshSecretKey == "your-refresh-secret-key-change-in-production" {
+			return nil, fmt.Errorf("JWT_REFRESH_SECRET_KEY must be changed in production")
+		}
+		if cfg.DBPassword == "zappass123" {
+			return nil, fmt.Errorf("DB_PASSWORD must be changed in production")
+		}
+		if cfg.MinIOAccessKey == "minioadmin" || cfg.MinIOSecretKey == "minioadmin" {
+			return nil, fmt.Errorf("MINIO_ACCESS_KEY/MINIO_SECRET_KEY must be changed in production")
+		}
+		if cfg.PaymentWebhookSecret == "your-webhook-secret-change-in-production" {
+			return nil, fmt.Errorf("PAYMENT_WEBHOOK_SECRET must be changed in production")
+		}
 	}
 
 	return cfg, nil

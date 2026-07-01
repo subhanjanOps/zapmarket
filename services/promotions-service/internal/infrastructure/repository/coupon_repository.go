@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	domainerrors "github.com/zapmarket/zapmarket/services/promotions-service/internal/domain/errors"
@@ -51,11 +52,61 @@ func (r *CouponRepository) CountUsageTotal(ctx context.Context, couponID string)
 	return n, err
 }
 
+var ErrUsageLimitReached = errors.New("coupon usage limit has been reached")
+
+// RecordUsage atomically re-checks the coupon's usage limits and inserts the
+// usage row within a single transaction, locking the coupon row so
+// concurrent redemptions of the same coupon are serialized. This prevents
+// over-redemption past max_uses_total/max_uses_per_user under concurrency.
 func (r *CouponRepository) RecordUsage(ctx context.Context, couponID, userID, orderID string) error {
-	_, err := r.db.ExecContext(ctx,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var maxTotal, maxPerUser int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT max_uses_total, max_uses_per_user FROM coupons WHERE id = $1 FOR UPDATE`, couponID,
+	).Scan(&maxTotal, &maxPerUser); err != nil {
+		if err == sql.ErrNoRows {
+			return domainerrors.ErrCouponNotFound
+		}
+		return err
+	}
+
+	if maxPerUser > 0 {
+		var used int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM coupon_usage WHERE coupon_id = $1 AND user_id = $2`, couponID, userID,
+		).Scan(&used); err != nil {
+			return err
+		}
+		if used >= maxPerUser {
+			return ErrUsageLimitReached
+		}
+	}
+
+	if maxTotal > 0 {
+		var total int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM coupon_usage WHERE coupon_id = $1`, couponID,
+		).Scan(&total); err != nil {
+			return err
+		}
+		if total >= maxTotal {
+			return ErrUsageLimitReached
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO coupon_usage (coupon_id, user_id, order_id, used_at) VALUES ($1,$2,$3,$4)`,
-		couponID, userID, orderID, time.Now())
-	return err
+		couponID, userID, orderID, time.Now(),
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // GetActiveSales returns PERCENT coupons whose sale window is currently active.

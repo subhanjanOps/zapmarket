@@ -16,6 +16,10 @@ func NewBalanceHandler(ledger application.LedgerRepository) *BalanceHandler {
 
 func (h *BalanceHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	sellerID := chi.URLParam(r, "id")
+	if !authorizeSeller(r, sellerID) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
 	bal, err := h.ledger.GetBalance(r.Context(), sellerID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

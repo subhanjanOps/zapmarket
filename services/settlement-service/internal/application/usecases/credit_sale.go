@@ -48,8 +48,5 @@ func (uc *CreditSaleUseCase) Execute(ctx context.Context, in CreditSaleInput) er
 		Currency:             in.Currency,
 		CreatedAt:            time.Now(),
 	}
-	if err := uc.ledger.InsertEntry(ctx, entry); err != nil {
-		return err
-	}
-	return uc.ledger.CreditBalance(ctx, in.SellerID, net)
+	return uc.ledger.ApplyLedgerEntry(ctx, entry, net)
 }

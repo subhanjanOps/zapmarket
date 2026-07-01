@@ -86,19 +86,17 @@ func GenerateRefreshToken(userID uuid.UUID, secretKey string, expiryDays int) (s
 	return tokenString, nil
 }
 
-// ValidateAccessToken verifies an access token and returns claims
-func ValidateAccessToken(tokenString, secretKey string) (*Claims, error) {
+// parseToken parses and validates the JWT signature/type, returning raw claims.
+func parseToken(tokenString, secretKey, wantType string) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(secretKey), nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
 	}
-
 	if !token.Valid {
 		return nil, NewDomainError(ErrInvalidToken, "token is invalid")
 	}
@@ -108,18 +106,24 @@ func ValidateAccessToken(tokenString, secretKey string) (*Claims, error) {
 		return nil, NewDomainError(ErrInvalidToken, "invalid token claims")
 	}
 
-	// Verify token type
 	tokenType, ok := claims["type"].(string)
-	if !ok || tokenType != "access" {
-		return nil, NewDomainError(ErrInvalidToken, "not an access token")
+	if !ok || tokenType != wantType {
+		return nil, NewDomainError(ErrInvalidToken, "not a "+wantType+" token")
+	}
+	return claims, nil
+}
+
+// ValidateAccessToken verifies an access token and returns claims
+func ValidateAccessToken(tokenString, secretKey string) (*Claims, error) {
+	claims, err := parseToken(tokenString, secretKey, "access")
+	if err != nil {
+		return nil, err
 	}
 
-	// Extract fields
 	userIDStr, ok := claims["user_id"].(string)
 	if !ok {
 		return nil, NewDomainError(ErrInvalidToken, "missing user_id in token")
 	}
-
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return nil, NewDomainError(ErrInvalidToken, "invalid user_id format")
@@ -160,38 +164,15 @@ func ValidateAccessToken(tokenString, secretKey string) (*Claims, error) {
 
 // ValidateRefreshToken verifies a refresh token and returns claims
 func ValidateRefreshToken(tokenString, secretKey string) (*Claims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(secretKey), nil
-	})
-
+	claims, err := parseToken(tokenString, secretKey, "refresh")
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse token: %w", err)
+		return nil, err
 	}
 
-	if !token.Valid {
-		return nil, NewDomainError(ErrInvalidToken, "token is invalid")
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, NewDomainError(ErrInvalidToken, "invalid token claims")
-	}
-
-	// Verify token type
-	tokenType, ok := claims["type"].(string)
-	if !ok || tokenType != "refresh" {
-		return nil, NewDomainError(ErrInvalidToken, "not a refresh token")
-	}
-
-	// Extract fields
 	userIDStr, ok := claims["user_id"].(string)
 	if !ok {
 		return nil, NewDomainError(ErrInvalidToken, "missing user_id in token")
 	}
-
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return nil, NewDomainError(ErrInvalidToken, "invalid user_id format")

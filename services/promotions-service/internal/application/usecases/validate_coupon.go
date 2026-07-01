@@ -55,13 +55,19 @@ func (uc *ValidateCouponUseCase) Execute(ctx context.Context, in ValidateCouponI
 		return nil, ErrCartBelowMinimum
 	}
 	if coupon.MaxUsesPerUser > 0 {
-		used, _ := uc.repo.CountUsageByUser(ctx, coupon.ID, in.UserID)
+		used, err := uc.repo.CountUsageByUser(ctx, coupon.ID, in.UserID)
+		if err != nil {
+			return nil, err
+		}
 		if used >= coupon.MaxUsesPerUser {
 			return nil, ErrUsageLimitReached
 		}
 	}
 	if coupon.MaxUsesTotal > 0 {
-		total, _ := uc.repo.CountUsageTotal(ctx, coupon.ID)
+		total, err := uc.repo.CountUsageTotal(ctx, coupon.ID)
+		if err != nil {
+			return nil, err
+		}
 		if total >= coupon.MaxUsesTotal {
 			return nil, ErrUsageLimitReached
 		}

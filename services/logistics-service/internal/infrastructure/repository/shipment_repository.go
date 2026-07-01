@@ -41,38 +41,37 @@ func (r *ShipmentRepository) AssignAgent(ctx context.Context, shipmentID, agentI
 	return err
 }
 
-// RecordAttempt updates delivery attempt state. Returns (undelivered bool, err).
-// If success, status = DELIVERED.
-// If failure and attempt_count < 3, status = REATTEMPT_SCHEDULED with next_attempt_at = now+24h.
-// If failure and attempt_count >= 3, status = UNDELIVERED.
+// RecordAttempt atomically increments attempt_count and derives the new
+// status in a single UPDATE, avoiding the read-then-write race of a separate
+// SELECT + UPDATE (which could double-count attempts or resurrect a stale
+// status under concurrent calls for the same shipment). Returns
+// (undelivered bool, err).
 func (r *ShipmentRepository) RecordAttempt(ctx context.Context, shipmentID string, success bool) (undelivered bool, err error) {
-	// Fetch current attempt count
-	var count int
-	if err := r.db.QueryRowContext(ctx, `SELECT attempt_count FROM shipments WHERE id = $1`, shipmentID).Scan(&count); err != nil {
-		return false, err
-	}
-	newCount := count + 1
 	now := time.Now()
 	var newStatus string
-	var nextAttempt *time.Time
-	switch {
-	case success:
-		newStatus = "DELIVERED"
-	case newCount < 3:
-		newStatus = "REATTEMPT_SCHEDULED"
-		t := now.Add(24 * time.Hour)
-		nextAttempt = &t
-	default:
-		newStatus = "UNDELIVERED"
-		undelivered = true
+	err = r.db.QueryRowContext(ctx, `
+		UPDATE shipments
+		SET attempt_count = attempt_count + 1,
+		    last_attempt_at = $2,
+		    next_attempt_at = CASE
+		        WHEN $3 THEN NULL
+		        WHEN attempt_count + 1 < 3 THEN $2 + INTERVAL '24 hours'
+		        ELSE NULL
+		    END,
+		    status = CASE
+		        WHEN $3 THEN 'DELIVERED'
+		        WHEN attempt_count + 1 < 3 THEN 'REATTEMPT_SCHEDULED'
+		        ELSE 'UNDELIVERED'
+		    END,
+		    updated_at = NOW()
+		WHERE id = $1
+		RETURNING status`,
+		shipmentID, now, success,
+	).Scan(&newStatus)
+	if err != nil {
+		return false, err
 	}
-	_, err = r.db.ExecContext(ctx,
-		`UPDATE shipments
-		 SET attempt_count = $1, last_attempt_at = $2, next_attempt_at = $3, status = $4, updated_at = NOW()
-		 WHERE id = $5`,
-		newCount, now, nextAttempt, newStatus, shipmentID,
-	)
-	return undelivered, err
+	return newStatus == "UNDELIVERED", nil
 }
 
 // WriteUndeliveredEvent writes a shipment.undelivered outbox event.

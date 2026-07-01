@@ -14,6 +14,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/logger"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
@@ -56,9 +57,12 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintln(w, `{"status":"ok"}`)
 	})
-	mux.HandleFunc("POST /v1/returns", h.CreateReturn)
-	mux.HandleFunc("PUT /v1/returns/{id}/approve", h.ApproveReturn)
-	mux.HandleFunc("PUT /v1/returns/{id}/reject", h.RejectReturn)
+	requireAuth := crypto.RequireAuth(cfg.JWTSecretKey)
+	requireStaff := crypto.RequireRole("seller", "admin")
+
+	mux.Handle("POST /v1/returns", requireAuth(http.HandlerFunc(h.CreateReturn)))
+	mux.Handle("PUT /v1/returns/{id}/approve", requireAuth(requireStaff(http.HandlerFunc(h.ApproveReturn))))
+	mux.Handle("PUT /v1/returns/{id}/reject", requireAuth(requireStaff(http.HandlerFunc(h.RejectReturn))))
 	mux.HandleFunc("GET /v1/products/{id}/rating", h.GetProductRating)
 
 	port := cfg.HTTPPort

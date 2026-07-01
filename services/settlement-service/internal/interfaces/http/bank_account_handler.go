@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 	"github.com/zapmarket/zapmarket/services/settlement-service/internal/domain"
-	"github.com/zapmarket/zapmarket/services/settlement-service/internal/infrastructure/postgres"
 )
 
 type bankAccountStore interface {
@@ -17,12 +17,27 @@ type bankAccountStore interface {
 
 type BankAccountHandler struct{ repo bankAccountStore }
 
-func NewBankAccountHandler(repo *postgres.BankAccountRepo) *BankAccountHandler {
+func NewBankAccountHandler(repo bankAccountStore) *BankAccountHandler {
 	return &BankAccountHandler{repo: repo}
+}
+
+// authorizeSeller ensures the authenticated caller is either the seller
+// identified by the path param or an admin. Prevents any seller from
+// reading or writing another seller's balance/bank details.
+func authorizeSeller(r *http.Request, pathSellerID string) bool {
+	claims, ok := crypto.ClaimsFromContext(r.Context())
+	if !ok {
+		return false
+	}
+	return claims.Role == "admin" || claims.UserID.String() == pathSellerID
 }
 
 func (h *BankAccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	sellerID := chi.URLParam(r, "id")
+	if !authorizeSeller(r, sellerID) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
 	var a domain.SellerBankAccount
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 		http.Error(w, `{"error":"invalid body"}`, http.StatusBadRequest)
@@ -44,6 +59,10 @@ func (h *BankAccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *BankAccountHandler) List(w http.ResponseWriter, r *http.Request) {
 	sellerID := chi.URLParam(r, "id")
+	if !authorizeSeller(r, sellerID) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
 	accounts, err := h.repo.ListBySeller(r.Context(), sellerID)
 	if err != nil {
 		http.Error(w, `{"error":"failed to list accounts"}`, http.StatusInternalServerError)

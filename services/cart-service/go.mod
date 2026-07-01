@@ -4,11 +4,13 @@ go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.3.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
 	github.com/redis/go-redis/v9 v9.20.1
 	github.com/zapmarket/zapmarket/pkg/config v0.0.0
+	github.com/zapmarket/zapmarket/pkg/crypto v0.0.0
 	github.com/zapmarket/zapmarket/pkg/database v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
 	github.com/zapmarket/zapmarket/pkg/migrate v0.0.0
@@ -25,6 +27,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.44.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
@@ -34,6 +37,7 @@ require (
 
 replace (
 	github.com/zapmarket/zapmarket/pkg/config => ../../pkg/config
+	github.com/zapmarket/zapmarket/pkg/crypto => ../../pkg/crypto
 	github.com/zapmarket/zapmarket/pkg/database => ../../pkg/database
 	github.com/zapmarket/zapmarket/pkg/errors => ../../pkg/errors
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger

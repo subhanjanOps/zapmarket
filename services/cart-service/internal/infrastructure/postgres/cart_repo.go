@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,18 +35,32 @@ func (r *CartRepo) GetCart(ctx context.Context, userID string) (*domain.Cart, er
 		); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(attrsJSON, &item.VariantAttrs)
+		if err := json.Unmarshal(attrsJSON, &item.VariantAttrs); err != nil {
+			return nil, fmt.Errorf("unmarshal variant attrs: %w", err)
+		}
 		cart.Items = append(cart.Items, item)
 	}
 	return cart, rows.Err()
 }
 
 func (r *CartRepo) UpsertItem(ctx context.Context, userID string, item domain.CartItem) error {
-	attrsJSON, _ := json.Marshal(item.VariantAttrs)
-	uid, _ := uuid.Parse(userID)
-	skuID, _ := uuid.Parse(item.SKUID)
-	productID, _ := uuid.Parse(item.ProductID)
-	_, err := r.db.ExecContext(ctx, `
+	attrsJSON, err := json.Marshal(item.VariantAttrs)
+	if err != nil {
+		return fmt.Errorf("marshal variant attrs: %w", err)
+	}
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user id: %w", err)
+	}
+	skuID, err := uuid.Parse(item.SKUID)
+	if err != nil {
+		return fmt.Errorf("invalid sku id: %w", err)
+	}
+	productID, err := uuid.Parse(item.ProductID)
+	if err != nil {
+		return fmt.Errorf("invalid product id: %w", err)
+	}
+	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO cart_items (user_id, sku_id, product_id, product_name, variant_attrs, quantity, price_at_add, currency, image_url, added_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),NOW())
 		ON CONFLICT (user_id, sku_id) DO UPDATE

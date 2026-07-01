@@ -16,6 +16,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
@@ -85,15 +86,19 @@ func main() {
 
 	consumer := kafkaconsumer.NewPaymentConsumer(creditUC, debitUC, log)
 	capturedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentCaptured, "settlement-captured")
+	refundedConsumer := pkgkafka.NewConsumer(cfg.KafkaBrokers, pkgkafka.TopicPaymentRefunded, "settlement-refunded")
 
 	balanceH := settlementhttp.NewBalanceHandler(ledgerRepo)
 	bankH := settlementhttp.NewBankAccountHandler(bankAccountRepo)
 
 	r := chi.NewRouter()
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
-	r.Get("/v1/sellers/{id}/balance", balanceH.GetBalance)
-	r.Post("/v1/sellers/{id}/bank-accounts", bankH.Create)
-	r.Get("/v1/sellers/{id}/bank-accounts", bankH.List)
+	r.Group(func(pr chi.Router) {
+		pr.Use(crypto.RequireAuth(cfg.JWTSecretKey))
+		pr.Get("/v1/sellers/{id}/balance", balanceH.GetBalance)
+		pr.Post("/v1/sellers/{id}/bank-accounts", bankH.Create)
+		pr.Get("/v1/sellers/{id}/bank-accounts", bankH.List)
+	})
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
@@ -110,6 +115,11 @@ func main() {
 	go func() {
 		if err := capturedConsumer.Run(ctx, consumer.HandleCaptured); err != nil {
 			log.Error("payment captured consumer exited", "error", err)
+		}
+	}()
+	go func() {
+		if err := refundedConsumer.Run(ctx, consumer.HandleRefunded); err != nil {
+			log.Error("payment refunded consumer exited", "error", err)
 		}
 	}()
 	log.Info("settlement consumers started")
@@ -132,6 +142,7 @@ func main() {
 		log.Error("shutdown error", "error", err)
 	}
 	_ = capturedConsumer.Close()
+	_ = refundedConsumer.Close()
 	log.Info("settlement-service stopped")
 }
 

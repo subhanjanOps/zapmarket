@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 	"github.com/zapmarket/zapmarket/pkg/database"
 	pkgkafka "github.com/zapmarket/zapmarket/pkg/kafka"
 	"github.com/zapmarket/zapmarket/pkg/logger"
@@ -80,12 +81,16 @@ func main() {
 		fmt.Fprintln(w, `{"status":"ok"}`)
 	})
 
-	mux.HandleFunc("POST /v1/agents", h.CreateAgent)
-	mux.HandleFunc("GET /v1/agents", h.ListAgents)
-	mux.HandleFunc("PUT /v1/shipments/{id}/assign", h.AssignAgent)
-	mux.HandleFunc("POST /v1/shipments/{id}/attempt", h.RecordAttempt)
-	mux.HandleFunc("POST /v1/shipments/{id}/deliver", h.Deliver)
-	mux.HandleFunc("GET /v1/shipments/{id}/tracking", h.GetTracking)
+	requireAuth := crypto.RequireAuth(cfg.JWTSecretKey)
+	requireAdmin := crypto.RequireRole("admin")
+	requireStaff := crypto.RequireRole("admin", "seller")
+
+	mux.Handle("POST /v1/agents", requireAuth(requireAdmin(http.HandlerFunc(h.CreateAgent))))
+	mux.Handle("GET /v1/agents", requireAuth(requireAdmin(http.HandlerFunc(h.ListAgents))))
+	mux.Handle("PUT /v1/shipments/{id}/assign", requireAuth(requireStaff(http.HandlerFunc(h.AssignAgent))))
+	mux.Handle("POST /v1/shipments/{id}/attempt", requireAuth(requireStaff(http.HandlerFunc(h.RecordAttempt))))
+	mux.Handle("POST /v1/shipments/{id}/deliver", requireAuth(requireStaff(http.HandlerFunc(h.Deliver))))
+	mux.Handle("GET /v1/shipments/{id}/tracking", requireAuth(http.HandlerFunc(h.GetTracking)))
 	mux.HandleFunc("POST /v1/webhooks/shiprocket", h.ShiprocketWebhook)
 	mux.HandleFunc("POST /v1/return-shipments", h.CreateReturnShipment)
 

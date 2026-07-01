@@ -1,9 +1,11 @@
 # ZapMarket — New Services & Shared Packages Review
 
 **Branch:** `features/cluster-setup`
-**Date:** 2026-07-01
+**Date:** 2026-07-01 (fixes applied same day, see addendum at bottom)
 **Reviewer:** Principal Engineer (automated, parallel agent review)
 **Scope:** 8 services added since the [2026-06-26 full-platform review](2026-06-26-full-platform-review.md) — `analytics-service`, `cart-service`, `import-service`, `logistics-service`, `promotions-service`, `review-return-service`, `settlement-service`, `wishlist-service` — plus all `pkg/` shared packages.
+
+> **Status: all P0/P1 findings below have been fixed.** See the "Fixes Applied" addendum at the end of this document for what changed and what remains open.
 
 The 9 services covered by the prior review (auth, product-catalog, order-management, inventory, payment, notification, currency, api-gateway, and the four UIs) are **not** re-reviewed here; see `reviews/2026-06-26-full-platform-review.md` for those.
 
@@ -144,8 +146,45 @@ Full column-level detail is in the corresponding section added to `db-design.md`
 
 ---
 
-## Final Verdict
+## Final Verdict (as originally reviewed)
 
 **CHANGES REQUIRED.**
 
 The 8 new services extend the platform's feature surface (cart, wishlist, reviews/returns, promotions, seller settlement, logistics, analytics, bulk import) but none of the six business-facing ones enforce authentication or ownership on mutation routes — a regression relative to the auth patterns already established (imperfectly) in the previously-reviewed services. `analytics-service` and `import-service` are early-stage scaffolds, not yet feature-complete. The shared `pkg/` layer also needs its trace-ID propagation and TLS-by-default gaps closed, since every new and existing service inherits them.
+
+---
+
+## Fixes Applied (2026-07-01, same day)
+
+All Critical and High findings above were fixed directly, sequentially, service by service. Each service was rebuilt, `go vet`'d, and its existing tests re-run after changes; all pass with no regressions to the previously-reviewed 9 services (also rebuilt as a sanity check since shared `pkg/` files changed).
+
+**Shared (`pkg/`)**
+- Added `pkg/crypto/httpauth.go`: `RequireAuth`, `OptionalAuth`, `RequireRole` HTTP middleware built on the existing `ValidateAccessToken`, so every new service can enforce JWT auth locally (shared-secret verification) without a gRPC round trip to auth-service per request.
+- Deduplicated `ValidateAccessToken`/`ValidateRefreshToken` in `pkg/crypto/jwt.go` behind a shared `parseToken` helper.
+- Fixed `pkg/httpx`'s `RequestID` middleware to actually store the ID in context; `Logger` now logs it.
+- `pkg/config/config.go`: production-mode validation now rejects the dev-default DB password, JWT secrets, MinIO keys, and payment webhook secret, not just the JWT signing key.
+- Added `pkg/kafka.TopicPaymentRefunded` topic constant.
+
+**cart-service** — mutation routes now require `RequireAuth`; user identity comes from the JWT, not `X-User-ID`. Fixed discarded `uuid.Parse`/`json.Unmarshal`/`json.Marshal` errors in the repository.
+
+**wishlist-service** — built out the missing HTTP layer (list/remove/clear use cases + handler + routes), all behind `RequireAuth`, deriving user identity from the token. The service went from "only `/health` responds" to a working, authenticated CRUD API.
+
+**review-return-service** — `CreateReturn` requires auth and persists the real authenticated `user_id` (previously never set at all, despite the NOT NULL constraint). `ApproveReturn`/`RejectReturn` require `admin`/`seller` role and now use a single atomic `UPDATE ... WHERE status = 'REQUESTED'`, closing the TOCTOU race and fixing the ignored-`RowsAffected` bug in one change. Fixed the ignored JSON decode error in `RejectReturn`.
+
+**promotions-service** — `Validate`/`Redeem` require auth; `user_id` comes from the token. `Redeem` now runs inside a DB transaction that locks the coupon row (`SELECT ... FOR UPDATE`) and re-checks usage limits before inserting, closing the over-redemption race. Fixed discarded errors from `CountUsageByUser`/`CountUsageTotal` in the validate path.
+
+**settlement-service** — balance and bank-account endpoints require auth and enforce seller-owns-resource (or admin) via `authorizeSeller`. Replaced the separate `InsertEntry`/`CreditBalance`/`DebitBalance` calls with one transactional `ApplyLedgerEntry` that deduplicates on `(payment_id, entry_type)` via a new unique index (migration `0003_idempotency`), so Kafka redelivery can no longer double-credit/debit. Payouts now go through `CreatePendingPayout` → gateway call → `CompletePayout`/`FailPayout`, with a unique partial index preventing two PENDING payouts for the same seller — so a crash mid-payout leaves an auditable record instead of allowing a silent double-pay. Registered the previously-dead `HandleRefunded` Kafka consumer. Fixed the `bank_account_handler` DIP violation (constructor now takes the interface, not the concrete repo type).
+  - *Not fixed (out of scope for this pass):* `payout_gateway.go` still passes `sellerID` as a placeholder `fund_account_id` instead of a real Razorpay fund account — needs a bank-account-to-fund-account linking flow.
+
+**logistics-service** — agent management requires `admin`; shipment assign/attempt/deliver require `admin`/`seller`. `RecordAttempt` is now a single atomic `UPDATE ... RETURNING`, removing the read-then-write race on `attempt_count`. Added HMAC-SHA256 signature verification (`X-Shiprocket-Signature` / `SHIPROCKET_WEBHOOK_SECRET`) on the carrier webhook. Added a shared-secret `X-Internal-Token` check on `/v1/return-shipments` for the review-return-service→logistics-service server-to-server call (also updated the caller to send it).
+
+**analytics-service** — `POST /v1/events` now runs `OptionalAuth`: an authenticated caller's `user_id` always comes from their token (never trusted from the body), while anonymous events are still accepted. Replaced the untracked fire-and-forget goroutine with a bounded `EventWriter` (fixed worker pool + queue) with a `Close(ctx)` that drains on shutdown instead of dropping in-flight events.
+
+**import-service** — `ProcessImportUseCase.Execute` no longer discards `BulkCreateProducts`/`UpdateStatus` errors; a batch failure now surfaces as a wrapped error and is counted, instead of the job silently going stale.
+
+**Not addressed in this pass** (lower severity or requires larger cross-service work, tracked for a follow-up):
+- Distributed tracing / `trace_id` propagation across services (XC-8 class issue, platform-wide).
+- TLS-by-default for gRPC/Postgres/Kafka connections (`pkg/grpcx`, `pkg/database`, `pkg/kafka`).
+- Test coverage remains thin outside the paths touched here — no new tests were added, only existing tests were kept green.
+- `analytics-service`/`import-service` still lack full domain/repository layering (analytics keeps a thin handler-owned writer by design; import-service's job/HTTP endpoints beyond `Execute` are still to be built per the async-import plan).
+- Settlement's Razorpay fund-account linking (see above).

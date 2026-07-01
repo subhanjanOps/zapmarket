@@ -12,9 +12,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 	"github.com/zapmarket/zapmarket/services/review-return-service/internal/domain"
 	"github.com/zapmarket/zapmarket/services/review-return-service/internal/infrastructure/postgres"
 )
+
+func authedUser(r *http.Request) (*crypto.Claims, bool) {
+	return crypto.ClaimsFromContext(r.Context())
+}
 
 type Handler struct {
 	repo              *postgres.Repository
@@ -42,6 +47,11 @@ func jsonErr(w http.ResponseWriter, code int, msg string) {
 
 // POST /v1/returns
 func (h *Handler) CreateReturn(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authedUser(r)
+	if !ok {
+		jsonErr(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	var body struct {
 		OrderID     string   `json:"order_id"`
 		OrderItemID string   `json:"order_item_id"`
@@ -56,6 +66,7 @@ func (h *Handler) CreateReturn(w http.ResponseWriter, r *http.Request) {
 	req := &domain.ReturnRequest{
 		OrderID:     body.OrderID,
 		OrderItemID: body.OrderItemID,
+		UserID:      claims.UserID.String(),
 		Reason:      body.Reason,
 		Description: body.Description,
 		ImageURLs:   body.ImageURLs,
@@ -92,8 +103,13 @@ func (h *Handler) ApproveReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.ApproveReturn(r.Context(), id, reverseShipmentID); err != nil {
+	updated, err := h.repo.ApproveReturn(r.Context(), id, reverseShipmentID)
+	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, "failed to approve return")
+		return
+	}
+	if !updated {
+		jsonErr(w, http.StatusConflict, "return is no longer in REQUESTED state")
 		return
 	}
 	jsonOK(w, map[string]string{"status": "APPROVED", "reverse_shipment_id": reverseShipmentID})
@@ -105,14 +121,18 @@ func (h *Handler) RejectReturn(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	json.NewDecoder(r.Body).Decode(&body)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
 
-	if err := h.repo.RejectReturn(r.Context(), id, body.Reason); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			jsonErr(w, http.StatusNotFound, "return not found")
-		} else {
-			jsonErr(w, http.StatusInternalServerError, "failed to reject return")
-		}
+	updated, err := h.repo.RejectReturn(r.Context(), id, body.Reason)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to reject return")
+		return
+	}
+	if !updated {
+		jsonErr(w, http.StatusConflict, "return is no longer in REQUESTED state")
 		return
 	}
 	jsonOK(w, map[string]string{"status": "REJECTED"})
@@ -140,6 +160,9 @@ func (h *Handler) createReverseShipment(ctx context.Context, returnID string) (s
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if token := os.Getenv("INTERNAL_SERVICE_TOKEN"); token != "" {
+		req.Header.Set("X-Internal-Token", token)
+	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return "", err

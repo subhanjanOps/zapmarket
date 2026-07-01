@@ -83,7 +83,7 @@ func main() {
 	handler := carthttp.NewCartHandler(addUC, removeUC, getUC, mergeUC)
 
 	r := chi.NewRouter()
-	r.Mount("/v1/cart", handler.Routes())
+	r.Mount("/v1/cart", handler.Routes(cfg.JWTSecretKey))
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	srv := &http.Server{

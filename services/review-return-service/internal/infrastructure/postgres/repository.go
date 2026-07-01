@@ -45,20 +45,38 @@ func (r *Repository) GetReturnByID(ctx context.Context, id string) (*domain.Retu
 	return req, nil
 }
 
-func (r *Repository) ApproveReturn(ctx context.Context, id, reverseShipmentID string) error {
+// ApproveReturn atomically transitions a return from REQUESTED to APPROVED.
+// It returns updated=false (no error) if the return does not exist or is no
+// longer in REQUESTED state, so callers can distinguish a no-op from a failure.
+func (r *Repository) ApproveReturn(ctx context.Context, id, reverseShipmentID string) (updated bool, err error) {
 	now := time.Now()
-	_, err := r.db.ExecContext(ctx,
+	res, err := r.db.ExecContext(ctx,
 		`UPDATE return_requests SET status = 'APPROVED', approved_at = $1, reverse_shipment_id = $2, updated_at = NOW()
-		 WHERE id = $3`, now, reverseShipmentID, id)
-	return err
+		 WHERE id = $3 AND status = 'REQUESTED'`, now, reverseShipmentID, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
-func (r *Repository) RejectReturn(ctx context.Context, id, reason string) error {
+// RejectReturn atomically transitions a return from REQUESTED to REJECTED.
+func (r *Repository) RejectReturn(ctx context.Context, id, reason string) (updated bool, err error) {
 	now := time.Now()
-	_, err := r.db.ExecContext(ctx,
+	res, err := r.db.ExecContext(ctx,
 		`UPDATE return_requests SET status = 'REJECTED', rejected_at = $1, rejection_reason = $2, updated_at = NOW()
-		 WHERE id = $3`, now, reason, id)
-	return err
+		 WHERE id = $3 AND status = 'REQUESTED'`, now, reason, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // ── Ratings ──────────────────────────────────────────────────────────────────

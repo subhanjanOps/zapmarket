@@ -13,8 +13,9 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
-	"github.com/zapmarket/zapmarket/pkg/database"
 	pkgcfg "github.com/zapmarket/zapmarket/pkg/config"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
+	"github.com/zapmarket/zapmarket/pkg/database"
 	"github.com/zapmarket/zapmarket/pkg/migrate"
 	"github.com/zapmarket/zapmarket/services/analytics-service/internal/handler"
 )
@@ -47,10 +48,11 @@ func main() {
 }
 
 func run(db *sql.DB, cfg *pkgcfg.Config, logger *slog.Logger) {
-	h := handler.NewEventHandler(db, logger)
+	writer := handler.NewEventWriter(db, logger, 1000, 4)
+	h := handler.NewEventHandler(writer, logger)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/events", h.RecordEvent)
+	mux.Handle("POST /v1/events", crypto.OptionalAuth(cfg.JWTSecretKey)(http.HandlerFunc(h.RecordEvent)))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `{"status":"ok"}`)
 	})
@@ -81,5 +83,6 @@ func run(db *sql.DB, cfg *pkgcfg.Config, logger *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+	writer.Close(ctx)
 	slog.Info("analytics-service shut down")
 }

@@ -6,9 +6,11 @@ import (
 	"errors"
 	"net/http"
 
-	domainerrors "github.com/zapmarket/zapmarket/services/promotions-service/internal/domain/errors"
+	"github.com/zapmarket/zapmarket/pkg/crypto"
 	"github.com/zapmarket/zapmarket/services/promotions-service/internal/application/usecases"
 	"github.com/zapmarket/zapmarket/services/promotions-service/internal/domain"
+	domainerrors "github.com/zapmarket/zapmarket/services/promotions-service/internal/domain/errors"
+	"github.com/zapmarket/zapmarket/services/promotions-service/internal/infrastructure/repository"
 )
 
 type couponRedeemer interface {
@@ -38,6 +40,11 @@ type validateResponse struct {
 }
 
 func (h *CouponHandler) Validate(w http.ResponseWriter, r *http.Request) {
+	claims, ok := crypto.ClaimsFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required")
+		return
+	}
 	var req validateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
@@ -45,7 +52,7 @@ func (h *CouponHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.validate.Execute(r.Context(), usecases.ValidateCouponInput{
 		Code:           req.Code,
-		UserID:         req.UserID,
+		UserID:         claims.UserID.String(),
 		CartTotalPaise: req.CartTotalPaise,
 	})
 	if err != nil {
@@ -64,12 +71,17 @@ func (h *CouponHandler) Validate(w http.ResponseWriter, r *http.Request) {
 }
 
 type redeemRequest struct {
-	UserID  string `json:"user_id"`
 	OrderID string `json:"order_id"`
-	// CouponID is embedded in the URL path as {coupon_id}
+	// CouponID is embedded in the URL path as {coupon_id}; user identity comes
+	// from the authenticated token, never from client-supplied fields.
 }
 
 func (h *CouponHandler) Redeem(w http.ResponseWriter, r *http.Request) {
+	claims, ok := crypto.ClaimsFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required")
+		return
+	}
 	couponID := r.PathValue("coupon_id")
 	if couponID == "" {
 		writeError(w, http.StatusBadRequest, "MISSING_COUPON_ID", "coupon_id path param required")
@@ -80,7 +92,15 @@ func (h *CouponHandler) Redeem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	if err := h.repo.RecordUsage(r.Context(), couponID, req.UserID, req.OrderID); err != nil {
+	if err := h.repo.RecordUsage(r.Context(), couponID, claims.UserID.String(), req.OrderID); err != nil {
+		if errors.Is(err, repository.ErrUsageLimitReached) {
+			writeError(w, http.StatusConflict, "USAGE_LIMIT_REACHED", err.Error())
+			return
+		}
+		if errors.Is(err, domainerrors.ErrCouponNotFound) {
+			writeError(w, http.StatusNotFound, "COUPON_NOT_FOUND", err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "REDEEM_FAILED", err.Error())
 		return
 	}

@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"encoding/csv"
+	"fmt"
 	"io"
 )
 
@@ -38,15 +39,25 @@ func (uc *ProcessImportUseCase) Execute(ctx context.Context, jobID string, r io.
 	var batch []ProductRow
 	total, failed := 0, 0
 
-	flush := func() {
+	flush := func() error {
 		if len(batch) == 0 {
-			return
+			return nil
 		}
-		created, _ := uc.catalog.BulkCreateProducts(ctx, batch)
+		created, err := uc.catalog.BulkCreateProducts(ctx, batch)
+		if err != nil {
+			// The whole batch failed to reach product-catalog-service; count
+			// every row in it as failed rather than silently dropping the error.
+			failed += len(batch)
+			batch = batch[:0]
+			if updErr := uc.jobs.UpdateStatus(ctx, jobID, "IN_PROGRESS", total, failed); updErr != nil {
+				return fmt.Errorf("bulk create batch failed (%w) and status update failed: %v", err, updErr)
+			}
+			return fmt.Errorf("bulk create batch failed: %w", err)
+		}
 		total += created
 		failed += len(batch) - created
 		batch = batch[:0]
-		uc.jobs.UpdateStatus(ctx, jobID, "IN_PROGRESS", total, failed) //nolint:errcheck
+		return uc.jobs.UpdateStatus(ctx, jobID, "IN_PROGRESS", total, failed)
 	}
 
 	for {
@@ -65,14 +76,21 @@ func (uc *ProcessImportUseCase) Execute(ctx context.Context, jobID string, r io.
 			Category: record[3],
 		})
 		if len(batch) >= uc.batchSize {
-			flush()
+			if err := flush(); err != nil {
+				return err
+			}
 		}
 	}
-	flush()
+	if err := flush(); err != nil {
+		return err
+	}
 
 	status := "COMPLETE"
 	if failed > 0 && total == 0 {
 		status = "FAILED"
 	}
-	return uc.jobs.UpdateStatus(ctx, jobID, status, total, failed)
+	if err := uc.jobs.UpdateStatus(ctx, jobID, status, total, failed); err != nil {
+		return fmt.Errorf("failed to persist final import status %s: %w", status, err)
+	}
+	return nil
 }

@@ -12,6 +12,7 @@ const (
 	TopicInventoryReservationFailed = "inventory.reservation_failed"
 	TopicPaymentCaptured            = "payment.captured"
 	TopicPaymentFailed              = "payment.failed"
+	TopicPaymentRefunded            = "payment.refunded"
 	TopicOrderConfirmed             = "order.confirmed"
 	TopicOrderCancelled             = "order.cancelled"
 	TopicShipmentDelivered          = "shipment.delivered"

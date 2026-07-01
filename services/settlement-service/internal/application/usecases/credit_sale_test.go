@@ -13,21 +13,22 @@ type fakeLedger struct {
 	credited int64
 }
 
-func (f *fakeLedger) InsertEntry(_ context.Context, e domain.LedgerEntry) error {
+func (f *fakeLedger) ApplyLedgerEntry(_ context.Context, e domain.LedgerEntry, delta int64) error {
 	f.entries = append(f.entries, e)
+	f.credited = delta
 	return nil
 }
-func (f *fakeLedger) CreditBalance(_ context.Context, _ string, net int64) error {
-	f.credited = net
-	return nil
-}
-func (f *fakeLedger) DebitBalance(_ context.Context, _ string, _ int64) error { return nil }
 func (f *fakeLedger) GetBalance(_ context.Context, _ string) (*domain.SellerBalance, error) {
 	return &domain.SellerBalance{PendingPaise: 50000, Currency: "INR"}, nil
 }
 func (f *fakeLedger) GetPendingSellers(_ context.Context, _ int64) ([]string, error) {
 	return nil, nil
 }
+func (f *fakeLedger) CreatePendingPayout(_ context.Context, _ string, _ int64, _ string) (string, error) {
+	return "payout-1", nil
+}
+func (f *fakeLedger) CompletePayout(_ context.Context, _, _, _ string, _ int64) error { return nil }
+func (f *fakeLedger) FailPayout(_ context.Context, _ string) error                   { return nil }
 
 func TestCreditSale_DeductsCommissionAndCreditsNet(t *testing.T) {
 	ledger := &fakeLedger{}
