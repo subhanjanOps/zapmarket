@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /workspace
@@ -8,11 +9,17 @@ ENV GOWORK=off
 RUN apk add --no-cache git
 
 COPY pkg/ ./pkg/
+COPY services/api-gateway/go.mod services/api-gateway/go.sum ./services/api-gateway/
+
+WORKDIR /workspace/services/api-gateway
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+WORKDIR /workspace
 COPY services/api-gateway/ ./services/api-gateway/
 
 WORKDIR /workspace/services/api-gateway
-RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/api-gateway .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /app/api-gateway .
 
 
 FROM alpine:3.20

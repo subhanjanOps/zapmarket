@@ -1,7 +1,19 @@
+x-db-env: &db-env
+  DB_HOST: zapmarket-postgres
+  DB_PORT: 5432
+  DB_USER: zapuser
+  DB_PASSWORD: zappass123
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks:
+    - zapnet
+
 services:
   kafka:
     image: apache/kafka:latest
     container_name: zapmarket-kafka
+    <<: *service-defaults
     environment:
       - KAFKA_NODE_ID=1
       - KAFKA_PROCESS_ROLES=broker,controller
@@ -19,8 +31,6 @@ services:
     ports:
       - 9092:9092
       - 29092:29092
-    networks:
-      - zapnet
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -33,10 +43,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: zapmarket-redis
+    <<: *service-defaults
     ports:
       - 6379:6379
-    networks:
-      - zapnet
     volumes:
       - redis-data:/data
     healthcheck:
@@ -48,6 +57,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: zapmarket-minio
+    <<: *service-defaults
     command: server /data --console-address ":9001"
     environment:
       - MINIO_ROOT_USER=minioadmin
@@ -55,8 +65,6 @@ services:
     ports:
       - 9000:9000
       - 9001:9001
-    networks:
-      - zapnet
     volumes:
       - minio-data:/data
     healthcheck:
@@ -65,7 +73,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    restart: unless-stopped
 
   # One-shot job: waits for minio to be healthy, then creates the
   # `zapmarket` bucket if it doesn't already exist and sets it to allow
@@ -97,35 +104,31 @@ services:
       context: .
       dockerfile: services/auth-service/Dockerfile
     container_name: zapmarket-auth-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=userauth
-      - JWT_SECRET_KEY=change-me-in-production
-      - JWT_REFRESH_SECRET_KEY=change-me-refresh-in-production
-      - JWT_ACCESS_EXPIRY_HOURS=1
-      - JWT_REFRESH_EXPIRY_DAYS=7
-      - HTTP_PORT=8080
-      - GRPC_PORT=50051
-      - APP_ENV=development
-      - REDIS_URL=zapmarket-redis:6379
+      <<: *db-env
+      DB_NAME: userauth
+      JWT_SECRET_KEY: change-me-in-production
+      JWT_REFRESH_SECRET_KEY: change-me-refresh-in-production
+      JWT_ACCESS_EXPIRY_HOURS: 1
+      JWT_REFRESH_EXPIRY_DAYS: 7
+      HTTP_PORT: 8080
+      GRPC_PORT: 50051
+      APP_ENV: development
+      REDIS_URL: zapmarket-redis:6379
     ports:
       - "8080:8080"
       - "50051:50051"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   product-catalog-service:
     build:
       context: .
       dockerfile: services/product-catalog-service/Dockerfile
     container_name: zapmarket-product-catalog-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
@@ -134,40 +137,35 @@ services:
       minio-init:
         condition: service_completed_successfully
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=productcatalog
-      - JWT_SECRET_KEY=change-me-in-production
-      - AUTH_SERVICE_ADDR=zapmarket-auth-service:50051
-      - HTTP_PORT=8081
-      - GRPC_PORT=50052
-      - APP_ENV=development
-      - MINIO_ENDPOINT=zapmarket-minio:9000
-      - MINIO_PUBLIC_URL=http://localhost:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET=zapmarket
-      - MINIO_USE_SSL=false
-      - REDIS_URL=zapmarket-redis:6379
-      - TYPESENSE_HOST=http://zapmarket-typesense:8108
-      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-xyz-local-key}
+      <<: *db-env
+      DB_NAME: productcatalog
+      JWT_SECRET_KEY: change-me-in-production
+      AUTH_SERVICE_ADDR: zapmarket-auth-service:50051
+      HTTP_PORT: 8081
+      GRPC_PORT: 50052
+      APP_ENV: development
+      MINIO_ENDPOINT: zapmarket-minio:9000
+      MINIO_PUBLIC_URL: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: zapmarket
+      MINIO_USE_SSL: "false"
+      REDIS_URL: zapmarket-redis:6379
+      TYPESENSE_HOST: http://zapmarket-typesense:8108
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-xyz-local-key}
     ports:
       - "8081:8081"
       - "50052:50052"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   order-management-service:
     build:
       context: .
       dockerfile: services/order-management-service/Dockerfile
     container_name: zapmarket-order-management-service
+    <<: *service-defaults
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       auth-service:
         condition: service_started
       kafka:
@@ -175,62 +173,52 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=ordermgmt
-      - AUTH_SERVICE_ADDR=zapmarket-auth-service:50051
-      - CATALOG_SERVICE_ADDR=zapmarket-product-catalog-service:50052
-      - INVENTORY_SERVICE_ADDR=zapmarket-inventory-service:50053
-      - PAYMENT_SERVICE_ADDR=zapmarket-payment-service:50054
-      - KAFKA_BROKERS=kafka:9092
-      - REDIS_URL=zapmarket-redis:6379
-      - HTTP_PORT=8084
-      - APP_ENV=development
-      - PROMOTIONS_SERVICE_URL=http://zapmarket-promotions-service:8091
+      <<: *db-env
+      DB_NAME: ordermgmt
+      AUTH_SERVICE_ADDR: zapmarket-auth-service:50051
+      CATALOG_SERVICE_ADDR: zapmarket-product-catalog-service:50052
+      INVENTORY_SERVICE_ADDR: zapmarket-inventory-service:50053
+      PAYMENT_SERVICE_ADDR: zapmarket-payment-service:50054
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: zapmarket-redis:6379
+      HTTP_PORT: 8084
+      APP_ENV: development
+      PROMOTIONS_SERVICE_URL: http://zapmarket-promotions-service:8091
     ports:
       - "8084:8084"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   currency-service:
     build:
       context: .
       dockerfile: services/currency-service/Dockerfile
     container_name: zapmarket-currency-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=currency
-      - HTTP_PORT=8086
-      - GRPC_PORT=50056
-      - APP_ENV=development
-      - REDIS_URL=zapmarket-redis:6379
-      - RATE_PROVIDER_URL=https://api.frankfurter.app
-      - RATE_REFRESH_INTERVAL=1h
-      - MAX_RATE_AGE=24h
-      - KAFKA_BROKERS=kafka:9092
+      <<: *db-env
+      DB_NAME: currency
+      HTTP_PORT: 8086
+      GRPC_PORT: 50056
+      APP_ENV: development
+      REDIS_URL: zapmarket-redis:6379
+      RATE_PROVIDER_URL: https://api.frankfurter.app
+      RATE_REFRESH_INTERVAL: 1h
+      MAX_RATE_AGE: 24h
+      KAFKA_BROKERS: kafka:9092
     ports:
       - "8086:8086"
       - "50056:50056"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   api-gateway:
     build:
       context: .
       dockerfile: services/api-gateway/Dockerfile
     container_name: zapmarket-api-gateway
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
@@ -239,26 +227,20 @@ services:
       auth-service:
         condition: service_started
     environment:
-      - HTTP_PORT=8000
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=apigateway
-      - REDIS_URL=zapmarket-redis:6379
-      - AUTH_SERVICE_ADDR=zapmarket-auth-service:50051
-      - AUTH_SERVICE_HTTP_URL=http://zapmarket-auth-service:8080
-      - CATALOG_SERVICE_HTTP_URL=http://zapmarket-product-catalog-service:8081
-      - ORDER_SERVICE_HTTP_URL=http://zapmarket-order-management-service:8084
-      - CURRENCY_SERVICE_HTTP_URL=http://zapmarket-currency-service:8086
-      - GATEWAY_AUTO_BIND=true
-      - ADMIN_UI_ORIGIN=http://localhost:3001
-      - APP_ENV=development
+      <<: *db-env
+      DB_NAME: apigateway
+      HTTP_PORT: 8000
+      REDIS_URL: zapmarket-redis:6379
+      AUTH_SERVICE_ADDR: zapmarket-auth-service:50051
+      AUTH_SERVICE_HTTP_URL: http://zapmarket-auth-service:8080
+      CATALOG_SERVICE_HTTP_URL: http://zapmarket-product-catalog-service:8081
+      ORDER_SERVICE_HTTP_URL: http://zapmarket-order-management-service:8084
+      CURRENCY_SERVICE_HTTP_URL: http://zapmarket-currency-service:8086
+      GATEWAY_AUTO_BIND: "true"
+      ADMIN_UI_ORIGIN: http://localhost:3001
+      APP_ENV: development
     ports:
       - "8000:8000"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   buyer-ui:
     build:
@@ -267,19 +249,17 @@ services:
       args:
         - NEXT_PUBLIC_GATEWAY_URL=http://localhost:8000
     container_name: zapmarket-buyer-ui
+    <<: *service-defaults
     depends_on:
       - api-gateway
     environment:
-      - PORT=3000
-      - HOSTNAME=0.0.0.0
-      - GATEWAY_URL=http://zapmarket-api-gateway:8000
-      - MINIO_INTERNAL_URL=http://zapmarket-minio:9000
-      - NEXT_PUBLIC_MINIO_URL=http://localhost:9000
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      GATEWAY_URL: http://zapmarket-api-gateway:8000
+      MINIO_INTERNAL_URL: http://zapmarket-minio:9000
+      NEXT_PUBLIC_MINIO_URL: http://localhost:9000
     ports:
       - "3000:3000"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   seller-ui:
     build:
@@ -288,17 +268,15 @@ services:
       args:
         - NEXT_PUBLIC_GATEWAY_URL=http://localhost:8000
     container_name: zapmarket-seller-ui
+    <<: *service-defaults
     depends_on:
       - api-gateway
     environment:
-      - PORT=3002
-      - HOSTNAME=0.0.0.0
-      - GATEWAY_URL=http://zapmarket-api-gateway:8000
+      PORT: 3002
+      HOSTNAME: 0.0.0.0
+      GATEWAY_URL: http://zapmarket-api-gateway:8000
     ports:
       - "3002:3002"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   admin-ui:
     build:
@@ -307,19 +285,17 @@ services:
       args:
         - NEXT_PUBLIC_GATEWAY_URL=http://localhost:8000
     container_name: zapmarket-admin-ui
+    <<: *service-defaults
     depends_on:
       - api-gateway
     environment:
-      - PORT=3001
-      - HOSTNAME=0.0.0.0
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
       # Server-side only: used by the BFF proxy routes to reach the gateway
       # inside the Docker network without going through the host-mapped port.
-      - GATEWAY_URL=http://zapmarket-api-gateway:8000
+      GATEWAY_URL: http://zapmarket-api-gateway:8000
     ports:
       - "3001:3001"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   backoffice-ui:
     build:
@@ -328,269 +304,224 @@ services:
       args:
         - NEXT_PUBLIC_GATEWAY_URL=http://localhost:8000
     container_name: zapmarket-backoffice-ui
+    <<: *service-defaults
     depends_on:
       - api-gateway
     environment:
-      - PORT=3003
-      - HOSTNAME=0.0.0.0
-      - GATEWAY_URL=http://zapmarket-api-gateway:8000
+      PORT: 3003
+      HOSTNAME: 0.0.0.0
+      GATEWAY_URL: http://zapmarket-api-gateway:8000
     ports:
       - "3003:3003"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: zapmarket-kafka-ui
+    <<: *service-defaults
     depends_on:
       kafka:
         condition: service_healthy
     environment:
-      - KAFKA_CLUSTERS_0_NAME=zapmarket
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      KAFKA_CLUSTERS_0_NAME: zapmarket
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
     ports:
       - "8090:8080"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   notification-service:
     build:
       context: .
       dockerfile: services/notification-service/Dockerfile
     container_name: zapmarket-notification-service
+    <<: *service-defaults
     depends_on:
       kafka:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      - KAFKA_BROKERS=kafka:9092
-      - REDIS_URL=zapmarket-redis:6379
-      - APP_ENV=development
-      - HTTP_PORT=8085
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: zapmarket-redis:6379
+      APP_ENV: development
+      HTTP_PORT: 8085
     ports:
       - "8085:8085"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   inventory-service:
     build:
       context: .
       dockerfile: services/inventory-service/Dockerfile
     container_name: zapmarket-inventory-service
+    <<: *service-defaults
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=inventory
-      - HTTP_PORT=8082
-      - GRPC_PORT=50053
-      - APP_ENV=development
-      - REDIS_URL=zapmarket-redis:6379
-      - KAFKA_BROKERS=kafka:9092
+      <<: *db-env
+      DB_NAME: inventory
+      HTTP_PORT: 8082
+      GRPC_PORT: 50053
+      APP_ENV: development
+      REDIS_URL: zapmarket-redis:6379
+      KAFKA_BROKERS: kafka:9092
     ports:
       - "8082:8082"
       - "50053:50053"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   payment-service:
     build:
       context: .
       dockerfile: services/payment-service/Dockerfile
     container_name: zapmarket-payment-service
+    <<: *service-defaults
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=payment
-      - HTTP_PORT=8083
-      - GRPC_PORT=50054
-      - APP_ENV=development
-      - PAYMENT_WEBHOOK_SECRET=change-me-webhook-secret
-      - REDIS_URL=zapmarket-redis:6379
-      - KAFKA_BROKERS=kafka:9092
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      <<: *db-env
+      DB_NAME: payment
+      HTTP_PORT: 8083
+      GRPC_PORT: 50054
+      APP_ENV: development
+      PAYMENT_WEBHOOK_SECRET: change-me-webhook-secret
+      REDIS_URL: zapmarket-redis:6379
+      KAFKA_BROKERS: kafka:9092
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     ports:
       - "8083:8083"
       - "50054:50054"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   settlement-service:
     build:
       context: .
       dockerfile: services/settlement-service/Dockerfile
     container_name: zapmarket-settlement-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=settlement
-      - HTTP_PORT=8088
-      - APP_ENV=development
-      - KAFKA_BROKERS=kafka:9092
-      - PLATFORM_COMMISSION_BPS=200
-      - MIN_PAYOUT_PAISE=10000
-      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-noop}
-      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-noop}
-      - MIGRATE_ON_BOOT=true
+      <<: *db-env
+      DB_NAME: settlement
+      HTTP_PORT: 8088
+      APP_ENV: development
+      KAFKA_BROKERS: kafka:9092
+      PLATFORM_COMMISSION_BPS: 200
+      MIN_PAYOUT_PAISE: 10000
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-noop}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-noop}
+      MIGRATE_ON_BOOT: "true"
     ports:
       - "8088:8088"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   review-return-service:
     build:
       context: .
       dockerfile: services/review-return-service/Dockerfile
     container_name: zapmarket-review-return-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=reviews
-      - HTTP_PORT=8093
-      - MIGRATE_ON_BOOT=true
+      <<: *db-env
+      DB_NAME: reviews
+      HTTP_PORT: 8093
+      MIGRATE_ON_BOOT: "true"
     ports:
       - "8093:8093"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   promotions-service:
     build:
       context: .
       dockerfile: services/promotions-service/Dockerfile
     container_name: zapmarket-promotions-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=promotions
-      - HTTP_PORT=8091
-      - MIGRATE_ON_BOOT=true
+      <<: *db-env
+      DB_NAME: promotions
+      HTTP_PORT: 8091
+      MIGRATE_ON_BOOT: "true"
     ports:
       - "8091:8091"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   logistics-service:
     build:
       context: .
       dockerfile: services/logistics-service/Dockerfile
     container_name: zapmarket-logistics-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=logistics
-      - HTTP_PORT=8092
-      - KAFKA_BROKERS=kafka:9092
-      - SHIPROCKET_EMAIL=${SHIPROCKET_EMAIL:-noop}
-      - SHIPROCKET_PASSWORD=${SHIPROCKET_PASSWORD:-noop}
-      - MIGRATE_ON_BOOT=true
+      <<: *db-env
+      DB_NAME: logistics
+      HTTP_PORT: 8092
+      KAFKA_BROKERS: kafka:9092
+      SHIPROCKET_EMAIL: ${SHIPROCKET_EMAIL:-noop}
+      SHIPROCKET_PASSWORD: ${SHIPROCKET_PASSWORD:-noop}
+      MIGRATE_ON_BOOT: "true"
     ports:
       - "8092:8092"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   wishlist-service:
     build:
       context: .
       dockerfile: services/wishlist-service/Dockerfile
     container_name: zapmarket-wishlist-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=wishlist
-      - HTTP_PORT=8089
-      - MIGRATE_ON_BOOT=true
+      <<: *db-env
+      DB_NAME: wishlist
+      HTTP_PORT: 8089
+      MIGRATE_ON_BOOT: "true"
     ports:
       - "8089:8089"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   import-service:
     build:
       context: .
       dockerfile: services/import-service/Dockerfile
     container_name: zapmarket-import-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=imports
-      - HTTP_PORT=8085
-      - CATALOG_HTTP_ADDR=http://zapmarket-product-catalog-service:8081
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
-      - MIGRATE_ON_BOOT=true
+      <<: *db-env
+      DB_NAME: imports
+      HTTP_PORT: 8085
+      CATALOG_HTTP_ADDR: http://zapmarket-product-catalog-service:8081
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MIGRATE_ON_BOOT: "true"
     ports:
       - "8094:8085"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   pgbouncer:
     image: edoburu/pgbouncer
     container_name: zapmarket-pgbouncer
+    <<: *service-defaults
     ports:
       - "5433:5432"
     volumes:
@@ -599,64 +530,53 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   typesense:
     image: typesense/typesense:26.0
     container_name: zapmarket-typesense
+    <<: *service-defaults
     ports:
       - "8108:8108"
     environment:
-      - TYPESENSE_DATA_DIR=/data
-      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-xyz-local-key}
-      - TYPESENSE_ENABLE_CORS=true
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-xyz-local-key}
+      TYPESENSE_ENABLE_CORS: "true"
     volumes:
       - typesense-data:/data
     command: --data-dir /data --api-key=${TYPESENSE_API_KEY:-xyz-local-key} --enable-cors
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   cart-service:
     build:
       context: .
       dockerfile: services/cart-service/Dockerfile
     container_name: zapmarket-cart-service
+    <<: *service-defaults
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      - DB_HOST=zapmarket-postgres
-      - DB_PORT=5432
-      - DB_USER=zapuser
-      - DB_PASSWORD=zappass123
-      - DB_NAME=cart
-      - HTTP_PORT=8087
-      - APP_ENV=development
-      - REDIS_URL=zapmarket-redis:6379
-      - CATALOG_GRPC_ADDR=zapmarket-product-catalog-service:50052
-      - MIGRATE_ON_BOOT=true
+      <<: *db-env
+      DB_NAME: cart
+      HTTP_PORT: 8087
+      APP_ENV: development
+      REDIS_URL: zapmarket-redis:6379
+      CATALOG_GRPC_ADDR: zapmarket-product-catalog-service:50052
+      MIGRATE_ON_BOOT: "true"
     ports:
       - "8087:8087"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
     container_name: zapmarket-postgres
+    <<: *service-defaults
     environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=zapuser
-      - POSTGRES_PASSWORD=zappass123
+      POSTGRES_DB: postgres
+      POSTGRES_USER: zapuser
+      POSTGRES_PASSWORD: zappass123
     ports:
       - 5432:5432
-    networks:
-      - zapnet
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U zapuser -d postgres"]
       interval: 5s
@@ -670,20 +590,19 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: zapmarket-redisinsight
+    <<: *service-defaults
     depends_on:
       redis:
         condition: service_healthy
     ports:
       - "5540:5540"
-    networks:
-      - zapnet
     volumes:
       - redisinsight-data:/data
-    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
     container_name: zapmarket-prometheus
+    <<: *service-defaults
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -693,73 +612,65 @@ services:
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   loki:
     image: grafana/loki:3.0.0
     container_name: zapmarket-loki
+    <<: *service-defaults
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
       - ./monitoring/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki-data:/loki
     ports:
       - "3100:3100"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   promtail:
     image: grafana/promtail:3.0.0
     container_name: zapmarket-promtail
+    <<: *service-defaults
     command: -config.file=/etc/promtail/promtail-config.yaml
     volumes:
       - ./monitoring/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - loki
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
     container_name: zapmarket-grafana
+    <<: *service-defaults
     depends_on:
       - prometheus
       - loki
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=zapmarket
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_HTTP_PORT=3009
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: zapmarket
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_PORT: 3009
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     ports:
       - "3009:3009"
-    networks:
-      - zapnet
-    restart: unless-stopped
 
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: zapmarket-pgadmin
+    <<: *service-defaults
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@zapmarket.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
+      PGADMIN_DEFAULT_EMAIL: admin@zapmarket.com
+      PGADMIN_DEFAULT_PASSWORD: admin
     ports:
       - 5050:80
-    networks:
-      - zapnet
     volumes:
       - pgadmin-data:/var/lib/pgadmin
 
 networks:
   zapnet:
-  frontend:
 
 volumes:
   kafka-data:
@@ -769,7 +680,6 @@ volumes:
   redisinsight-data:
   pgadmin-data:
   typesense-data:
-  elasticsearch-data:
   prometheus-data:
   grafana-data:
   loki-data:
