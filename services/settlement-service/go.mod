@@ -8,6 +8,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
 	github.com/zapmarket/zapmarket/pkg/config v0.0.0
+	github.com/zapmarket/zapmarket/pkg/crypto v0.0.0-00010101000000-000000000000
 	github.com/zapmarket/zapmarket/pkg/database v0.0.0
 	github.com/zapmarket/zapmarket/pkg/kafka v0.0.0
 	github.com/zapmarket/zapmarket/pkg/logger v0.0.0
@@ -15,6 +16,7 @@ require (
 )
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang-migrate/migrate/v4 v4.18.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -24,12 +26,12 @@ require (
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 )
 
 replace (
 	github.com/zapmarket/zapmarket/pkg/config => ../../pkg/config
+	github.com/zapmarket/zapmarket/pkg/crypto => ../../pkg/crypto
 	github.com/zapmarket/zapmarket/pkg/database => ../../pkg/database
 	github.com/zapmarket/zapmarket/pkg/kafka => ../../pkg/kafka
 	github.com/zapmarket/zapmarket/pkg/logger => ../../pkg/logger
