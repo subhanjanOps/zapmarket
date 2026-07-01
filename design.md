@@ -1,6 +1,8 @@
 # Ecommerce Microservices Architecture
 
-Six services communicating via gRPC (sync) and Kafka (async), with Redis for caching, locking, and idempotency. Each service owns its own database — no cross-service joins.
+Fourteen services communicating via gRPC (sync) and Kafka (async), with Redis for caching, locking, and idempotency. Each service owns its own database — no cross-service joins.
+
+> **Note (2026-07-01):** `cart-service`, `wishlist-service`, `review-return-service`, `promotions-service`, `settlement-service`, `logistics-service`, `analytics-service`, and `import-service` were added after the original six-service design below. None of the six business-facing ones currently enforce authentication on mutation routes — see `reviews/2026-07-01-new-services-review.md` before routing them through `api-gateway` in production.
 
 ---
 
@@ -107,6 +109,58 @@ flowchart TD
 
 ---
 
+## Additional Services (added 2026-07-01)
+
+### Cart
+- Server-side cart for logged-in users; guest carts held in Redis and merged on login
+- Calls Product Catalog via gRPC to check price/stock freshness
+- **DB:** PostgreSQL (`cart_items`)
+- **Cache:** Redis — guest cart storage
+- **Status:** no auth middleware yet — trusts a client-supplied user header (see review)
+
+### Wishlist
+- Lets buyers save products/SKUs for later
+- **DB:** PostgreSQL (`wishlist_items`)
+- **Status:** minimal — only one use case exists, not yet wired to HTTP routes
+
+### Review & Return
+- Post-purchase product reviews (with `verified_purchase` derived from order history) and return/refund requests
+- Approved returns call Logistics to create a reverse shipment
+- A materialized view (`product_ratings`) aggregates published reviews per product for Product Catalog to read
+- **DB:** PostgreSQL (`reviews`, `return_requests`, `return_items`, `product_ratings` matview)
+- **Status:** no auth/RBAC on create or approve/reject endpoints (see review)
+
+### Promotions
+- Coupon codes and flash sales; validates and redeems coupons at checkout
+- **DB:** PostgreSQL (`coupons`, `coupon_usage`)
+- **Status:** redemption is not transactional — can be over-redeemed past `max_uses` under concurrency
+
+### Settlement
+- Seller ledger, running balances, and payouts (via Razorpay payouts) net of commission/TDS/GST
+- Consumes `payment.processed` / `payment.refunded` to credit/debit the seller ledger
+- **DB:** PostgreSQL (`seller_ledger`, `seller_balances`, `seller_payouts`, `seller_bank_accounts`)
+- **Consumes:** `payment.processed`, `payment.refunded`
+- **Status:** ledger writes are not idempotent against Kafka redelivery; refund consumer exists but is never registered
+
+### Logistics
+- Shipment assignment to delivery agents, tracking events, proof of delivery, COD reconciliation, and reverse (return) shipments
+- Integrates with an external carrier (Shiprocket) via webhook
+- **DB:** PostgreSQL (`shipments`, `tracking_events`, `delivery_agents`, `proof_of_delivery`, `cod_reconciliations`, `outbox`)
+- **Publishes:** `shipment.delivered` (via outbox relay)
+- **Status:** no auth on mutation routes; carrier webhook has no signature verification
+
+### Analytics
+- Ingests buyer behavior events (`view`, `cart_add`, `purchase`, `search`) for downstream reporting
+- **DB:** PostgreSQL (`user_events`)
+- **Status:** skeleton service — single handler, writes via untracked goroutines, no auth
+
+### Import
+- Bulk product/category import for sellers: uploads a CSV to MinIO, a worker parses it and calls Product Catalog's `/categories/bulk` in batches of 100
+- **DB:** PostgreSQL (`import_jobs`)
+- **Status:** scaffold only — job endpoints and worker wiring described in the import plan are not yet built
+
+---
+
 ## Communication Patterns
 
 ### gRPC (synchronous, internal)
@@ -131,6 +185,9 @@ All proto definitions live in a shared `proto/` repo. Services generate client s
 | `inventory.reserved` | Inventory | Order Mgmt |
 | `inventory.updated` | Inventory | Analytics |
 | `user.registered` | User / Auth | Notification |
+| `payment.processed` | Payment | Settlement |
+| `payment.refunded` | Payment | Settlement |
+| `shipment.delivered` | Logistics | Order Mgmt, Notification |
 
 Retention: 7 days minimum. Each service has its own consumer group.
 

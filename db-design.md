@@ -476,6 +476,313 @@ Notification preferences are persisted in the User service DB via the `notificat
 
 ---
 
+## 7. Cart Service
+
+```sql
+CREATE TABLE cart_items (
+    id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id        UUID         NOT NULL,          -- logical FK to users.id
+    sku_id         UUID         NOT NULL,           -- logical FK to skus.id
+    product_id     UUID         NOT NULL,
+    product_name   VARCHAR(500) NOT NULL,           -- snapshot
+    variant_attrs  JSONB        NOT NULL DEFAULT '{}',
+    quantity       INT          NOT NULL CHECK (quantity > 0),
+    price_at_add   BIGINT       NOT NULL,           -- paise, snapshot
+    currency       CHAR(3)      NOT NULL DEFAULT 'INR',
+    image_url      TEXT,
+    added_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, sku_id)
+);
+
+CREATE INDEX idx_cart_items_user ON cart_items (user_id);
+```
+
+Guest carts (no `user_id`) live entirely in Redis and are merged into `cart_items` on login.
+
+---
+
+## 8. Wishlist Service
+
+```sql
+CREATE TABLE wishlist_items (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID        NOT NULL,
+    product_id UUID        NOT NULL,
+    sku_id     UUID,
+    added_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, product_id)
+);
+
+CREATE INDEX idx_wishlist_user ON wishlist_items (user_id);
+```
+
+---
+
+## 9. Review & Return Service
+
+```sql
+CREATE TABLE reviews (
+    id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id        UUID         NOT NULL,
+    sku_id            UUID         NOT NULL,
+    user_id           UUID         NOT NULL,
+    order_id          UUID         NOT NULL,
+    verified_purchase BOOLEAN      NOT NULL DEFAULT FALSE,
+    rating            SMALLINT     NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    title             TEXT         NOT NULL,
+    body              TEXT,
+    image_urls        TEXT[]       NOT NULL DEFAULT '{}',
+    helpful_count     INT          NOT NULL DEFAULT 0,
+    status            VARCHAR(32)  NOT NULL DEFAULT 'PENDING_MODERATION',
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, order_id, sku_id)
+);
+
+CREATE TABLE return_requests (
+    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id      UUID        NOT NULL,
+    order_item_id UUID        NOT NULL,
+    user_id       UUID        NOT NULL,
+    reason        VARCHAR(64) NOT NULL,
+    description   TEXT,
+    status        VARCHAR(32) NOT NULL DEFAULT 'REQUESTED',
+    image_urls    TEXT[]      NOT NULL DEFAULT '{}',
+    approved_at   TIMESTAMPTZ,
+    rejected_at   TIMESTAMPTZ,
+    rejection_reason      TEXT,
+    reverse_shipment_id   UUID,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE return_items (
+    id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    return_request_id  UUID        NOT NULL REFERENCES return_requests (id),
+    order_item_id      UUID        NOT NULL,
+    quantity           INT         NOT NULL CHECK (quantity > 0),
+    reason             VARCHAR(64),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Materialized view, refreshed periodically; read by Product Catalog for display
+CREATE MATERIALIZED VIEW product_ratings AS
+SELECT product_id, AVG(rating) AS avg_rating, COUNT(*) AS review_count
+FROM reviews WHERE status = 'PUBLISHED'
+GROUP BY product_id;
+
+CREATE UNIQUE INDEX idx_product_ratings_product ON product_ratings (product_id);
+CREATE INDEX idx_reviews_product ON reviews (product_id, status);
+CREATE INDEX idx_reviews_user   ON reviews (user_id);
+CREATE INDEX idx_returns_order  ON return_requests (order_id);
+```
+
+---
+
+## 10. Promotions Service
+
+```sql
+CREATE TABLE coupons (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    code                VARCHAR(64)  NOT NULL UNIQUE,
+    discount_type       VARCHAR(16)  NOT NULL CHECK (discount_type IN ('percent', 'fixed')),
+    discount_value      BIGINT       NOT NULL,     -- percent bps or paise, per discount_type
+    min_order_paise     BIGINT       NOT NULL DEFAULT 0,
+    max_uses_total      INT,
+    max_uses_per_user   INT,
+    is_active           BOOLEAN      NOT NULL DEFAULT TRUE,
+    starts_at           TIMESTAMPTZ,
+    expires_at          TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE coupon_usage (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    coupon_id  UUID        NOT NULL REFERENCES coupons (id),
+    user_id    UUID        NOT NULL,
+    order_id   UUID        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    -- NOTE: no UNIQUE(coupon_id, order_id) yet — see reviews/2026-07-01-new-services-review.md
+);
+```
+
+Flash sales (`0002_flash_sales`) extend this with a `flash_sales` table scoping a coupon or a flat discount to a time window and a product/category set.
+
+---
+
+## 11. Settlement Service
+
+```sql
+CREATE TABLE seller_ledger (
+    id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id        UUID        NOT NULL,
+    order_id         UUID,
+    payment_id       UUID,
+    entry_type       VARCHAR(32) NOT NULL,          -- 'SALE_CREDIT', 'REFUND_DEBIT', 'PAYOUT_DEBIT', ...
+    amount_paise     BIGINT      NOT NULL,
+    commission_paise BIGINT      NOT NULL DEFAULT 0,
+    net_paise        BIGINT      NOT NULL,
+    currency         VARCHAR(3)  NOT NULL DEFAULT 'INR',
+    note             TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    -- NOTE: no UNIQUE(payment_id, entry_type) yet — Kafka redelivery can double-post
+);
+
+CREATE TABLE seller_balances (
+    seller_id       UUID        PRIMARY KEY,
+    pending_paise   BIGINT      NOT NULL DEFAULT 0,
+    paid_out_paise  BIGINT      NOT NULL DEFAULT 0,
+    currency        VARCHAR(3)  NOT NULL DEFAULT 'INR',
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE seller_payouts (
+    id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id          UUID        NOT NULL,
+    amount_paise       BIGINT      NOT NULL,
+    currency           VARCHAR(3)  NOT NULL DEFAULT 'INR',
+    razorpay_payout_id TEXT,
+    status             VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    initiated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed_at       TIMESTAMPTZ
+);
+
+-- Added in 0002_compliance
+CREATE TABLE seller_bank_accounts (
+    id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id      UUID        NOT NULL,
+    account_number VARCHAR(64),
+    ifsc_code      VARCHAR(16),
+    upi_id         VARCHAR(128),
+    is_verified    BOOLEAN     NOT NULL DEFAULT FALSE,
+    is_primary     BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_seller_ledger_seller  ON seller_ledger (seller_id);
+CREATE INDEX idx_seller_payouts_seller ON seller_payouts (seller_id, status);
+```
+
+---
+
+## 12. Logistics Service
+
+```sql
+CREATE TABLE shipments (
+    id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id            UUID        NOT NULL UNIQUE,
+    carrier_shipment_id VARCHAR(128),
+    carrier             VARCHAR(64),
+    tracking_url        TEXT,
+    status              VARCHAR(32) NOT NULL DEFAULT 'CREATED',
+    label_url           TEXT,
+    estimated_delivery  TIMESTAMPTZ,
+    assigned_agent_id   UUID        REFERENCES delivery_agents (id),
+    attempt_count       INT         NOT NULL DEFAULT 0,
+    parent_shipment_id  UUID        REFERENCES shipments (id),  -- set for reverse/return shipments
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE tracking_events (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    shipment_id UUID        NOT NULL REFERENCES shipments (id),
+    status      VARCHAR(64) NOT NULL,
+    description TEXT,
+    location    TEXT,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Added in 0002_delivery_agents
+CREATE TABLE delivery_agents (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID        NOT NULL,
+    zone       VARCHAR(64),
+    status     VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Added in 0003_reverse_logistics
+CREATE TABLE proof_of_delivery (
+    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    shipment_id   UUID        NOT NULL REFERENCES shipments (id),
+    delivered_by  UUID        REFERENCES delivery_agents (id),
+    signature_url TEXT,
+    photo_url     TEXT,
+    delivered_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE cod_reconciliations (
+    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    shipment_id  UUID        NOT NULL REFERENCES shipments (id),
+    agent_id     UUID        REFERENCES delivery_agents (id),
+    amount_paise BIGINT      NOT NULL,
+    status       VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Transactional outbox — same Debezium CDC pattern as Order/Payment
+CREATE TABLE outbox (
+    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    topic        VARCHAR(128) NOT NULL,
+    payload      JSONB       NOT NULL,
+    published_at TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_shipments_order  ON shipments (order_id);
+CREATE INDEX idx_tracking_shipment ON tracking_events (shipment_id);
+```
+
+---
+
+## 13. Analytics Service
+
+```sql
+CREATE TABLE user_events (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID,                               -- nullable, no FK (cross-service, may be anonymous)
+    session_id  TEXT        NOT NULL,
+    event_type  TEXT        NOT NULL CHECK (event_type IN ('view', 'cart_add', 'purchase', 'search')),
+    product_id  UUID,
+    category_id UUID,
+    metadata    JSONB,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_events_user_category ON user_events (user_id, category_id, occurred_at DESC);
+CREATE INDEX idx_events_product ON user_events (product_id, occurred_at DESC);
+```
+
+---
+
+## 14. Import Service
+
+```sql
+CREATE TABLE import_jobs (
+    id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id      UUID         NOT NULL,           -- logical FK to users.id
+    file_key       TEXT         NOT NULL,           -- MinIO object key for the uploaded CSV
+    status         VARCHAR(16)  NOT NULL DEFAULT 'PENDING',
+    total_rows     INT,
+    rows_processed INT          NOT NULL DEFAULT 0,
+    rows_failed    INT          NOT NULL DEFAULT 0,
+    error_file_key TEXT,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_import_jobs_seller ON import_jobs (seller_id);
+CREATE INDEX idx_import_jobs_status ON import_jobs (status);
+```
+
+A worker polls `import_jobs`, parses the CSV from MinIO, and calls product-catalog-service's `/categories/bulk` in batches of 100.
+
+---
+
 ## Entity Relationship Summary
 
 ```mermaid
@@ -503,6 +810,14 @@ erDiagram
     payments ||--o{ ledger_entries : records
     payments ||--o{ refunds : has
     payments ||--o{ outbox : emits
+
+    return_requests ||--o{ return_items : contains
+    shipments ||--o{ tracking_events : records
+    shipments ||--o{ proof_of_delivery : has
+    shipments ||--o{ cod_reconciliations : has
+    shipments ||--o{ shipments : "reverse shipment of"
+    delivery_agents ||--o{ shipments : assigned
+    coupons ||--o{ coupon_usage : tracks
 ```
 
 ---
